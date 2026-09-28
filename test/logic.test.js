@@ -133,3 +133,36 @@ describe('diagnosis', () => {
     expect(D.diagnosisOutcome('dvt', 'dvt', 5).correct).toBe(true);
   });
 });
+
+import * as K from '../src/missions/strokeLogic.js';
+describe('stroke', () => {
+  it('scores retriever size', () => {
+    const c = { clotLength: 10, vesselDiameter: 3 };
+    expect(K.retrieverScore({ d: 4, l: 20 }, c)).toBe(1);
+    expect(K.retrieverScore({ d: 3, l: 20 }, c)).toBe(1);
+    expect(K.retrieverScore({ d: 4, l: 8 }, { clotLength: 10, vesselDiameter: 3 })).toBeLessThan(1);
+  });
+  it('a steady in-band pull removes the clot without tearing', () => {
+    const st = K.createPull();
+    let guard = 0;
+    while (st.progress < 1 && guard++ < 5000) {
+      // controller: aim for the middle of the band
+      const f = 0.6 + K.friction(st.progress, 0.9);
+      const p = Math.min(1, ((K.PULL.low + K.PULL.high) / 2) / f);
+      K.stepPull(st, p, 1 / 60, 0.9);
+    }
+    expect(st.progress).toBe(1);
+    expect(st.fragments).toBe(0);
+    expect(st.time).toBeLessThan(15);
+  });
+  it('yanking tears fragments off', () => {
+    const st = K.createPull();
+    for (let i = 0; i < 600 && st.progress < 1; i++) K.stepPull(st, 1, 1 / 60, 0.9);
+    expect(st.fragments).toBeGreaterThan(0);
+  });
+  it('time is brain', () => {
+    expect(K.neuronsLost(2)).toBeCloseTo(1.9e6, -3); // 2 game s = 1 real min
+    expect(K.tici(true, 0)).toBe('3');
+    expect(K.tici(false, 0)).toBe('0');
+  });
+});

@@ -88,6 +88,20 @@ function sampleMesh(type, disease) {
         s.position.copy(new THREE.Vector3().randomDirection().multiplyScalar(Math.random() * 1.5));
         g.add(s);
       }
+    } else if (disease === 'stroke') {
+      // micro-emboli from the heart: small platelet–fibrin clumps
+      const red = new THREE.MeshStandardMaterial({ color: 0x9a2a2a, roughness: 0.7 });
+      const pale = new THREE.MeshStandardMaterial({ color: 0xeedccc, roughness: 0.6 });
+      for (let k = 0; k < 4; k++) {
+        const c = new THREE.Group();
+        c.position.copy(new THREE.Vector3().randomDirection().multiplyScalar(2.5));
+        for (let i = 0; i < 9; i++) {
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.35 + Math.random() * 0.4, 8, 6), i % 3 ? pale : red);
+          m.position.copy(new THREE.Vector3().randomDirection().multiplyScalar(Math.random() * 0.9));
+          c.add(m);
+        }
+        g.add(c);
+      }
     } else {
       const mat = new THREE.MeshStandardMaterial({ color: 0xf2ead0, roughness: 0.8 });
       for (let k = 0; k < 10; k++) {

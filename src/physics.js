@@ -34,6 +34,16 @@ export const VESSELS = {
     diastolicPeak: false,
     fogDensity: 0.011,
   },
+  mca: {
+    key: 'mca',
+    radius: 1500, // middle cerebral artery M1, Ø 3 mm
+    vmaxReal: 800_000, // ≈ 60 cm/s mean → 0.8 m/s centre line
+    timeScale: 2500,
+    heartRate: 72,
+    pulsatility: 0.3,
+    diastolicPeak: false,
+    fogDensity: 0.0026,
+  },
   venule: {
     key: 'venule',
     radius: 20, // post-capillary venule, Ø 40 µm

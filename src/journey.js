@@ -29,6 +29,9 @@ const S = {
   femoral: { kind: 'artery', r: 7, len: 90, d: '8 mm', v: 0.5, map: 'femoral' },
   capleg: { kind: 'cap', r: 3, len: 60, d: '8 µm', v: 0.001, map: 'calf' },
   popvein: { kind: 'vein', r: 9, len: 60, d: '6 mm', v: 0.1, map: 'popliteal', venousAfter: true },
+  carotid: { kind: 'artery', r: 8, len: 100, d: '5 mm', v: 0.5, map: 'carotid' },
+  willis: { kind: 'artery', r: 6, len: 60, d: '4 mm', v: 0.5, map: 'brain' },
+  mca: { kind: 'artery', r: 5, len: 70, d: '3 mm', v: 0.6, map: 'mca' },
 };
 
 const ROUTES = {
@@ -36,6 +39,7 @@ const ROUTES = {
   stent: ['arm', 'svc', 'ra', 'rv', 'pa', 'lungcap', 'pv', 'la', 'lv', 'aorta', 'lca'],
   diag: ['arm', 'svc', 'ra', 'rv', 'pa', 'lungcap', 'pv', 'la', 'lv', 'aorta', 'aortadesc', 'celiac', 'gastric'],
   clot: ['arm', 'svc', 'ra', 'rv', 'pa', 'lungcap', 'pv', 'la', 'lv', 'aorta', 'aortadesc', 'iliac', 'femoral', 'capleg', 'popvein'],
+  stroke: ['arm', 'svc', 'ra', 'rv', 'pa', 'lungcap', 'pv', 'la', 'lv', 'aorta', 'carotid', 'willis', 'mca'],
 };
 
 // landmarks on the body map image (normalised 0..1), see public/assets/bodymap.webp
@@ -53,7 +57,13 @@ export const MAP_POINTS = {
   femoral: [0.435, 0.58],
   calf: [0.42, 0.76],
   popliteal: [0.42, 0.69],
+  carotid: [0.485, 0.17],
+  brain: [0.5, 0.105],
+  mca: [0.535, 0.1],
 };
+
+// where each mission takes place (for the blinking location marker)
+export const MISSION_SITE = { diag: 'stomach', stent: 'coronary', virus: 'lung', clot: 'popliteal', stroke: 'mca' };
 
 const VENOUS = { fog: new THREE.Color(0x3e1216), rbc: new THREE.Color(0x7a1a2a), wall: new THREE.Color(0xb88890) };
 const ARTERIAL = { fog: new THREE.Color(0x7a261e), rbc: new THREE.Color(0xd8352a), wall: new THREE.Color(0xffc8c0) };
@@ -91,8 +101,11 @@ export class Journey {
     this.curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
     this.curveLen = this.curve.getLength();
 
+    this.heartMeshes = [];
+    this.labels = [];
     this.buildTube();
     this.buildValves();
+    this.buildHeartDetail();
     this.buildAlveoli();
     this.buildCells();
 
@@ -151,7 +164,8 @@ export class Journey {
           const y = c.y + (N.y * Math.cos(a) + B.y * Math.sin(a)) * r * wob;
           const z = c.z + (N.z * Math.cos(a) + B.z * Math.sin(a)) * r * wob;
           pos.push(x, y, z);
-          uv.push(s / 20, (j / radial) * Math.max(2, Math.round((r * 6.28) / 20)));
+          const tile = st.kind === 'heart' ? 14 : 20;
+          uv.push(s / tile, (j / radial) * Math.max(2, Math.round((r * 6.28) / tile)));
         }
       }
       const n = i1 - i0;
@@ -168,9 +182,11 @@ export class Journey {
       g.computeVertexNormals();
       const venous = st.kind === 'vein' && !st.arterialBlood;
       const col = st.kind === 'heart' ? HEART.wall : venous ? VENOUS.wall : ARTERIAL.wall;
+      const heart = st.kind === 'heart';
       const m = new THREE.MeshStandardMaterial({
-        map: tex('tex_endothelium', 1, 1),
-        color: col,
+        map: tex(heart ? 'tex_endocardium' : 'tex_endothelium', 1, 1),
+        color: heart ? 0xf0d0d0 : col,
+        emissive: heart ? 0x2a0808 : 0x000000,
         roughness: 0.8,
         side: THREE.BackSide,
         transparent: st.kind === 'lung' || st.kind === 'cap',
@@ -179,6 +195,16 @@ export class Journey {
       });
       const mesh = new THREE.Mesh(g, m);
       this.group.add(mesh);
+      if (heart) {
+        // remember rest shape + ring centres so the chamber can contract
+        const base = Float32Array.from(pos);
+        const centers = new Float32Array(pos.length);
+        for (let i = i0; i <= i1; i++) {
+          const c = this.curve.getPointAt(this.u((i / rings) * this.total));
+          for (let j = 0; j <= radial; j++) centers.set([c.x, c.y, c.z], ((i - i0) * (radial + 1) + j) * 3);
+        }
+        this.heartMeshes.push({ mesh, base, centers, st });
+      }
     }
   }
 
@@ -204,6 +230,10 @@ export class Journey {
       root.position.copy(f.p);
       root.lookAt(f.p.clone().add(f.tan));
       this.group.add(root);
+      // fibrous valve ring
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, Math.max(0.8, r * 0.04), 10, 64), new THREE.MeshStandardMaterial({ color: 0xf2e2d2, roughness: 0.5 }));
+      root.add(ring);
+      this.labels.push({ pos: f.p.clone(), key: 'v_' + st.valve.key });
       const cusps = [];
       for (let k = 0; k < st.valve.cusps; k++) {
         const hinge = new THREE.Group();
@@ -223,8 +253,131 @@ export class Journey {
         arm.add(leaf);
         cusps.push(arm);
       }
-      this.valves.push({ s, root, cusps, open: 0 });
+      // tricuspid and mitral valves are held by chordae; semilunar valves are not
+      const chordae = st.valve.key === 'tricuspid' || st.valve.key === 'mitral';
+      this.valves.push({ s, root, cusps, open: 0, r, chordae, next: this.stations[this.stations.indexOf(st) + 1] });
     }
+  }
+
+  /** Trabeculae, papillary muscles with chordae tendineae, chamber lights, coronary ostia. */
+  buildHeartDetail() {
+    const muscle = new THREE.MeshStandardMaterial({ map: tex('tex_endocardium', 3, 1), color: 0xd89090, roughness: 0.6, emissive: 0x220606 });
+    for (const st of this.stations) {
+      if (st.kind !== 'heart') continue;
+      const mid = this.frameAt(st.s0 + st.len / 2);
+      const light = new THREE.PointLight(0xffd8c8, 28, 95, 1.4);
+      light.position.copy(mid.p);
+      this.group.add(light);
+      // trabeculae carneae: muscle ridges along the wall
+      for (let k = 0; k < 16; k++) {
+        const a0 = Math.random() * Math.PI * 2;
+        const pts = [];
+        const sA = st.s0 + 4 + Math.random() * st.len * 0.3;
+        const sB = Math.min(st.s1 - 6, sA + st.len * (0.35 + Math.random() * 0.4));
+        for (let i = 0; i <= 4; i++) {
+          const ss = sA + ((sB - sA) * i) / 4;
+          const f = this.frameAt(ss);
+          const a = a0 + Math.sin(i * 1.3 + k) * 0.25;
+          const rr = this.radiusAt(ss) * (0.86 + Math.sin(i * 2.1 + k) * 0.03);
+          pts.push(f.p.clone().addScaledVector(f.side, Math.cos(a) * rr).addScaledVector(f.up, Math.sin(a) * rr));
+        }
+        const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.8 + Math.random() * 1.1, 6), muscle);
+        this.group.add(tube);
+        if (k === 0) this.labels.push({ pos: pts[2], key: 's_trab' });
+      }
+      // papillary muscles in the ventricles (anchor the chordae)
+      if (st.key === 'rv' || st.key === 'lv') {
+        st.papTips = [];
+        const n = st.key === 'rv' ? 3 : 2;
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2 + 0.6;
+          const fb = this.frameAt(st.s0 + st.len * 0.62);
+          const ft = this.frameAt(st.s0 + st.len * 0.38);
+          const rb = this.radiusAt(st.s0 + st.len * 0.62) * 0.9;
+          const rt = this.radiusAt(st.s0 + st.len * 0.38) * 0.55;
+          const base = fb.p.clone().addScaledVector(fb.side, Math.cos(a) * rb).addScaledVector(fb.up, Math.sin(a) * rb);
+          const tip = ft.p.clone().addScaledVector(ft.side, Math.cos(a) * rt).addScaledVector(ft.up, Math.sin(a) * rt);
+          const len = base.distanceTo(tip);
+          const cone = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 4.5, len, 14), muscle);
+          cone.position.copy(base).lerp(tip, 0.5);
+          cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tip.clone().sub(base).normalize());
+          this.group.add(cone);
+          st.papTips.push(tip);
+          if (k === 0) this.labels.push({ pos: tip.clone(), key: 's_papillary' });
+        }
+      }
+    }
+    // chordae tendineae: thin strings from the valve leaflets to the papillary muscles
+    const cm = new THREE.LineBasicMaterial({ color: 0xfff2e8, transparent: true, opacity: 0.85 });
+    for (const vl of this.valves) {
+      if (!vl.chordae || !vl.next?.papTips) continue;
+      const n = vl.cusps.length * 3;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 2 * 3), 3));
+      vl.lines = new THREE.LineSegments(g, cm);
+      vl.lines.frustumCulled = false;
+      this.group.add(vl.lines);
+      this.labels.push({ pos: vl.root.position.clone().lerp(vl.next.papTips[0], 0.5), key: 's_chordae' });
+    }
+    // the two coronary ostia just above the aortic valve
+    const ao = this.stations.find((x) => x.key === 'aorta');
+    if (ao) {
+      const hole = new THREE.MeshBasicMaterial({ color: 0x1a0404, side: THREE.DoubleSide });
+      for (const a of [0.9, 2.6]) {
+        const ss = ao.s0 + 10;
+        const f = this.frameAt(ss);
+        const rr = this.radiusAt(ss) * 0.97;
+        const pos = f.p.clone().addScaledVector(f.side, Math.cos(a) * rr).addScaledVector(f.up, Math.sin(a) * rr);
+        const m = new THREE.Mesh(new THREE.CircleGeometry(2.4, 20), hole);
+        m.position.copy(pos);
+        m.lookAt(f.p);
+        this.group.add(m);
+        if (a < 1) this.labels.push({ pos, key: 's_coronary_ostium' });
+      }
+    }
+  }
+
+  updateChordae() {
+    const tmp = new THREE.Vector3();
+    for (const vl of this.valves) {
+      if (!vl.lines) continue;
+      vl.root.updateMatrixWorld(true);
+      const arr = vl.lines.geometry.attributes.position.array;
+      let i = 0;
+      vl.cusps.forEach((arm, k) => {
+        const w = (Math.PI * vl.r) / vl.cusps.length;
+        for (const [x, y] of [[-0.45 * w, -0.72 * vl.r], [0, -vl.r], [0.45 * w, -0.72 * vl.r]]) {
+          tmp.set(x, y, 0);
+          arm.localToWorld(tmp);
+          const tip = vl.next.papTips[k % vl.next.papTips.length];
+          arr.set([tmp.x, tmp.y, tmp.z, tip.x, tip.y, tip.z], i);
+          i += 6;
+        }
+      });
+      vl.lines.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  /** Heart chambers squeeze with the beat: atria first, then ventricles. */
+  beatWalls(beat) {
+    const amp = this.comfort ? 0.025 : 0.06;
+    for (const h of this.heartMeshes) {
+      const atrium = h.st.key === 'ra' || h.st.key === 'la';
+      const c = atrium ? (beat < 0.15 ? Math.sin((beat / 0.15) * Math.PI) : 0) : beat > 0.15 && beat < 0.45 ? Math.sin(((beat - 0.15) / 0.3) * Math.PI) : 0;
+      const k = 1 - amp * c;
+      const p = h.mesh.geometry.attributes.position.array;
+      for (let i = 0; i < p.length; i++) p[i] = h.centers[i] + (h.base[i] - h.centers[i]) * k;
+      h.mesh.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  /** Labelled structures near the camera (for HUD markers). */
+  visibleLabels(maxDist = 70) {
+    const cam = this.world.camera.position;
+    return this.labels.filter((l) => {
+      const d = l.pos.distanceTo(cam);
+      return d > 5 && d < maxDist;
+    });
   }
 
   buildAlveoli() {
@@ -316,6 +469,8 @@ export class Journey {
     scene.background = fogC;
     this.oxy = oxy;
 
+    this.beatWalls(beat);
+
     // valves: open as we approach, close behind us (and flutter with the beat)
     for (const vl of this.valves) {
       const d = vl.s - this.s;
@@ -324,6 +479,7 @@ export class Journey {
       const flutter = this.comfort ? 0 : Math.sin(this.time * 9) * 0.03;
       for (const c of vl.cusps) c.rotation.x = -(0.15 + vl.open * 1.25) + flutter;
     }
+    this.updateChordae();
 
     // blood cells travel with us (slightly faster in the centre)
     const cd = this.cellData;

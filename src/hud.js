@@ -42,6 +42,9 @@ export class Hud {
       <div class="jr-card"><div class="jr-kicker"></div><div class="jr-name"></div><div class="jr-fact"></div><div class="jr-meta"></div></div>
       <div class="jr-hint"></div>`;
     this.jr.style.display = 'none';
+    this.locEl = el('div', 'loc-map', h);
+    this.locEl.innerHTML = '<img src="assets/bodymap.webp" alt=""><canvas></canvas><div class="loc-label"></div>';
+    this.locEl.style.display = 'none';
     this.help = el('div', 'hud-panel hud-help', h);
     this.help.style.display = 'none';
     // markers canvas covers the whole viewport
@@ -68,11 +71,11 @@ export class Hud {
     this.jr.style.display = 'block';
     this.jr.querySelector('.jr-kicker').textContent = texts.kicker;
     this.jr.querySelector('.jr-hint').textContent = texts.hint;
-    for (const e of [this.objective, this.stats, this.toolbar, this.crosshair, this.apBtn]) e.style.visibility = 'hidden';
+    for (const e of [this.objective, this.stats, this.toolbar, this.crosshair, this.apBtn, this.locEl]) e.style.visibility = 'hidden';
   }
   hideJourney() {
     this.jr.style.display = 'none';
-    for (const e of [this.objective, this.stats, this.toolbar, this.crosshair, this.apBtn]) e.style.visibility = '';
+    for (const e of [this.objective, this.stats, this.toolbar, this.crosshair, this.apBtn, this.locEl]) e.style.visibility = '';
   }
   updateJourney(index, frac, name, fact, meta, changed) {
     if (changed) {
@@ -105,19 +108,63 @@ export class Hud {
     g.lineJoin = 'round';
     line(P[0], P.slice(1), 'rgba(255,210,127,0.35)', 3);
     line(P[0], [...P.slice(1, index + 1), cur], 'rgba(255,210,127,0.95)', 4);
-    g.fillStyle = '#fff';
-    g.shadowColor = '#7ff3ff';
-    g.shadowBlur = 14;
-    g.beginPath();
-    g.arc(cur[0], cur[1], 7, 0, Math.PI * 2);
-    g.fill();
-    g.shadowBlur = 0;
-    const end = P[P.length - 1];
-    g.strokeStyle = '#ff6b6b';
+    // blinking "you are here" marker with an expanding pulse ring
+    const now = performance.now() / 1000;
+    const blink = 0.55 + 0.45 * Math.sin(now * 7);
+    const ring = (now * 1.2) % 1;
+    g.strokeStyle = `rgba(127,243,255,${(1 - ring) * 0.9})`;
     g.lineWidth = 3;
     g.beginPath();
-    g.arc(end[0], end[1], 10, 0, Math.PI * 2);
+    g.arc(cur[0], cur[1], 8 + ring * 34, 0, Math.PI * 2);
     g.stroke();
+    g.fillStyle = `rgba(255,255,255,${blink})`;
+    g.shadowColor = '#7ff3ff';
+    g.shadowBlur = 18;
+    g.beginPath();
+    g.arc(cur[0], cur[1], 8, 0, Math.PI * 2);
+    g.fill();
+    g.shadowBlur = 0;
+    g.font = `bold ${Math.round(W * 0.055)}px system-ui, sans-serif`;
+    g.textAlign = cur[0] > W * 0.55 ? 'right' : 'left';
+    g.fillStyle = `rgba(127,243,255,${0.6 + 0.4 * blink})`;
+    g.fillText(this.hereText ?? '', cur[0] + (cur[0] > W * 0.55 ? -16 : 16), cur[1] + 5);
+    // destination blinks red
+    const end = P[P.length - 1];
+    g.strokeStyle = `rgba(255,107,107,${0.4 + 0.6 * Math.abs(Math.sin(now * 3))})`;
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(end[0], end[1], 11, 0, Math.PI * 2);
+    g.stroke();
+  }
+
+  /** Small body map during a mission: where in the body the ship is. */
+  showLocation(point, label) {
+    this.loc = { point, label };
+    this.locEl.style.display = point ? 'block' : 'none';
+    this.locEl.querySelector('.loc-label').textContent = label ?? '';
+  }
+  drawLocation() {
+    if (!this.loc?.point || this.locEl.style.display === 'none') return;
+    const c = this.locEl.querySelector('canvas');
+    const img = this.locEl.querySelector('img');
+    const W = (c.width = img.clientWidth * 2 || 100);
+    const H = (c.height = img.clientHeight * 2 || 180);
+    const g = c.getContext('2d');
+    const [x, y] = [this.loc.point[0] * W, this.loc.point[1] * H];
+    const now = performance.now() / 1000;
+    const ring = (now * 1.1) % 1;
+    g.strokeStyle = `rgba(255,210,127,${(1 - ring) * 0.9})`;
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(x, y, 5 + ring * 26, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = `rgba(255,230,160,${0.55 + 0.45 * Math.sin(now * 7)})`;
+    g.shadowColor = '#ffd27f';
+    g.shadowBlur = 14;
+    g.beginPath();
+    g.arc(x, y, 6, 0, Math.PI * 2);
+    g.fill();
+    g.shadowBlur = 0;
   }
 
   toggleHelp(html) {
@@ -171,6 +218,7 @@ export class Hud {
     this.apBtn.onclick = onToggle;
   }
   update(dt) {
+    this.drawLocation();
     if (this.toastT > 0) {
       this.toastT -= dt;
       if (this.toastT <= 0) this.toastEl.classList.remove('show');

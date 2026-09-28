@@ -140,12 +140,12 @@ async function simple(name, width, q = 82) {
 
 await cockpit();
 await icons();
-for (const n of ['tex_endothelium', 'tex_plaque', 'tex_fibrin']) await simple(n, 1024, 85);
+for (const n of ['tex_endothelium', 'tex_plaque', 'tex_fibrin', 'tex_endocardium']) await simple(n, 1024, 85);
 // The RBC generation came out as a field of cells; a small patch of one cell
 // gives the smooth, mottled membrane surface we need.
 await sharp(`${SRC}/tex_rbc.png`).extract({ left: 590, top: 400, width: 70, height: 70 }).resize(512, 512, { kernel: 'cubic' }).blur(6).webp({ quality: 85 }).toFile(`${OUT}/tex_rbc.webp`);
 for (const n of ['transition_start', 'transition_end']) await simple(n, 1920, 80);
 await simple('bodymap', 480, 85);
-for (const n of ['brief_stent', 'brief_virus', 'brief_clot', 'ship_concept']) await simple(n, 960);
+for (const n of ['brief_stent', 'brief_virus', 'brief_clot', 'brief_stroke', 'ship_concept']) await simple(n, 960);
 for (const n of ['keyart', 'outcome_survived', 'outcome_died']) await simple(n, 1920);
 console.log('assets processed');

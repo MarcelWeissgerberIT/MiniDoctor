@@ -11,12 +11,13 @@ import { DiagnosisMission } from './missions/diag.js';
 import { StentMission } from './missions/stent.js';
 import { VirusMission } from './missions/virus.js';
 import { ClotMission } from './missions/clot.js';
+import { StrokeMission } from './missions/stroke.js';
 import { DISEASES, TREATMENT } from './missions/diagLogic.js';
-import { Journey, MAP_POINTS, stationName, stationFact } from './journey.js';
+import { Journey, MAP_POINTS, MISSION_SITE, stationName, stationFact } from './journey.js';
 
-const MISSIONS = { diag: DiagnosisMission, stent: StentMission, virus: VirusMission, clot: ClotMission };
-const BRIEF_IMG = { diag: 'ship_concept', stent: 'brief_stent', virus: 'brief_virus', clot: 'brief_clot' };
-const NAME = { diag: 'm0', stent: 'm1', virus: 'm2', clot: 'm3' };
+const MISSIONS = { diag: DiagnosisMission, stent: StentMission, virus: VirusMission, clot: ClotMission, stroke: StrokeMission };
+const BRIEF_IMG = { diag: 'ship_concept', stent: 'brief_stent', virus: 'brief_virus', clot: 'brief_clot', stroke: 'brief_stroke' };
+const NAME = { diag: 'm0', stent: 'm1', virus: 'm2', clot: 'm3', stroke: 'm4' };
 const HANDOVER = 5; // seconds of autopilot before the pilot takes over
 
 const $ = (s) => document.querySelector(s);
@@ -144,7 +145,7 @@ function newTraining(id) {
   audio.ensure();
   game.training = true;
   game.condition = 85;
-  game.disease = id === 'stent' ? 'stenosis' : id === 'virus' ? 'virus' : id === 'clot' ? 'dvt' : DISEASES[Math.floor(Math.random() * 3)];
+  game.disease = { stent: 'stenosis', virus: 'virus', clot: 'dvt', stroke: 'stroke' }[id] ?? DISEASES[Math.floor(Math.random() * DISEASES.length)];
   game.plan = [id];
   game.step = 0;
   game.history = [];
@@ -168,6 +169,7 @@ function briefing() {
         <div class="kicker">${t('drop')} ${game.step + 1} ${t('of')} ${game.plan.length} · ${t('patientName')} · ${t('condition')} ${Math.round(game.condition)} %</div>
         <h2>${t(n + '_name')}</h2>
         <div class="place">${t(n + '_place')}</div>
+        <div class="brief-map"><img src="assets/bodymap.webp" alt=""><div class="dot" style="left:${MAP_POINTS[MISSION_SITE[id]][0] * 100}%;top:${MAP_POINTS[MISSION_SITE[id]][1] * 100}%"></div><div class="cap">${t('location')}</div></div>
         <p>${t(n + '_brief')}</p>
         <h3>${t('howto')}</h3>
         <ol class="brief-steps">${t(n + '_steps').map((x) => `<li>${x}</li>`).join('')}</ol>
@@ -269,6 +271,9 @@ function journeyFrame(dt) {
   }
   tools.update(dt);
   hud.clearMarkers();
+  hud.hereText = t('here');
+  if (game.state === 'journey')
+    for (const l of journey.visibleLabels()) hud.marker(l.pos, { size: 14, color: '#ffd27f', label: t(l.key) });
   hud.update(dt);
   cockpit.updateSticks(dt, {}, settings.comfort);
   cockpit.draw(
@@ -322,6 +327,7 @@ function startMission(id) {
   hud.setBar('');
   hud.setCenter('');
   mission.start(ctx);
+  hud.showLocation(MAP_POINTS[MISSION_SITE[id]], `${t('here')}: ${t(NAME[id] + '_place').split(',')[0]}`);
   ctx.mapTarget = null;
   ctx.distToTarget = null;
 }
@@ -349,6 +355,7 @@ function endMission(res) {
   game.state = 'result';
   input.unlock();
   mission?.dispose?.(ctx);
+  hud.showLocation(null);
   game.condition = Math.max(0, game.condition - res.damage);
   game.history.push({ id: mission.id, ...res });
   const dead = game.condition <= 0;
@@ -495,7 +502,7 @@ function frame(now) {
     world.render(tools.scene);
     if (res) endMission(res);
   }
-  if (game.state === 'play' && !input.locked && ctx.controls && hud.panel.style.display === 'none' && mission) {
+  if (game.state === 'play' && !input.locked && ctx.controls && hud.panel.style.display === 'none' && mission && !mission.wantsCursor?.()) {
     $('#lockhint').textContent = t('clickToFocus');
     $('#lockhint').style.display = 'block';
   } else $('#lockhint').style.display = 'none';

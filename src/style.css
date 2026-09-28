@@ -155,3 +155,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #07070c; col
 .jr-fact { opacity: .9; }
 .jr-meta { margin-top: .3em; font-size: .85em; color: var(--warn); font-family: ui-monospace, monospace; }
 .jr-hint { position: absolute; right: 18%; top: 17%; background: var(--panel); border-radius: 6px; padding: .35em .8em; font-size: .85em; opacity: .85; }
+.timing.pos .lesion.red { background: rgba(200, 70, 70, 0.7); }
+.timing .zoneMark.goal { background: rgba(86, 245, 154, 0.45); }
+.gauge.thin { height: 8px; margin-top: 6px; }
+.gauge.thin .fill { background: var(--ok); }
+
+.loc-map { position: absolute; left: 17.5%; bottom: 27.5%; height: 17%; aspect-ratio: 768 / 1376; border: 1px solid rgba(255,210,127,.4); border-radius: 6px; overflow: hidden; background: #07121c; pointer-events: none; }
+.loc-map img, .loc-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.loc-label { position: absolute; left: 0; right: 0; bottom: 2px; text-align: center; font-size: .7em; color: var(--warn); text-shadow: 0 0 4px #000; }
+.brief-map { position: relative; width: 90px; aspect-ratio: 768 / 1376; float: right; margin: 0 0 .5em 1em; border: 1px solid rgba(255,210,127,.4); border-radius: 6px; overflow: hidden; background: #07121c; }
+.brief-map img { width: 100%; height: 100%; display: block; }
+.brief-map .dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #ffe6a0; box-shadow: 0 0 10px #ffd27f; animation: blink 0.9s infinite; }
+.brief-map .dot::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid #ffd27f; animation: ping 1.2s infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+@keyframes ping { from { transform: scale(0.6); opacity: 1; } to { transform: scale(3); opacity: 0; } }
+.brief-map .cap { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--warn); }
