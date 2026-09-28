@@ -1,0 +1,4 @@
+node_modules
+dist
+# raw OpenArt generations (large); processed versions live in public/assets
+assets-src

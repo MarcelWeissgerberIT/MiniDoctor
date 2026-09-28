@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MiniDoctor</title>
+    <link rel="preload" href="assets/cockpit.webp" as="image" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <div id="cockpit"></div>
+    <div id="fade"></div>
+    <div id="lockhint"></div>
+
+    <section id="menu" class="screen"></section>
+    <section id="briefing" class="screen"></section>
+    <section id="result" class="screen"></section>
+    <section id="outcome" class="screen"></section>
+    <section id="videoscreen" class="screen"></section>
+
+    <div id="video-layer">
+      <video id="dropvideo" playsinline muted preload="auto" poster="assets/transition_start.webp"></video>
+      <div id="video-caption"></div>
+      <button id="video-skip" class="btn sm"></button>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
