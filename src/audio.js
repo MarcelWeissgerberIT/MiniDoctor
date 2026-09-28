@@ -279,6 +279,23 @@ export class Audio {
       case 'oxygen': // gas exchange sparkle
         for (let i = 0; i < 5; i++) this.tone(1800 + Math.random() * 1400, 0.25, 'sine', 0.025, 300, i * 0.07);
         return;
+      case 'radio_on': // squelch + beep
+        this.noise(0.18, { from: 2500, to: 1200, q: 0.6, vol: 0.12 });
+        return this.tone(1320, 0.08, 'sine', 0.06, 0, 0.16);
+      case 'radio_off':
+        this.tone(990, 0.06, 'sine', 0.05);
+        return this.noise(0.22, { from: 1800, to: 700, q: 0.6, vol: 0.1, delay: 0.05 });
+      case 'click': // flip switch
+        this.noise(0.03, { from: 4000, to: 2500, q: 2, vol: 0.25 });
+        return this.tone(180, 0.05, 'square', 0.05, -60, 0.01);
+      case 'button': // push button
+        this.tone(260, 0.05, 'square', 0.05, -80);
+        return this.noise(0.04, { from: 3000, to: 1500, q: 3, vol: 0.12 });
+      case 'sonar':
+        this.tone(1480, 1.2, 'sine', 0.08, -200);
+        return this.tone(1480, 0.9, 'sine', 0.03, -200, 0.45);
+      case 'light':
+        return this.tone(80, 0.25, 'sawtooth', 0.04, 40);
       case 'arrive': // arrival chord
         this.tone(392, 1.6, 'triangle', 0.06);
         this.tone(494, 1.6, 'triangle', 0.05, 0, 0.12);

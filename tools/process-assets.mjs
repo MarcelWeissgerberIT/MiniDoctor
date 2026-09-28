@@ -146,6 +146,7 @@ for (const n of ['tex_endothelium', 'tex_plaque', 'tex_fibrin', 'tex_endocardium
 await sharp(`${SRC}/tex_rbc.png`).extract({ left: 590, top: 400, width: 70, height: 70 }).resize(512, 512, { kernel: 'cubic' }).blur(6).webp({ quality: 85 }).toFile(`${OUT}/tex_rbc.webp`);
 for (const n of ['transition_start', 'transition_end']) await simple(n, 1920, 80);
 await simple('bodymap', 480, 85);
+await simple('doctor', 480, 82);
 for (const n of ['brief_stent', 'brief_virus', 'brief_clot', 'brief_stroke', 'ship_concept']) await simple(n, 960);
 for (const n of ['keyart', 'outcome_survived', 'outcome_died']) await simple(n, 1920);
 console.log('assets processed');

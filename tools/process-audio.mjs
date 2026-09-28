@@ -21,3 +21,13 @@ for (const f of readdirSync(SRC).filter((f) => f.endsWith('.mp4'))) {
   execFileSync(ffmpeg, [...input, ...filters, '-c:a', 'aac', '-b:a', music ? '112k' : '80k', `${OUT}/${name}.m4a`]);
   console.log('audio', name);
 }
+
+// Talking loop of the radio doctor (OpenArt image-to-video) → small WebM + MP4.
+const talk = 'assets-src/doctor_talk.mp4';
+try {
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', talk, '-an', '-vf', 'scale=400:-2,fps=24', '-c:v', 'libvpx-vp9', '-b:v', '350k', '-row-mt', '1', 'public/assets/doctor_talk.webm']);
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', talk, '-an', '-vf', 'scale=400:-2,fps=24', '-c:v', 'libx264', '-crf', '28', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', 'public/assets/doctor_talk.mp4']);
+  console.log('video doctor_talk');
+} catch (e) {
+  console.warn('doctor_talk skipped:', e.message);
+}

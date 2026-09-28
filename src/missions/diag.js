@@ -146,6 +146,11 @@ export class DiagnosisMission {
     ctx.tools.select('scanner');
   }
 
+  sonarRange = 400;
+  sonarTargets() {
+    return this.samples.filter((s) => s.state === 'open').map((s) => ({ x: s.mesh.position.x, y: s.mesh.position.y, z: s.mesh.position.z }));
+  }
+
   autopilotTarget(ship) {
     const next = this.samples.find((s) => s.state === 'open' && s.dist - ship.dist > -5);
     if (!next) return { x: 0, y: 0 };
@@ -171,6 +176,7 @@ export class DiagnosisMission {
       if (z > 20 && s.state === 'open') {
         s.state = 'missed';
         hud.toast(t('d_missed'), 'warn');
+        ctx.radio('r_d_missed', null, { cooldown: 30 });
       }
       if (z > 200) {
         s.state = s.state === 'open' ? 'missed' : s.state;
@@ -198,6 +204,7 @@ export class DiagnosisMission {
         const f = findingFor(best.s.type, this.disease);
         this.findings.push({ type: best.s.type, f });
         hud.toast(`${t('s_' + best.s.type)}: ${t(f)}`, 'ok', 4.5);
+        ctx.radio('r_d_found', null, { priority: 0, cooldown: 25 });
         audio.sfx('ok');
       } else if (Math.random() < dt * 6) audio.sfx('scan');
     }

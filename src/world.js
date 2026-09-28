@@ -99,7 +99,8 @@ export class World {
 
     // Endothelium: tile ~150 µm covers roughly a dozen endothelial cells.
     const tile = 150;
-    const L = Math.min(2400, Math.max(600, 30 / vessel.fogDensity));
+    // the wall is not fogged, so big vessels need a long tunnel (no visible end)
+    const L = R < 100 ? Math.min(2400, Math.max(600, 30 / vessel.fogDensity)) : 9000;
     this.wallLen = L;
     const circ = 2 * Math.PI * R;
     const radial = R < 100 ? 48 : 160;

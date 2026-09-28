@@ -57,9 +57,25 @@ export class Cockpit {
       this.frame.appendChild(c);
       this.canvases[k] = c;
     }
-    this.lamps = LAMPS.map(([x, y]) => {
+    this.buttonHandlers = {};
+    this.lamps = LAMPS.map(([x, y], i) => {
       const d = document.createElement('div');
       d.className = 'dash-lamp';
+      d.dataset.i = i;
+      d.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        d.classList.add('pressed');
+        this.buttonHandlers.press?.(i);
+      });
+      const up = () => d.classList.remove('pressed');
+      d.addEventListener('pointerup', up);
+      d.addEventListener('pointerleave', up);
+      const lab = document.createElement('div');
+      lab.className = 'dash-label';
+      Object.assign(lab.style, { left: pct(x - 40, IMG_W), top: pct(y + LAMP_R + 1, IMG_H), width: pct(80, IMG_W) });
+      this.frame.appendChild(lab);
+      d.label = lab;
       Object.assign(d.style, {
         left: pct(x - LAMP_R, IMG_W),
         top: pct(y - LAMP_R, IMG_H),
@@ -114,6 +130,34 @@ export class Cockpit {
       this.sticks[name] = st;
     }
 
+    // overhead console: flip switches
+    this.switches = [];
+    const SW_Y = 30;
+    for (let i = 0; i < 4; i++) {
+      const x = 1180 + i * 105;
+      const d = document.createElement('div');
+      d.className = 'flip';
+      Object.assign(d.style, { left: pct(x, IMG_W), top: pct(SW_Y, IMG_H), width: pct(80, IMG_W), height: pct(105, IMG_H) });
+      d.innerHTML = '<div class="flip-plate"><div class="flip-lever"></div></div><div class="flip-led"></div><div class="flip-label"></div>';
+      d.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.buttonHandlers.flip?.(i);
+      });
+      this.frame.appendChild(d);
+      this.switches.push(d);
+    }
+    // top-right panel: sonar
+    this.sonar = document.createElement('canvas');
+    this.sonar.className = 'sonar';
+    Object.assign(this.sonar.style, { left: pct(2282, IMG_W), top: pct(35, IMG_H), width: pct(400, IMG_W), height: pct(200, IMG_H) });
+    this.frame.appendChild(this.sonar);
+    this.sonarPing = 0;
+    // interior lighting (boot-up, alarm) above the cockpit image, below the HUD
+    this.light = document.createElement('div');
+    this.light.className = 'cockpit-light';
+    this.frame.appendChild(this.light);
+
     // HUD layer lives inside the frame so it always lines up with the canopy
     this.hud = document.createElement('div');
     this.hud.className = 'hud';
@@ -166,6 +210,115 @@ export class Cockpit {
     return out;
   }
 
+  setLabels(labels) {
+    this.lamps.forEach((l, i) => (l.label.textContent = labels[i] ?? ''));
+  }
+  setSwitches(states, labels) {
+    this.switches.forEach((d, i) => {
+      d.classList.toggle('on', !!states[i]);
+      d.querySelector('.flip-label').textContent = labels[i];
+    });
+  }
+  /** interior lights: boot-up flicker when a mission starts */
+  boot() {
+    this.light.classList.remove('booting');
+    void this.light.offsetWidth;
+    this.light.classList.add('booting');
+    this.frame.querySelectorAll('.dash-screen, .sonar, .comm').forEach((el, i) => {
+      el.style.animation = 'none';
+      void el.offsetWidth;
+      el.style.animation = `screenOn .5s ${0.6 + i * 0.18}s both`;
+    });
+  }
+  alarm(on) {
+    this.light.classList.toggle('alarm', !!on);
+  }
+  shake(comfort) {
+    if (comfort) return;
+    this.frame.classList.remove('shake');
+    void this.frame.offsetWidth;
+    this.frame.classList.add('shake');
+  }
+  ping() {
+    this.sonarPing = 1;
+  }
+
+  /** radar-style top view around the ship; targets in metres-free relative coords */
+  drawSonar(dt, targets = [], range = 200) {
+    const c = this.sonar;
+    const W = (c.width = 400);
+    const H = (c.height = 200);
+    const g = c.getContext('2d');
+    this.sweep = ((this.sweep ?? 0) + dt * 2.2) % (Math.PI * 2);
+    this.sonarPing = Math.max(0, this.sonarPing - dt * 0.6);
+    g.fillStyle = '#051418';
+    g.fillRect(0, 0, W, H);
+    const cx = H / 2 + 10;
+    const cy = H / 2;
+    const R = H / 2 - 12;
+    g.strokeStyle = 'rgba(127,243,255,0.25)';
+    g.lineWidth = 1.5;
+    for (const f of [0.33, 0.66, 1]) {
+      g.beginPath();
+      g.arc(cx, cy, R * f, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.beginPath();
+    g.moveTo(cx - R, cy);
+    g.lineTo(cx + R, cy);
+    g.moveTo(cx, cy - R);
+    g.lineTo(cx, cy + R);
+    g.stroke();
+    // sweep wedge
+    const grd = g.createConicGradient ? g.createConicGradient(this.sweep - 0.6, cx, cy) : null;
+    if (grd) {
+      grd.addColorStop(0, 'rgba(127,243,255,0)');
+      grd.addColorStop(0.09, 'rgba(127,243,255,0.35)');
+      grd.addColorStop(0.1, 'rgba(127,243,255,0)');
+      g.fillStyle = grd;
+      g.beginPath();
+      g.arc(cx, cy, R, 0, Math.PI * 2);
+      g.fill();
+    }
+    // ping ring
+    if (this.sonarPing > 0) {
+      g.strokeStyle = `rgba(255,210,127,${this.sonarPing})`;
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(cx, cy, R * (1 - this.sonarPing), 0, Math.PI * 2);
+      g.stroke();
+    }
+    // targets (x = right, z = ahead)
+    for (const tg of targets) {
+      const d = Math.hypot(tg.x, tg.z);
+      if (d > range) continue;
+      const px = cx + (tg.x / range) * R;
+      const py = cy - (tg.z / range) * R;
+      const a = Math.atan2(px - cx, -(py - cy));
+      const since = (((this.sweep - a) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      const glow = Math.max(0.25, 1 - since / 3) + this.sonarPing;
+      g.fillStyle = tg.color ?? `rgba(255,210,127,${Math.min(1, glow)})`;
+      g.globalAlpha = Math.min(1, glow);
+      g.beginPath();
+      g.arc(px, py, tg.size ?? 5, 0, Math.PI * 2);
+      g.fill();
+      g.globalAlpha = 1;
+    }
+    g.fillStyle = '#fff';
+    g.beginPath();
+    g.moveTo(cx, cy - 7);
+    g.lineTo(cx - 5, cy + 5);
+    g.lineTo(cx + 5, cy + 5);
+    g.fill();
+    g.fillStyle = 'rgba(127,243,255,0.8)';
+    g.font = '18px ui-monospace, monospace';
+    g.textAlign = 'left';
+    g.fillText('SONAR', H + 30, 40);
+    g.fillText(`${range} µm`, H + 30, 70);
+    g.fillStyle = 'rgba(255,210,127,0.9)';
+    g.fillText(`${targets.filter((x) => Math.hypot(x.x, x.z) <= range).length} ◦`, H + 30, 100);
+  }
+
   show(v) {
     this.frame.style.display = v ? 'block' : 'none';
   }
@@ -188,7 +341,7 @@ export class Cockpit {
     set(this.lamps[1], s.anchored);
     set(this.lamps[2], s.toolActive);
     set(this.lamps[3], s.sound);
-    set(this.lamps[4], s.warning, 'warn');
+    set(this.lamps[4], s.radio, 'radio');
     set(this.leds[0], s.beat < 0.12);
     set(this.leds[1], s.scanning);
     set(this.leds[2], s.warning, 'warn');

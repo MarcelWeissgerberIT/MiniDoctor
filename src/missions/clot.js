@@ -29,8 +29,9 @@ export class ClotMission {
     this.phase = 'approach';
 
     // clot face: fibrin disc filling the lumen
-    const faceMat = new THREE.MeshStandardMaterial({ map: tex('tex_fibrin', 40, 40), roughness: 0.9, color: 0xffe8e0, transparent: true, opacity: 1, fog: false });
-    const geo = new THREE.PlaneGeometry(2 * R, 2 * R, 64, 64);
+    const faceMat = new THREE.MeshStandardMaterial({ map: tex('tex_fibrin', 40, 40), emissiveMap: tex('tex_fibrin', 40, 40), emissive: 0x7a4a40, emissiveIntensity: 0.6, roughness: 0.9, color: 0xffe8e0, transparent: true, opacity: 1, fog: false });
+    // round disc that fills the lumen (ring geometry has radial segments for the bumps)
+    const geo = new THREE.RingGeometry(1, R * 1.02, 128, 48);
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i);
@@ -70,6 +71,11 @@ export class ClotMission {
     this.opened = false;
     ctx.tools.select('laser');
     ctx.hud.setObjective(`<b>${t('m3_name')}</b><br>${t('c_approach')}`);
+  }
+
+  sonarRange = 3000;
+  sonarTargets(ctx) {
+    return [{ x: 0, y: 0, z: ctx.world.zOf(CLOT_AT, ctx.ship), color: '#ff6b6b', size: 9 }];
   }
 
   flowMod(ship) {
@@ -217,6 +223,7 @@ export class ClotMission {
     for (const f of ev.fragments) {
       if (f.embolus) {
         ctx.hud.toast(t('c_embolus'), 'bad', 4);
+        ctx.radio('r_c_embolus', null, { priority: 2 });
         ctx.audio.sfx('bad');
         const e = new THREE.Mesh(new THREE.DodecahedronGeometry(18 + f.cells.length * 2, 1), this.face.material.clone());
         e.material.opacity = 1;

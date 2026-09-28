@@ -103,6 +103,12 @@ export class StentMission {
     ctx.hud.setObjective(`<b>${t('m1_name')}</b><br>${t('st_obj')}`);
   }
 
+  sonarRange = 3000;
+  sonarTargets(ctx) {
+    const a = this.anchorPoint();
+    return [{ x: a.x, y: a.y, z: ctx.world.zOf(LESION_AT, ctx.ship), color: '#ffd27f', size: 7 }];
+  }
+
   get lesionDist() {
     return LESION_AT;
   }
@@ -190,6 +196,7 @@ export class StentMission {
       this.phase = 'scan';
       this.anchorDist = ship.dist;
       this.reel = true; // harpoon line pulls the ship to the wall
+      ctx.radio('r_s_anchored', null, { priority: 2 });
       hud.toast(t('hud_anchored'), 'ok');
       hud.setObjective(`<b>${t('m1_name')}</b><br>${t('st_scan')}`);
       ctx.tools.select('scanner');
@@ -272,6 +279,7 @@ export class StentMission {
       if (toGo < -30) {
         this.missed++;
         this.armed = true; // after a miss the anchor assistant takes over
+        ctx.radio('r_s_swept', null, { priority: 2 });
         ship.dist = LESION_AT - 2200;
         audio.sfx('bad');
         hud.toast(t('sweptPast'), 'bad', 6);
@@ -482,6 +490,7 @@ export class StentMission {
     const dScore = L.diameterScore(this.choice.diam, this.case.refDiameter);
     const o = L.stentOutcome({ lScore, dScore, pScore: this.pScore, inflation: infl, missedAnchors: this.missed });
     if (infl.dissection) {
+      ctx.radio('r_s_dissection', null, { priority: 2 });
       ctx.hud.toast(t('st_dissection'), 'bad', 5);
       ctx.audio.sfx('bad');
     } else ctx.audio.sfx('ok');

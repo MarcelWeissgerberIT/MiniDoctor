@@ -33,8 +33,9 @@ export class StrokeMission {
     this.opened = false;
 
     // red, RBC-rich cardio-embolic clot filling the lumen
-    const faceMat = new THREE.MeshStandardMaterial({ map: tex('tex_fibrin', 40, 40), color: 0xc05050, roughness: 0.85, transparent: true, fog: false });
-    const geo = new THREE.PlaneGeometry(2 * R, 2 * R, 64, 64);
+    const faceMat = new THREE.MeshStandardMaterial({ map: tex('tex_fibrin', 40, 40), emissiveMap: tex('tex_fibrin', 40, 40), emissive: 0x8a2a2a, emissiveIntensity: 0.6, color: 0xc05050, roughness: 0.85, transparent: true, fog: false });
+    // round disc that fills the lumen (ring geometry has radial segments for the bumps)
+    const geo = new THREE.RingGeometry(1, R * 1.02, 128, 48);
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i);
@@ -81,6 +82,11 @@ export class StrokeMission {
     ctx.hud.setObjective(`<b>${t('m4_name')}</b><br>${t('k_approach')}`);
   }
 
+  sonarRange = 3500;
+  sonarTargets(ctx) {
+    return [{ x: 0, y: 0, z: ctx.world.zOf(CLOT_AT, ctx.ship), color: '#ff6b6b', size: 9 }];
+  }
+
   get dockPoint() {
     const R = this.vessel.radius;
     return { x: Math.cos(this.side) * R * 0.78, y: Math.sin(this.side) * R * 0.78 };
@@ -115,6 +121,7 @@ export class StrokeMission {
     const { world, ship, hud, input, tools, audio } = ctx;
     const R = this.vessel.radius;
     if (!this.opened) this.elapsed += dt;
+    if (!this.opened && this.elapsed > 20) ctx.radio('r_k_time', null, { priority: 0, cooldown: 45 });
     const zFace = world.zOf(CLOT_AT, ship);
     const pr = this.pull.progress;
     // while being pulled, the clot is compressed into the retriever and slides towards us
@@ -168,10 +175,10 @@ export class StrokeMission {
       }
       if (this.scanT) {
         this.scanT -= dt;
-        this.face.material.emissive.setHex(Math.sin(ctx.time * 20) > 0 ? 0x113344 : 0);
+        this.face.material.emissive.setHex(Math.sin(ctx.time * 20) > 0 ? 0x335566 : 0x8a2a2a);
         if (this.scanT <= 0) {
           this.scanT = 0;
-          this.face.material.emissive.setHex(0);
+          this.face.material.emissive.setHex(0x8a2a2a);
           audio.sfx('ok');
           this.openChooser(ctx);
         }
@@ -240,6 +247,7 @@ export class StrokeMission {
       if (p > 0.02 && Math.random() < dt * 5) audio.sfx('tool');
       if (ev.tore) {
         hud.toast(t('k_tore'), 'bad', 3);
+        ctx.radio('r_k_tore', null, { cooldown: 8 });
         audio.sfx('bad');
         const fr = new THREE.Mesh(new THREE.DodecahedronGeometry(90, 1), this.face.material.clone());
         fr.material.opacity = 1;

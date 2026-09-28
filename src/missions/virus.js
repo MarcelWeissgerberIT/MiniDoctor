@@ -82,6 +82,11 @@ export class VirusMission {
     });
   }
 
+  sonarRange = 40;
+  sonarTargets() {
+    return this.clusters.map((c) => ({ x: c.x, y: c.y, z: c.z, size: 2 + c.level * 1.5, color: '#b6ff9f' }));
+  }
+
   autopilotTarget() {
     return { x: 0, y: 0 };
   }
@@ -96,6 +101,7 @@ export class VirusMission {
       for (let k = 0; k < w.small; k++) this.spawn(2);
       this.wave++;
       hud.toast(`${t('v_wave')} ${this.wave}/${WAVES.length}`, 'warn');
+      if (this.wave > 1) ctx.radio('r_v_wave', null, { cooldown: 10 });
       audio.sfx('alarm');
     }
 
@@ -119,6 +125,7 @@ export class VirusMission {
         this.infections += c.level;
         this.flashes.push({ x: c.x, y: c.y, z: c.z, t: 1.5 });
         hud.toast(t('v_infected'), 'bad');
+        ctx.radio('r_v_infect', null, { cooldown: 20 });
         audio.sfx('bad');
       }
     }

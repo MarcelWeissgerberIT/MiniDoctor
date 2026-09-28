@@ -1,9 +1,11 @@
 import './style.css';
+import * as THREE from 'three';
 import { World } from './world.js';
 import { Ship, Input } from './ship.js';
 import { ToolRig, TOOL_KEYS } from './tools.js';
 import { Cockpit } from './cockpit.js';
 import { Hud } from './hud.js';
+import { Comm } from './comm.js';
 import { Audio } from './audio.js';
 import { t, getLang, setLang } from './i18n.js';
 import { beatPhase, toRealMetersPerSecond, vmaxGame } from './physics.js';
@@ -30,9 +32,18 @@ const cockpit = new Cockpit($('#cockpit'));
 const hud = new Hud(cockpit, world);
 const audio = new Audio();
 
-const settings = { comfort: loadBool('md_comfort', false), sound: loadBool('md_sound', true), music: loadBool('md_music', true) };
+const settings = {
+  comfort: loadBool('md_comfort', false),
+  sound: loadBool('md_sound', true),
+  music: loadBool('md_music', true),
+  voice: loadBool('md_voice', true),
+  light: true,
+  hud: true,
+};
 audio.setEnabled(settings.sound);
 audio.setMusic(settings.music);
+const comm = new Comm(cockpit.frame, audio);
+comm.voice = settings.voice;
 
 function loadBool(k, d) {
   try {
@@ -81,6 +92,7 @@ const ctx = {
   warning: false,
   mapTarget: null,
   requestAnchor: (on = true) => setAnchor(on, true),
+  radio: (key, vars, opts) => comm.say(key, vars, opts),
   fade: () => (fadeT = 1),
 };
 
@@ -116,6 +128,7 @@ function renderMenu() {
         <label><input type="checkbox" id="m-comfort" ${settings.comfort ? 'checked' : ''}> ${t('comfort')}</label>
         <label><input type="checkbox" id="m-sound" ${settings.sound ? 'checked' : ''}> ${t('sound')}</label>
         <label><input type="checkbox" id="m-music" ${settings.music ? 'checked' : ''}> ${t('music')}</label>
+        <label><input type="checkbox" id="m-voice" ${settings.voice ? 'checked' : ''}> ${t('voiceOpt')}</label>
       </div>
       <p class="scale">${t('scaleInfo')}</p>
       <p class="controls"><b>${t('controlsTitle')}:</b> ${t('controls')}</p>
@@ -125,6 +138,10 @@ function renderMenu() {
   document.querySelectorAll('[data-lang]').forEach((b) => (b.onclick = () => (setLang(b.dataset.lang), renderMenu())));
   document.querySelectorAll('[data-train]').forEach((b) => (b.onclick = () => newTraining(b.dataset.train)));
   $('#m-comfort').onchange = (e) => saveBool('md_comfort', (settings.comfort = e.target.checked));
+  $('#m-voice').onchange = (e) => {
+    saveBool('md_voice', (settings.voice = e.target.checked));
+    comm.voice = settings.voice;
+  };
   $('#m-music').onchange = (e) => {
     saveBool('md_music', (settings.music = e.target.checked));
     audio.setMusic(settings.music);
@@ -229,6 +246,8 @@ function finishVideos() {
   showScreen(null);
   hud.showJourney(journey.stations, MAP_POINTS, { kicker: `${t('j_title')} · ${t('j_scale')}`, hint: t('j_skip') });
   audioScene = '';
+  cockpit.boot();
+  comm.say('r_j_start', null, { priority: 2 });
   layer.style.transition = 'opacity 1.2s ease';
   layer.style.opacity = 0;
   setTimeout(() => {
@@ -263,6 +282,8 @@ function endJourney() {
   hud.hideJourney();
   startMission(journeyTarget);
   game.state = 'play';
+  cockpit.boot();
+  comm.say('r_m_' + journeyTarget, null, { priority: 2 });
   handover = HANDOVER;
   ship.controlsEnabled = false;
   ctx.controls = false;
@@ -305,7 +326,13 @@ function journeyFrame(dt) {
   const frac = (journey.s - st.s0) / st.len;
   if (game.state === 'journey') {
     hud.updateJourney(r.index, Math.min(1, frac), stationName(st), stationFact(st), `Ø ${st.d} · ${st.v >= 0.01 ? st.v.toFixed(2) + ' m/s' : (st.v * 1000).toFixed(1) + ' mm/s'} ${t('j_real')}`, r.changed);
-    if (r.changed) audio.sfx('station');
+    if (r.changed) {
+      audio.sfx('station');
+      const line = { ra: 'r_j_heart', rv: 'r_j_rv', lungcap: 'r_j_lung', lv: 'r_j_lv', aorta: 'r_j_aorta' }[st.key];
+      if (line) comm.say(line, null, { cooldown: 5 });
+      if (r.index === journey.stations.length - 1) comm.say('r_j_arrive', null, { cooldown: 5 });
+    }
+    if (r.events.includes('valve')) cockpit.shake(settings.comfort);
     journeyAudio(r, beat, dt);
   }
   tools.update(dt);
@@ -344,6 +371,7 @@ function journeyFrame(dt) {
   lastBeat = beat;
   if (fadeT > 0) fadeT = Math.max(0, fadeT - dt * 0.8);
   $('#fade').style.opacity = fadeT;
+  updateCockpitControls(dt);
   world.render(tools.scene);
   if (game.state === 'journey' && (journey.done || input.pressed.has('Space') || input.pressed.has('Enter'))) endJourney();
 }
@@ -384,6 +412,7 @@ function setAnchor(on, auto = false) {
     ship.anchored = true;
     tools.setAnchor(true);
     audio.sfx('anchor');
+    cockpit.shake(settings.comfort);
   } else {
     if (!auto && mission?.canRelease && !mission.canRelease()) return;
     ship.anchored = false;
@@ -419,6 +448,7 @@ function endMission(res) {
   };
   showScreen('result');
   audio.setFlow(0);
+  comm.say(res.damage <= 10 ? 'r_good' : res.damage <= 30 ? 'r_ok' : 'r_bad', null, { priority: 2 });
 }
 
 function outcome() {
@@ -448,6 +478,11 @@ function handleKeys() {
     saveBool('md_sound', settings.sound);
     audio.setEnabled(settings.sound);
   }
+  if (game.state === 'play' || game.state === 'journey') {
+    if (input.pressed.has('KeyR')) callDoctor();
+    if (input.pressed.has('KeyL')) flip(0);
+    if (input.pressed.has('KeyT')) flip(1);
+  }
   if (game.state !== 'play') return;
   if (input.pressed.has('KeyP') && ctx.controls) toggleAutopilot();
   if (input.pressed.has('KeyH') && mission) {
@@ -465,6 +500,77 @@ function handleKeys() {
     setAnchor(!ship.anchored);
   }
 }
+// ---------------------------------------------------------------- cockpit controls
+function callDoctor() {
+  // the doctor reads out what to do right now (the live objective)
+  const now = (hud.objective.innerText || '').split('\n').filter(Boolean);
+  const cur = hud.objective.querySelector('li.now')?.innerText ?? now.slice(1, 3).join(' ');
+  if (game.state === 'journey') comm.say('r_hint_journey', null, { priority: 2, cooldown: 0 });
+  else comm.say(cur ? { text: t('r_hint', { text: cur.replace(/^[✓✗]\s*/, '') }) } : 'r_hint_none', null, { priority: 2, cooldown: 0 });
+}
+function flip(i) {
+  audio.sfx('click');
+  if (i === 0) {
+    settings.light = !settings.light;
+    audio.sfx('light');
+  } else if (i === 1) {
+    cockpit.ping();
+    audio.sfx('sonar');
+    sonarFlash = 1.5;
+  } else if (i === 2) {
+    settings.hud = !settings.hud;
+    for (const e of [hud.objective, hud.stats]) e.style.opacity = settings.hud ? '' : '0';
+  } else if (i === 3) {
+    saveBool('md_comfort', (settings.comfort = !settings.comfort));
+  }
+}
+cockpit.buttonHandlers.flip = flip;
+cockpit.buttonHandlers.press = (i) => {
+  audio.sfx('button');
+  if (i === 0 && ctx.controls) toggleAutopilot();
+  else if (i === 1 && ctx.controls) {
+    tools.select('anchor');
+    setAnchor(!ship.anchored);
+  } else if (i === 2 && ctx.controls) {
+    tools.cycle(1);
+    toolChanged();
+  } else if (i === 3) {
+    saveBool('md_sound', (settings.sound = !settings.sound));
+    audio.setEnabled(settings.sound);
+  } else if (i === 4) callDoctor();
+};
+let sonarFlash = 0;
+let switchKey = '';
+function updateCockpitControls(dt) {
+  const L = t('lampLabels');
+  const S = t('switchLabels');
+  const key = [settings.light, sonarFlash > 0, settings.hud, settings.comfort, getLang()].join();
+  if (key !== switchKey) {
+    switchKey = key;
+    cockpit.setSwitches([settings.light, sonarFlash > 0, settings.hud, settings.comfort], S);
+    cockpit.setLabels(L);
+  }
+  sonarFlash = Math.max(0, sonarFlash - dt);
+  // headlight switch
+  const want = settings.light ? 1 : 0.08;
+  lightLevel += (want - lightLevel) * Math.min(1, dt * 6);
+  world.headlight.intensity = baseHeadlight() * lightLevel;
+  comm.update(dt);
+  // sonar: targets around the ship (x = right, z = ahead)
+  const targets = [];
+  const list = game.state === 'play' ? (mission?.sonarTargets?.(ctx) ?? []) : [];
+  for (const p of list) targets.push({ x: p.x - ship.x, z: -p.z, color: p.color, size: p.size });
+  cockpit.drawSonar(dt, targets, mission?.sonarRange ?? 200);
+  // highlight sonar contacts in the canopy for a moment after a ping
+  if (sonarFlash > 0) for (const p of list) hud.marker(new THREE.Vector3(p.x, p.y ?? 0, p.z), { size: 22, color: '#ffd27f' });
+  cockpit.alarm(game.state === 'play' && (ctx.warning || game.condition < 30));
+}
+let lightLevel = 1;
+let journeyLight = null;
+function baseHeadlight() {
+  return journey ? (journeyLight ?? world.headlight.intensity) : 60;
+}
+
 function toolChanged() {
   audio.sfx('tool');
   mission?.onToolChange?.();
@@ -533,6 +639,7 @@ function frame(now) {
     });
     hud.setAutopilot(ship.autopilot, ctx.controls, toggleAutopilot);
     updateDashboard(dt);
+    if (game.condition < 40) comm.say('r_low', null, { priority: 0, cooldown: 90 });
     // heartbeat sound + flow noise
     const beat = beatPhase(time, mission.vessel.heartRate);
     if (beat < lastBeat && game.state === 'play') audio.heartbeat();
@@ -540,6 +647,7 @@ function frame(now) {
     audio.setFlow(Math.min(1, ship.speed / vmaxGame(mission.vessel)));
     if (fadeT > 0) fadeT = Math.max(0, fadeT - dt * 0.8);
     $('#fade').style.opacity = fadeT;
+    updateCockpitControls(dt);
     world.render(tools.scene);
     if (res) endMission(res);
   }
@@ -588,7 +696,7 @@ requestAnimationFrame(frame);
 
 // debug/testing hook (used by the automated browser test)
 window.__md = {
-  game, ship, tools, ctx, input, world, audio,
+  game, ship, tools, ctx, input, world, audio, comm, cockpit,
   get mission() { return mission; },
   get journey() { return journey; },
   skipJourney: () => journey && endJourney(),

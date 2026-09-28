@@ -173,3 +173,55 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #07070c; col
 
 .guide li.past-ok { opacity: .6; }
 .hud-center .zone.big { font-size: 1.5em; padding: .5em 1.4em; animation: pulse .45s infinite alternate; }
+
+/* push buttons on the dashboard */
+.dash-lamp { pointer-events: auto; cursor: pointer; transition: background .2s, box-shadow .2s, transform .08s, filter .08s; }
+.dash-lamp:hover { filter: brightness(1.4); }
+.dash-lamp.pressed { transform: scale(.82); filter: brightness(1.8); box-shadow: inset 0 0 8px #000, 0 0 16px #7ff3ff; }
+.dash-lamp.radio { background: radial-gradient(circle, #fff6d0 0%, #ffd27f 55%, #8a5a12 100%); box-shadow: 0 0 12px #ffd27f; animation: blink 0.8s infinite; }
+.dash-label { position: absolute; text-align: center; font: 600 clamp(6px, .45vw, 10px) ui-monospace, monospace; color: rgba(127,243,255,.75); letter-spacing: .5px; pointer-events: none; text-shadow: 0 0 3px #000; }
+/* overhead flip switches */
+.flip { position: absolute; pointer-events: auto; cursor: pointer; perspective: 200px; }
+.flip-plate { position: absolute; left: 20%; right: 20%; top: 8%; height: 58%; border-radius: 6px; background: linear-gradient(#2a3038, #15191e); box-shadow: inset 0 0 0 1px rgba(127,243,255,.25); }
+.flip-lever { position: absolute; left: 32%; right: 32%; top: 10%; height: 80%; border-radius: 40%; background: linear-gradient(90deg, #9aa3ad, #e9edf2 45%, #8a939d); transform-origin: 50% 50%; transform: rotateX(38deg) translateY(12%); transition: transform .18s cubic-bezier(.3,1.6,.5,1); box-shadow: 0 3px 3px rgba(0,0,0,.6); }
+.flip.on .flip-lever { transform: rotateX(-38deg) translateY(-12%); }
+.flip-led { position: absolute; left: 44%; width: 12%; aspect-ratio: 1; top: 70%; border-radius: 50%; background: #213038; }
+.flip.on .flip-led { background: #56f59a; box-shadow: 0 0 8px #56f59a; }
+.flip-label { position: absolute; left: -10%; right: -10%; bottom: 0; text-align: center; font: 600 clamp(6px, .45vw, 10px) ui-monospace, monospace; color: rgba(127,243,255,.8); }
+.flip:hover .flip-plate { box-shadow: inset 0 0 0 1px rgba(127,243,255,.7); }
+/* sonar screen */
+.sonar { position: absolute; border-radius: 10px; }
+/* interior light: boot flicker + red alarm */
+.cockpit-light { position: absolute; inset: 0; pointer-events: none; background: transparent; }
+.cockpit-light.booting { animation: boot 1.8s ease-out both; }
+@keyframes boot { 0% { background: rgba(0,0,0,.85); } 20% { background: rgba(0,0,0,.4); } 25% { background: rgba(0,0,0,.8); } 32% { background: rgba(0,0,0,.25); } 36% { background: rgba(0,0,0,.6); } 100% { background: rgba(0,0,0,0); } }
+.cockpit-light.alarm { background: radial-gradient(ellipse at center, transparent 45%, rgba(255,30,30,.28) 100%); animation: alarm 1.2s ease-in-out infinite; }
+@keyframes alarm { 50% { opacity: .35; } }
+@keyframes screenOn { 0% { opacity: 0; filter: brightness(3); transform: scaleY(.05); } 60% { opacity: 1; transform: scaleY(1); } 100% { filter: none; } }
+.cockpit-frame.shake { animation: shake .28s ease-out; }
+@keyframes shake { 20% { transform: translate(3px, 2px); } 40% { transform: translate(-3px, -1px); } 60% { transform: translate(2px, -2px); } 80% { transform: translate(-1px, 1px); } }
+/* radio link with the doctor */
+.comm { position: absolute; border-radius: 12px; overflow: hidden; background: #050b10; box-shadow: inset 0 0 0 1px rgba(127,243,255,.25); }
+.comm img, .comm video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(.8) contrast(1.05); opacity: .55; transition: opacity .3s; }
+.comm video { opacity: 0; }
+.comm.live video { opacity: 1; }
+.comm.live img { opacity: 0; }
+.comm-noise { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px); mix-blend-mode: overlay; pointer-events: none; }
+.comm.live .comm-noise { animation: scan 0.25s steps(2) infinite; }
+@keyframes scan { 50% { transform: translateY(1px); } }
+.comm-top { position: absolute; left: 4%; right: 4%; top: 4%; display: flex; align-items: center; gap: 4%; font: 600 clamp(6px, .45vw, 10px) ui-monospace, monospace; color: #cfefff; text-shadow: 0 0 3px #000; }
+.comm-rec { width: 6px; height: 6px; border-radius: 50%; background: #444; }
+.comm.live .comm-rec { background: #ff4d4d; animation: blink .8s infinite; }
+.comm-name { flex: 1; }
+.comm-bars { display: flex; gap: 2px; align-items: flex-end; height: 10px; }
+.comm-bars i { width: 3px; background: #7ff3ff; height: 30%; }
+.comm-bars i:nth-child(2) { height: 55%; } .comm-bars i:nth-child(3) { height: 80%; } .comm-bars i:nth-child(4) { height: 100%; }
+.comm.live .comm-bars i { animation: bars .4s ease-in-out infinite alternate; }
+.comm.live .comm-bars i:nth-child(2) { animation-delay: .1s; } .comm.live .comm-bars i:nth-child(3) { animation-delay: .2s; } .comm.live .comm-bars i:nth-child(4) { animation-delay: .3s; }
+@keyframes bars { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
+.comm-sub { position: absolute; left: 2.2%; top: 16.5%; width: 14.5%; max-height: 30%; overflow: hidden; background: rgba(4,14,20,.85); border: 1px solid rgba(255,210,127,.35); border-radius: 8px; padding: .5em .6em; font-size: clamp(10px, .75vw, 14px); line-height: 1.35; opacity: 0; transition: opacity .4s; pointer-events: none; }
+.comm-sub.live { opacity: 1; }
+.comm-sub b { color: var(--warn); }
+.comm.live.novideo img { opacity: 1; }
+.comm.live.novideo img { animation: talk .35s ease-in-out infinite alternate; }
+@keyframes talk { to { transform: scale(1.015); } }

@@ -40,6 +40,9 @@ Jeder Drop beginnt mit einem Video (Injektion → Pille öffnet sich → Kameraf
 | Linksklick | Werkzeug benutzen (Scanner/Ballon: halten) |
 | P | Autopilot an/aus |
 | H | Hilfe (Schritt-für-Schritt-Anleitung der Mission) |
+| R | Funk: Dr. Brandt nach dem nächsten Schritt fragen |
+| L | Scheinwerfer an/aus |
+| T | Sonar-Ping |
 | M | Ton an/aus |
 
 Die beiden **Steuergriffe im Cockpit** lassen sich mit der Maus oder per Touch ziehen: vor, zurück, links, rechts. Sie bewegen sich auch mit, wenn du Tastatur oder Maus benutzt.
@@ -66,11 +69,18 @@ Fester Horizont (kein Rollen), sichtbarer Cockpitrahmen, ruhige Kamera, begrenzt
 
 ## Cockpit
 
+**Funk mit der Ärztin:** Oben links sitzt der Funk-Bildschirm mit Dr. L. Brandt (fiktive Interventionsradiologin im Angio-Leitstand; Porträt und Sprech-Animation von OpenArt). Sie meldet sich an den Stationen der Reise, beim Missionsstart, bei Fehlern (Vorbeitreiben, Embolie, Dissektion …), bei Zeitdruck und am Ende. Untertitel mit Schreibmaschinen-Effekt, Funkrauschen und – abschaltbar – Sprachausgabe über die Browser-Stimme. Die FUNK-Taste (oder R) fragt sie nach dem aktuellen nächsten Schritt.
+
+**Knöpfe & Schalter:** Die fünf Rundknöpfe am Armaturenbrett sind echte Druckknöpfe (AUTO, ANKER, WERKZEUG, TON, FUNK). An der Deckenkonsole sitzen vier Kippschalter: LICHT (Scheinwerfer), SONAR (Ping, markiert Ziele kurz im Sichtfenster), HUD (Einblendungen aus/an), KOMFORT. Oben rechts läuft ein Sonar mit Radar-Sweep und Zielkontakten.
+
+**Animationen:** Beim Start fährt die Cockpit-Beleuchtung flackernd hoch und die Displays schalten nacheinander ein; bei Gefahr pulsiert rotes Alarmlicht; Ankern und Herzklappen rütteln das Cockpit kurz (im Komfortmodus aus).
+
+
 Die Displays im Armaturenbrett zeigen Live-Werte: EKG und Puls des Patienten, Zustand, echte Flussgeschwindigkeit, Wandabstand, Zieldistanz, Gefäßquerschnitt mit Schiffsposition, Zeitdehnung, Autopilot-Status. Die Rundlampen zeigen Autopilot, Anker, Werkzeug aktiv, Ton und Warnung.
 
 ## Assets
 
-Alle Bilder, Texturen und Videos wurden mit **OpenArt** generiert (Projekt „MiniDoctor"): Cockpit (per Chroma-Key freigestellt; Griffe als eigene Ebenen über eine zweite, griffelose Generation), Körperkarte, Texturen (Endothel, Plaque, Fibrin, Erythrozyt), Missionsbilder, Key-Art, Ausgangsbilder, Werkzeug-Icons, Herzinnenwand-Textur, Schlaganfall-Briefing, Drop-Video (Wan 3.0) und Übergangsvideo Pille → Cockpit (Kling 3 Omni, Start-/Endframe). `tools/process-assets.mjs` erzeugt aus den Rohdaten (`assets-src/`, nicht im Repo) die Web-Versionen in `public/assets/`. Die 3D-Werkzeuge sind prozedural modelliert und animiert; Sounds werden per WebAudio synthetisiert.
+Alle Bilder, Texturen und Videos wurden mit **OpenArt** generiert (Projekt „MiniDoctor"): Cockpit (per Chroma-Key freigestellt; Griffe als eigene Ebenen über eine zweite, griffelose Generation), Körperkarte, Texturen (Endothel, Plaque, Fibrin, Erythrozyt), Missionsbilder, Key-Art, Ausgangsbilder, Werkzeug-Icons, Herzinnenwand-Textur, Schlaganfall-Briefing, Porträt und Sprech-Animation der Funk-Ärztin, Drop-Video (Wan 3.0) und Übergangsvideo Pille → Cockpit (Kling 3 Omni, Start-/Endframe). `tools/process-assets.mjs` erzeugt aus den Rohdaten (`assets-src/`, nicht im Repo) die Web-Versionen in `public/assets/`. Die 3D-Werkzeuge sind prozedural modelliert und animiert; Sounds werden per WebAudio synthetisiert.
 
 ## Code
 
@@ -82,6 +92,7 @@ src/journey.js        animierte Anreise durch Herz und Kreislauf
 src/tools.js          animierte Werkzeuge (Laser, Skalpell, Antikörper, Anker, Scanner, tPA)
 src/cockpit.js        Cockpit-Overlay + Live-Displays
 src/hud.js            HUD, Zielmarker, Werkzeugleiste
+src/comm.js           Funkverbindung zur Ärztin
 src/missions/*.js     Diagnose, Stent, Viren, Thrombose, Schlaganfall (+ testbare *Logic.js)
 src/i18n.js           Deutsch / Englisch
 ```
