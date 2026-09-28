@@ -13,6 +13,8 @@ npm test         # Logik-Tests (Physik, Puzzles, Übersetzungen)
 npm run build    # statischer Build in dist/
 ```
 
+**Online spielen:** https://marcelweissgerberit.github.io/MiniDoctor/ (automatisches Deployment per GitHub Actions bei jedem Push)
+
 ## Ablauf
 
 1. **Drop 1 – Diagnose** (Arteriole, Ø 100 µm): Proben im Blut scannen (Plasma, Leukozyt, Thrombozyt, Lipoproteine, Partikel) und die Krankheit bestimmen.
