@@ -158,7 +158,7 @@ export class Audio {
       if (!l) continue;
       if (scene.music === theme) {
         l.start();
-        l.level(1, 3);
+        l.level(scene.musicLevel ?? 1, 3);
       } else if (l.running) l.stop(3);
     }
     for (const [k, v] of [

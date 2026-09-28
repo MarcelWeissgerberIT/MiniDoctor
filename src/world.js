@@ -114,6 +114,10 @@ export class World {
     this.wallTex = tex('tex_endothelium', L / tile, Math.max(1, Math.round(circ / tile)));
     this.wallMat = new THREE.MeshStandardMaterial({
       map: this.wallTex,
+      emissiveMap: this.wallTex,
+      emissive: 0x8a4440,
+      emissiveIntensity: 0.6,
+      fog: false, // the wall stays readable as a tunnel for orientation
       side: THREE.BackSide,
       roughness: 0.85,
       color: 0xffc8c0,

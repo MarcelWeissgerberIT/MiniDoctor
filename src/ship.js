@@ -132,7 +132,7 @@ export class Ship {
       const c = Math.cos(this.yaw);
       ax = sx * (Math.abs(c) < 0.3 ? Math.sign(c || 1) * 0.3 : c);
       ay = sy;
-    } else if (this.autopilot && !this.anchored) {
+    } else if ((this.autopilot || mission?.assist) && !this.anchored) {
       const tgt = mission?.autopilotTarget?.(this);
       if (tgt) {
         const dx = tgt.x - this.x;

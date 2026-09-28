@@ -22,7 +22,7 @@ export const VESSELS = {
     heartRate: 72,
     pulsatility: 0.45,
     diastolicPeak: true, // coronary flow peaks in diastole
-    fogDensity: 0.0048,
+    fogDensity: 0.0022,
   },
   arteriole: {
     key: 'arteriole',
@@ -42,7 +42,7 @@ export const VESSELS = {
     heartRate: 72,
     pulsatility: 0.3,
     diastolicPeak: false,
-    fogDensity: 0.0026,
+    fogDensity: 0.0022,
   },
   venule: {
     key: 'venule',
@@ -62,7 +62,7 @@ export const VESSELS = {
     heartRate: 72,
     pulsatility: 0.15,
     diastolicPeak: false,
-    fogDensity: 0.0042,
+    fogDensity: 0.0022,
   },
 };
 

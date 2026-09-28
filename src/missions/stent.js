@@ -56,7 +56,7 @@ export class StentMission {
     this.plaqueAxial = 6000;
     this.plaqueRadial = R * this.case.stenosis;
     this.plaqueTangential = 1400;
-    const pm = new THREE.MeshStandardMaterial({ map: tex('tex_plaque', 6, 30), roughness: 0.7, color: 0xfff2d0, emissive: 0x000000 });
+    const pm = new THREE.MeshStandardMaterial({ map: tex('tex_plaque', 6, 30), roughness: 0.7, color: 0xfff2d0, emissive: 0x000000, fog: false }); // visible from afar as the target
     this.plaque = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), pm);
     this.plaque.scale.set(this.plaqueRadial, this.plaqueTangential, this.plaqueAxial);
     this.plaque.rotation.z = this.theta;
@@ -140,7 +140,7 @@ export class StentMission {
       `<li class="${cls(sideOk, !sideOk)}">${ok(sideOk)} ${t('st_g1', { a: Math.round(ang) })}</li>` +
       `<li class="${cls(wallOk, sideOk && !wallOk)}">${ok(wallOk)} ${t('st_g2', { d: Math.round(wall) })}</li>` +
       `<li class="${zone ? 'now' : ''}">${ok(timeOk)} ${zone ? t('st_g3_now') : t('st_g3', { d: (Math.max(0, toGo - ANCHOR_WINDOW) / 1000).toFixed(1) })}</li>` +
-      `</ol><span class="muted">${ship.autopilot ? t('st_g_auto') : t('st_g_manual')}</span>`;
+      `</ol><span class="muted">${ship.autopilot ? t('st_g_auto') : this.armed ? t('st_g_armed') : t('st_g_manual')}</span>`;
     if (html !== this._guide) {
       this._guide = html;
       hud.setObjective(html);
@@ -151,6 +151,24 @@ export class StentMission {
 
   canRelease() {
     return this.phase === 'approach';
+  }
+
+  /** Anchor assistant: steers to the wall and anchors by itself once armed. */
+  get assist() {
+    return this.phase === 'approach' && !!this.armed;
+  }
+
+  /**
+   * Automatic time-lapse: at the wall the plasma almost stands still, so time
+   * runs faster there (the dashboard shows the real dilation factor).
+   */
+  flowMod(ship) {
+    if (this.phase !== 'approach') return 1;
+    const R = this.vessel.radius;
+    const q = Math.min(1, ship.r / R);
+    const base = (this.vessel.vmaxReal / this.vessel.timeScale) * (1 - q * q);
+    const want = 110; // µm/s of apparent drift
+    return Math.max(1, Math.min(15, want / Math.max(1, base)));
   }
 
   inAnchorZone(ship) {
@@ -179,6 +197,13 @@ export class StentMission {
     }
     const toGo = LESION_AT - ship.dist;
     const R = this.vessel.radius;
+    if (toGo > 0 && !this.armed) {
+      // arm the anchor: the assistant flies to the wall and grips in the zone
+      this.armed = true;
+      hud.toast(t('anchorArmed'), 'ok', 4);
+      ctx.audio.sfx('tool');
+      return false;
+    }
     let msg;
     if (toGo > ANCHOR_WINDOW) msg = t('anchorEarly', { d: ((toGo - ANCHOR_WINDOW) / 1000).toFixed(1) });
     else if (angDiff(Math.atan2(ship.y, ship.x), this.theta) >= ANCHOR_ANGLE) msg = t('anchorWrongSide');
@@ -236,7 +261,8 @@ export class StentMission {
 
     if (this.phase === 'approach') {
       const zone = this.inAnchorZone(ship);
-      if (zone && ship.autopilot) ctx.requestAnchor();
+      if (zone && (ship.autopilot || this.armed)) ctx.requestAnchor();
+      ctx.timeWarp = this.flowMod(ship);
       this.guide(ctx, zone, toGo);
       if (!zone) {
         // yellow arrow towards the plaque side of the wall
@@ -245,6 +271,7 @@ export class StentMission {
       }
       if (toGo < -30) {
         this.missed++;
+        this.armed = true; // after a miss the anchor assistant takes over
         ship.dist = LESION_AT - 2200;
         audio.sfx('bad');
         hud.toast(t('sweptPast'), 'bad', 6);

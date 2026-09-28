@@ -35,7 +35,7 @@ Jeder Drop beginnt mit einem Video (Injektion → Pille öffnet sich → Kameraf
 |---|---|
 | Maus / rechter Steuergriff | umsehen (Klick = Maus einfangen) |
 | W A S D / Pfeile / linker Steuergriff | Strömungsklappen: seitlich driften |
-| Leertaste | GP-Ib-Anker-Harpune (greift bis 200 µm Wandabstand und zieht das Schiff an die Wand) |
+| Leertaste | GP-Ib-Anker-Harpune (greift bis 200 µm Wandabstand und zieht das Schiff an die Wand). Vor der Ankerzone gedrückt: Anker scharf – der Anker-Assistent steuert hin und greift automatisch |
 | 1–6 / Mausrad | Werkzeug: Laser, Skalpell, Antikörper, Anker, Scanner, tPA |
 | Linksklick | Werkzeug benutzen (Scanner/Ballon: halten) |
 | P | Autopilot an/aus |
@@ -48,7 +48,7 @@ Die beiden **Steuergriffe im Cockpit** lassen sich mit der Maus oder per Touch z
 
 - **Maßstab 1:1** (1 Welteinheit = 1 µm): Schiff 2,5 µm, Erythrozyt 7,8 µm (echtes Evans-Fung-Profil), Virion 0,1 µm, Führungsdraht 0,36 mm, Stentstrebe 80 µm.
 - **Strömung** nach Hagen-Poiseuille (Mitte schnell, Wand langsam), pulsierend mit dem Puls des Patienten; Koronarfluss ist in der Diastole am stärksten; vor einem Verschluss kommt der Fluss zum Stillstand (Stase).
-- Nur die **Zeit ist gedehnt** (1:100 bis 1:1000), damit man dem Fluss folgen kann; die Cockpit-Anzeigen zeigen die echten Werte.
+- Nur die **Zeit ist gedehnt** (1:100 bis 1:1000), damit man dem Fluss folgen kann; die Cockpit-Anzeigen zeigen die echten Werte. Nahe der Gefäßwand, wo das Blut fast stillsteht, schaltet sich automatisch ein Zeitraffer zu (Anzeige z. B. 1:8000).
 - Die Dichte der Blutkörperchen ist für die Sicht reduziert.
 
 ## Sound & Musik
@@ -56,6 +56,7 @@ Die beiden **Steuergriffe im Cockpit** lassen sich mit der Maus oder per Touch z
 - **Musik** für die Anreise: zwei von OpenArt generierte Soundtracks (Wan 3.0): ein ruhiges, dunkles *venöses* Thema bis zur Lunge und ein helleres, treibendes *arterielles* Thema, in das beim Gasaustausch übergeblendet wird. Nahtlose Schleifen per Crossfade.
 - **Geräuschkulissen** (ebenfalls OpenArt): gedämpftes Herzinneres in den Herzkammern, Atmen in der Lunge.
 - **Effekte** (synthetisiert, synchron zum Geschehen): Stationsgong, Klappenschlag beim Durchfahren, Herzschlag (in den Kammern laut), Pulswelle in Arterien, Sauerstoff-Funkeln in der Lunge, Strömungsrauschen, das in engen Gefäßen höher pfeift, vorbeiziehende Blutkörperchen, Ankunfts-Akkord.
+- In den Missionen läuft die Musik leise weiter.
 - Musik und Ton sind im Menü getrennt abschaltbar, **M** schaltet den Ton stumm.
 - `tools/process-audio.mjs` extrahiert die Tonspuren der OpenArt-Videos als Opus (+ AAC-Fallback).
 

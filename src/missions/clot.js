@@ -29,7 +29,7 @@ export class ClotMission {
     this.phase = 'approach';
 
     // clot face: fibrin disc filling the lumen
-    const faceMat = new THREE.MeshStandardMaterial({ map: tex('tex_fibrin', 40, 40), roughness: 0.9, color: 0xffe8e0, transparent: true, opacity: 1 });
+    const faceMat = new THREE.MeshStandardMaterial({ map: tex('tex_fibrin', 40, 40), roughness: 0.9, color: 0xffe8e0, transparent: true, opacity: 1, fog: false });
     const geo = new THREE.PlaneGeometry(2 * R, 2 * R, 64, 64);
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) {

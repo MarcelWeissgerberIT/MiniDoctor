@@ -103,6 +103,8 @@ export class Journey {
 
     this.heartMeshes = [];
     this.labels = [];
+    // soft fill light so walls read clearly (the headlight alone is too narrow)
+    this.group.add(new THREE.HemisphereLight(0xffe2d8, 0x5a2020, 1.5));
     this.buildTube();
     this.buildValves();
     this.buildHeartDetail();
@@ -183,10 +185,14 @@ export class Journey {
       const venous = st.kind === 'vein' && !st.arterialBlood;
       const col = st.kind === 'heart' ? HEART.wall : venous ? VENOUS.wall : ARTERIAL.wall;
       const heart = st.kind === 'heart';
+      const wallTex = tex(heart ? 'tex_endocardium' : 'tex_endothelium', 1, 1);
+      // the texture also glows faintly so the wall stays readable in the dark
       const m = new THREE.MeshStandardMaterial({
-        map: tex(heart ? 'tex_endocardium' : 'tex_endothelium', 1, 1),
+        map: wallTex,
+        emissiveMap: wallTex,
         color: heart ? 0xf0d0d0 : col,
-        emissive: heart ? 0x2a0808 : 0x000000,
+        emissive: heart ? 0xb05050 : venous ? 0x7a4450 : 0x9a4a42,
+        emissiveIntensity: heart ? 1.0 : 0.8,
         roughness: 0.8,
         side: THREE.BackSide,
         transparent: st.kind === 'lung' || st.kind === 'cap',
@@ -403,7 +409,7 @@ export class Journey {
   }
 
   buildCells() {
-    const N = 260;
+    const N = 150;
     const mat = new THREE.MeshStandardMaterial({ map: tex('tex_rbc'), roughness: 0.45, color: 0xffffff });
     this.cells = new THREE.InstancedMesh(this.world.rbcGeo, mat, N);
     this.cells.frustumCulled = false;
@@ -457,6 +463,7 @@ export class Journey {
     cam.rotateX(this.lookPitch);
     cam.updateMatrixWorld();
 
+    const rNowFog = this.radiusAt(this.s);
     // fog/background follow the blood: dark venous → bright arterial after the lungs
     const lungIdx = this.stations.findIndex((x) => x.kind === 'lung');
     const i = this.stationAt(this.s);
@@ -468,8 +475,8 @@ export class Journey {
     const scene = this.world.scene;
     if (!scene.fog || !scene.fog.isFog) scene.fog = new THREE.Fog(fogC, 10, 160);
     scene.fog.color.copy(fogC);
-    scene.fog.near = 6;
-    scene.fog.far = st.kind === 'heart' ? 110 : 150;
+    scene.fog.near = 12;
+    scene.fog.far = Math.max(190, rNowFog * 7);
     scene.background = fogC;
     this.oxy = oxy;
 

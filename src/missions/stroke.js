@@ -33,7 +33,7 @@ export class StrokeMission {
     this.opened = false;
 
     // red, RBC-rich cardio-embolic clot filling the lumen
-    const faceMat = new THREE.MeshStandardMaterial({ map: tex('tex_fibrin', 40, 40), color: 0xc05050, roughness: 0.85, transparent: true });
+    const faceMat = new THREE.MeshStandardMaterial({ map: tex('tex_fibrin', 40, 40), color: 0xc05050, roughness: 0.85, transparent: true, fog: false });
     const geo = new THREE.PlaneGeometry(2 * R, 2 * R, 64, 64);
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) {

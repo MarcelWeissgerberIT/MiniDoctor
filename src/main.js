@@ -94,6 +94,7 @@ function showScreen(id) {
 }
 
 function renderMenu() {
+  audio.stopScene();
   const lang = getLang();
   $('#menu').style.backgroundImage = 'url(assets/keyart.webp)';
   $('#menu').innerHTML = `
@@ -366,6 +367,9 @@ function startMission(id) {
   hud.showLocation(MAP_POINTS[MISSION_SITE[id]], `${t('here')}: ${t(NAME[id] + '_place').split(',')[0]}`);
   ctx.mapTarget = null;
   ctx.distToTarget = null;
+  ctx.timeWarp = 1;
+  // music keeps playing quietly during the mission
+  audio.setScene({ music: id === 'clot' ? 'venous' : 'arterial', musicLevel: 0.35, heart: 0, lung: 0 });
 }
 
 function setAnchor(on, auto = false) {
@@ -418,6 +422,7 @@ function endMission(res) {
 }
 
 function outcome() {
+  audio.stopScene();
   const survived = game.condition > 0;
   game.state = 'outcome';
   $('#outcome').style.backgroundImage = `url(assets/outcome_${survived ? 'survived' : 'died'}.webp)`;
@@ -555,7 +560,7 @@ function updateDashboard(dt) {
       beat: beatPhase(time, v.heartRate),
       condition: game.condition,
       flowReal: toRealMetersPerSecond(ship.speed, v),
-      timeScale: v.timeScale,
+      timeScale: Math.round(v.timeScale * (ctx.timeWarp ?? 1)),
       wallDist: ship.wallDistance(v.radius),
       dist: ctx.distToTarget ?? ship.dist,
       R: v.radius,
