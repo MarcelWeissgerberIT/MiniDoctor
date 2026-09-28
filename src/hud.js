@@ -36,6 +36,8 @@ export class Hud {
       this.toolBtns[k] = b;
     }
     this.toolName = el('div', 'tool-name', this.toolbar);
+    this.help = el('div', 'hud-panel hud-help', h);
+    this.help.style.display = 'none';
     // markers canvas covers the whole viewport
     this.markers = el('canvas', 'hud-markers', document.body);
     this.mctx = this.markers.getContext('2d');
@@ -53,6 +55,14 @@ export class Hud {
   show(v) {
     this.root.style.display = v ? 'block' : 'none';
     this.markers.style.display = v ? 'block' : 'none';
+  }
+  toggleHelp(html) {
+    const show = this.help.style.display === 'none';
+    this.help.innerHTML = html;
+    this.help.style.display = show ? 'block' : 'none';
+  }
+  hideHelp() {
+    this.help.style.display = 'none';
   }
   setObjective(html) {
     this.objective.innerHTML = html;
@@ -91,7 +101,7 @@ export class Hud {
     this.toolName.textContent = current ? t(`tool_${current}`) : '';
   }
   setAutopilot(on, enabled, onToggle) {
-    this.apBtn.textContent = `${t('autopilot')}: ${on ? t('on') : t('off')} [P]`;
+    this.apBtn.textContent = `${t('autopilot')}: ${on ? t('on') : t('off')} [P] · ${t('helpKey')}`;
     this.apBtn.classList.toggle('on', on);
     this.apBtn.style.display = enabled ? '' : 'none';
     this.apBtn.onclick = onToggle;
@@ -105,6 +115,40 @@ export class Hud {
   clearMarkers() {
     this.mctx.clearRect(0, 0, this.markers.width, this.markers.height);
   }
+  /** Arrow near the crosshair pointing towards a world-space point. */
+  pointer(pos, color = '#ffd27f') {
+    if (this.panel.style.display !== 'none') return;
+    const v = this._v.copy(pos).project(this.world.camera);
+    const behind = v.z > 1;
+    let x = v.x;
+    let y = v.y;
+    if (behind) {
+      x = -x;
+      y = -y;
+    }
+    if (!behind && Math.hypot(x, y) < 0.12) return;
+    const a = Math.atan2(-y, x);
+    const g = this.mctx;
+    const d = this.dpr;
+    const cx = (innerWidth / 2) * d;
+    const cy = (innerHeight / 2) * d;
+    const r = 70 * d;
+    const px = cx + Math.cos(a) * r;
+    const py = cy + Math.sin(a) * r;
+    g.save();
+    g.translate(px, py);
+    g.rotate(a);
+    g.fillStyle = color;
+    g.beginPath();
+    g.moveTo(14 * d, 0);
+    g.lineTo(-6 * d, -9 * d);
+    g.lineTo(-2 * d, 0);
+    g.lineTo(-6 * d, 9 * d);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+
   /** Draw a bracket around a world-space point. */
   marker(pos, { size = 18, color = '#7ff3ff', label = '', progress = -1 } = {}) {
     if (this.panel.style.display !== 'none') return false;

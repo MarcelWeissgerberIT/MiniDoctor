@@ -126,3 +126,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #07070c; col
   .brief-text { padding: 1.2em; }
   .hud-objective, .hud-stats { max-width: 40%; font-size: 11px; }
 }
+
+.guide { margin: .4em 0 .3em; padding-left: 1.3em; }
+.guide li { opacity: .45; margin: .15em 0; }
+.guide li.past { opacity: .35; text-decoration: line-through; }
+.guide li.now { opacity: 1; color: var(--warn); font-weight: 600; }
+.hud-help { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, 46%); pointer-events: none; z-index: 2; background: rgba(6, 22, 30, 0.92); }
+.hud-help h3 { margin: 0 0 .4em; color: var(--cyan); }
+.hud-help ol { padding-left: 1.3em; margin: 0; }
+.hud-help li { margin: .3em 0; }
+.brief-steps { padding-left: 1.3em; margin: .6em 0 1em; }
+.brief-steps li { margin: .25em 0; }
+.tool-name { text-shadow: 0 0 4px #000, 0 0 8px #000; }

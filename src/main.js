@@ -165,6 +165,8 @@ function briefing() {
         <h2>${t(n + '_name')}</h2>
         <div class="place">${t(n + '_place')}</div>
         <p>${t(n + '_brief')}</p>
+        <h3>${t('howto')}</h3>
+        <ol class="brief-steps">${t(n + '_steps').map((x) => `<li>${x}</li>`).join('')}</ol>
         <p class="muted">${t('controls')}</p>
         <button class="btn primary big" id="b-go">${t('launch')}</button>
       </div>
@@ -236,6 +238,7 @@ function startMission(id) {
   tools.setAvailable(mission.tools);
   tools.anchorGoal = tools.anchorState = 0;
   hud.closePanel();
+  hud.hideHelp();
   hud.setBar('');
   hud.setCenter('');
   mission.start(ctx);
@@ -319,6 +322,10 @@ function handleKeys() {
   }
   if (game.state !== 'play') return;
   if (input.pressed.has('KeyP') && ctx.controls) toggleAutopilot();
+  if (input.pressed.has('KeyH') && mission) {
+    const n = NAME[mission.id];
+    hud.toggleHelp(`<h3>${t(n + '_name')} — ${t('howto')}</h3><ol>${t(n + '_steps').map((x) => `<li>${x}</li>`).join('')}</ol>`);
+  }
   if (!ctx.controls) return;
   for (const [code, name] of Object.entries(TOOL_KEYS)) if (input.pressed.has(code) && tools.select(name)) toolChanged();
   if (input.wheel) {

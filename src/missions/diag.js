@@ -4,8 +4,9 @@ import { t } from '../i18n.js';
 import { SAMPLE_TYPES, findingFor, evidence, diagnosisOutcome, DISEASES } from './diagLogic.js';
 import { tex } from '../world.js';
 
-const SCAN_RANGE = 45; // µm
-const SCAN_ANGLE = 0.16; // rad
+const SCAN_RANGE = 60; // µm
+const SCAN_ANGLE = 0.22; // rad (≈ 12°)
+const LOCK_ANGLE = 0.75; // autopilot target lock (≈ 43°)
 const SCAN_TIME = 1.3;
 
 function bumpy(geo, amp) {
@@ -124,12 +125,11 @@ export class DiagnosisMission {
       const r = R * (0.45 + Math.random() * 0.3);
       const mesh = sampleMesh(type, this.disease);
       world.group.add(mesh);
-      return { type, x: Math.cos(a) * r, y: Math.sin(a) * r, dist: 160 + k * 140, state: 'open', progress: 0, mesh };
+      return { type, x: Math.cos(a) * r, y: Math.sin(a) * r, dist: 380 + k * 170, state: 'open', progress: 0, mesh };
     });
     this.findings = [];
     this.phase = 'scan';
     ctx.tools.select('scanner');
-    ctx.hud.setObjective(`<b>${t('m0_name')}</b><br>${t('d_obj')}`);
   }
 
   autopilotTarget(ship) {
@@ -146,6 +146,8 @@ export class DiagnosisMission {
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
     let scanning = false;
     let best = null;
+    let next = null;
+    const lockAngle = ship.autopilot ? LOCK_ANGLE : SCAN_ANGLE;
     for (const s of this.samples) {
       if (s.state === 'gone') continue;
       s.dist += world.flowAt(s.x, s.y, ctx.time) * dt;
@@ -164,14 +166,17 @@ export class DiagnosisMission {
       const to = s.mesh.position.clone().sub(cam.position);
       const d = to.length();
       const ang = to.normalize().angleTo(fwd);
-      if (d < SCAN_RANGE && ang < SCAN_ANGLE && (!best || d < best.d)) best = { s, d };
+      if (!next || z < next.z) next = { s, d, z };
+      if (d < SCAN_RANGE && ang < lockAngle && (!best || d < best.d)) best = { s, d };
     }
-    // Scanner: hold mouse button with the sample in the crosshair
-    const canScan = this.phase === 'scan' && tools.target === 'scanner' && input.down && ctx.controls;
-    tools.setHolding(canScan);
+    // Scanner: hold the mouse button while a sample is in the crosshair
+    // (with the autopilot on, the scanner locks on automatically).
+    const holding = this.phase === 'scan' && input.down && ctx.controls;
+    if (holding && tools.target !== 'scanner') tools.select('scanner');
+    tools.setHolding(holding);
     if (best) tools.aimAtWorld(best.s.mesh.position);
     else tools.aimForward(30);
-    if (canScan && best) {
+    if (holding && best) {
       scanning = true;
       best.s.progress += dt / SCAN_TIME;
       if (best.s.progress >= 1) {
@@ -182,11 +187,11 @@ export class DiagnosisMission {
         audio.sfx('ok');
       } else if (Math.random() < dt * 6) audio.sfx('scan');
     }
-    // markers
+    // markers + arrow to the next sample
     for (const s of this.samples) {
       if (s.state === 'gone' || !s.mesh.visible) continue;
       const d = s.mesh.position.distanceTo(cam.position);
-      if (d > 220) continue;
+      if (d > 260) continue;
       const done = s.state === 'done';
       const col = done ? '#56f59a' : s.state === 'missed' ? '#777' : best?.s === s ? '#ffd27f' : '#7ff3ff';
       hud.marker(s.mesh.position, {
@@ -196,6 +201,8 @@ export class DiagnosisMission {
         progress: s.state === 'open' && s.progress > 0 ? s.progress : -1,
       });
     }
+    if (next && !best) hud.pointer(next.s.mesh.position, '#ffd27f');
+    this.guide(ctx, next, best, scanning);
     ctx.scanning = scanning;
     const open = this.samples.filter((s) => s.state === 'open').length;
     hud.setStats(
@@ -205,6 +212,33 @@ export class DiagnosisMission {
     if (this.phase === 'scan' && (open === 0 || input.pressed.has('Enter'))) this.openDiagnosis(ctx);
     if (this.result) return this.result;
     return null;
+  }
+
+  /** Step-by-step instructions that follow what the pilot has to do next. */
+  guide(ctx, next, best, scanning) {
+    const done = this.samples.filter((s) => s.state === 'done').length;
+    let step;
+    let text;
+    if (!next) {
+      step = 4;
+      text = t('d_step4');
+    } else if (best) {
+      step = 3;
+      text = scanning ? t('d_scanning', { p: Math.round(best.s.progress * 100) }) : t('d_step3');
+    } else if (next.d < SCAN_RANGE * 1.6) {
+      step = 2;
+      text = ctx.input.locked || !ctx.controls ? t('d_step2') : t('d_step2_lock');
+    } else {
+      step = 1;
+      text = t('d_step1', { type: t('s_' + next.s.type), d: Math.round(next.d) });
+    }
+    const steps = [1, 2, 3, 4]
+      .map((k) => `<li class="${k === step ? 'now' : k < step ? 'past' : ''}">${k === step ? text : t('d_short' + k)}</li>`)
+      .join('');
+    const key = `${step}|${text}|${done}`;
+    if (key === this._guideKey) return;
+    this._guideKey = key;
+    ctx.hud.setObjective(`<b>${t('m0_name')}</b> · ${t('d_samples')} ${done}/${this.samples.length}<ol class="guide">${steps}</ol>`);
   }
 
   openDiagnosis(ctx) {
