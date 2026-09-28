@@ -3,18 +3,14 @@
 import { t, getLang } from './i18n.js';
 
 const SCREEN = [70, 35, 400, 200]; // on the 2752×1536 cockpit image
-const IMG_W = 2752;
-const IMG_H = 1536;
-const pct = (v, w) => `${(v / w) * 100}%`;
 
 export class Comm {
-  constructor(frame, audio) {
+  constructor(cockpit, audio) {
+    const frame = cockpit.frame;
     this.audio = audio;
     this.voice = true;
-    const [x, y, w, h] = SCREEN;
     this.el = document.createElement('div');
     this.el.className = 'comm';
-    Object.assign(this.el.style, { left: pct(x, IMG_W), top: pct(y, IMG_H), width: pct(w, IMG_W), height: pct(h, IMG_H) });
     this.el.innerHTML = `
       <img class="comm-still" src="assets/doctor.webp" alt="">
       <video class="comm-talk" muted loop playsinline preload="auto"><source src="assets/doctor_talk.webm" type="video/webm"><source src="assets/doctor_talk.mp4" type="video/mp4"></video>
@@ -24,6 +20,9 @@ export class Comm {
     this.sub = document.createElement('div');
     this.sub.className = 'comm-sub';
     frame.appendChild(this.sub);
+    // keep screen + subtitles fully visible on any aspect ratio
+    cockpit.addSafe(this.el, SCREEN, 'left', null, 'comm');
+    cockpit.addSafe(this.sub, [0, 35, 0, 200], 'after', 'comm');
     this.video = this.el.querySelector('video');
     // without the talking loop the still portrait stays visible
     this.video.querySelector('source:last-child').addEventListener('error', () => this.el.classList.add('novideo'));

@@ -150,7 +150,7 @@ export class Cockpit {
     // top-right panel: sonar
     this.sonar = document.createElement('canvas');
     this.sonar.className = 'sonar';
-    Object.assign(this.sonar.style, { left: pct(2282, IMG_W), top: pct(35, IMG_H), width: pct(400, IMG_W), height: pct(200, IMG_H) });
+    this.addSafe(this.sonar, [2282, 35, 400, 200], 'right');
     this.frame.appendChild(this.sonar);
     this.sonarPing = 0;
     // interior lighting (boot-up, alarm) above the cockpit image, below the HUD
@@ -180,6 +180,7 @@ export class Cockpit {
     }
     Object.assign(this.frame.style, { width: `${w}px`, height: `${h}px`, left: `${(vw - w) / 2}px`, top: `${(vh - h) / 2}px` });
     this.scale = w / IMG_W;
+    this.applySafe(w, vw, h, vh);
     for (const [k, c] of Object.entries(this.canvases)) {
       const [, , rw, rh] = RECTS[k];
       const dpr = Math.min(3, devicePixelRatio || 1);
@@ -208,6 +209,39 @@ export class Cockpit {
       out[name] = st.drag ? { x: st.drag.x, y: st.drag.y } : { x: 0, y: 0 };
     }
     return out;
+  }
+
+  /**
+   * Elements that must stay fully visible: on screens narrower than 16:9 the
+   * cockpit image is cropped left/right, so these slide inwards.
+   * side: 'left' | 'right' | 'after' (placed right of `ref`, up to the overhead switches)
+   */
+  addSafe(el, rect, side, ref, key) {
+    (this.safe ??= []).push({ el, rect, side, ref, key });
+    if (this.scale) this.applySafe(parseFloat(this.frame.style.width), innerWidth, parseFloat(this.frame.style.height), innerHeight);
+  }
+  applySafe(w, vw, h = 0, vh = 0) {
+    const s = this.scale;
+    const offX = Math.max(0, (w - vw) / 2); // hidden part on each side (px, frame coords)
+    const offY = Math.max(0, (h - vh) / 2); // hidden part top/bottom on very wide screens
+    const place = {};
+    for (const it of this.safe ?? []) {
+      const [x, y, rw, rh] = it.rect;
+      const W = rw * s;
+      const H = rh * s;
+      let left = x * s;
+      if (it.side === 'left') left = Math.max(left, offX + 8);
+      if (it.side === 'right') left = Math.min(left, offX + vw - 8 - W);
+      let width = W;
+      if (it.side === 'after') {
+        const r = place[it.ref];
+        left = r ? r.left + r.width + 8 : left;
+        const stop = 1170 * s - 10; // overhead switches start here
+        width = Math.max(140, stop - left);
+      }
+      if (it.key) place[it.key] = { left, width };
+      Object.assign(it.el.style, { left: `${left}px`, top: `${Math.max(y * s, offY + 6)}px`, width: `${width}px`, ...(it.side === 'after' ? { maxHeight: `${H}px` } : { height: `${H}px` }) });
+    }
   }
 
   setLabels(labels) {

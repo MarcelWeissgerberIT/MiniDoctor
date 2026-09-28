@@ -42,7 +42,7 @@ const settings = {
 };
 audio.setEnabled(settings.sound);
 audio.setMusic(settings.music);
-const comm = new Comm(cockpit.frame, audio);
+const comm = new Comm(cockpit, audio);
 comm.voice = settings.voice;
 
 function loadBool(k, d) {
