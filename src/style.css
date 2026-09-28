@@ -170,3 +170,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #07070c; col
 @keyframes blink { 50% { opacity: .25; } }
 @keyframes ping { from { transform: scale(0.6); opacity: 1; } to { transform: scale(3); opacity: 0; } }
 .brief-map .cap { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--warn); }
+
+.guide li.past-ok { opacity: .6; }
+.hud-center .zone.big { font-size: 1.5em; padding: .5em 1.4em; animation: pulse .45s infinite alternate; }

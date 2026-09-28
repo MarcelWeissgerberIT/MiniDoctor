@@ -6,6 +6,7 @@ export const STRINGS = {
     language: 'Sprache',
     comfort: 'Komfortmodus (weniger Bewegung)',
     sound: 'Ton',
+    music: 'Musik',
     on: 'an',
     off: 'aus',
     scaleInfo:
@@ -58,9 +59,18 @@ export const STRINGS = {
     tool_scanner: 'Lidar-Scanner',
 
     anchorZone: 'ANKERZONE — Leertaste zum Verankern',
+    st_g1: 'Zur Plaque-Seite driften (gelber Pfeil) — Winkel {a}° (Ziel < 40°)',
+    st_g2: 'Nah an die Wand — Abstand {d} µm (Ziel < 200 µm)',
+    st_g3: 'Ankerzone beginnt in {d} mm',
+    st_g3_now: 'JETZT LEERTASTE — Anker setzen!',
+    st_g_auto: 'Der Autopilot fliegt dich hin und ankert selbst. P = selbst steuern.',
+    st_g_manual: 'Steuern: WASD oder linker Griff. Tipp: früh zur Seite driften, dann an die Wand.',
+    anchorEarly: 'Noch zu früh — die Ankerzone beginnt in {d} mm',
+    anchorWrongSide: 'Falsche Seite — drifte zur Plaque (gelber Pfeil)',
+
     anchorNoWall: 'Anker greift nicht — zu weit von der Wand',
     anchorWrongSpot: 'Anker greift nur an geschädigtem Endothel (nahe der Plaque)',
-    sweptPast: 'An der Plaque vorbeigetrieben! Magnetische Rückholung … (Zeitverlust)',
+    sweptPast: 'An der Plaque vorbeigetrieben! Rückholung … Tipp: früher zur Wand driften oder Autopilot (P) einschalten.',
     marginate: 'Tipp: nahe der Wand fließt es langsamer',
 
     st_scan: 'Läsion vermessen: Scanner wählen (5) und klicken',
@@ -180,7 +190,7 @@ export const STRINGS = {
     m1_steps: [
       'Die gelbe Markierung auf der Querschnittskarte (rechtes Display) zeigt, wo die Plaque sitzt.',
       'Autopilot an: Er treibt dich selbst dorthin. Manuell: mit WASD zur Wandseite driften (nahe der Wand ist es langsamer).',
-      'Sobald „ANKERZONE“ erscheint: Leertaste — der Anker greift (mit Autopilot automatisch).',
+      'Sobald „JETZT LEERTASTE“ blinkt: Leertaste — die Anker-Harpune greift bis 200 µm Abstand und zieht dich an die Wand (mit Autopilot automatisch).',
       'Klick mit dem Scanner (5) vermisst die Läsion.',
       'Skalpell (2): klicke, wenn die Nadel über einem hellen Feld der Leiste steht — so ritzt du die Kalkknoten an.',
       'Stent wählen: Länge ≥ Läsion + 2 mm, Durchmesser = Referenzdurchmesser.',
@@ -318,6 +328,7 @@ export const STRINGS = {
     language: 'Language',
     comfort: 'Comfort mode (less motion)',
     sound: 'Sound',
+    music: 'Music',
     on: 'on',
     off: 'off',
     scaleInfo:
@@ -370,9 +381,18 @@ export const STRINGS = {
     tool_scanner: 'Lidar scanner',
 
     anchorZone: 'ANCHOR ZONE — press Space to anchor',
+    st_g1: 'Drift to the plaque side (yellow arrow) — angle {a}° (goal < 40°)',
+    st_g2: 'Get close to the wall — distance {d} µm (goal < 200 µm)',
+    st_g3: 'Anchor zone starts in {d} mm',
+    st_g3_now: 'PRESS SPACE NOW — set the anchor!',
+    st_g_auto: 'The autopilot flies you there and anchors by itself. P = fly yourself.',
+    st_g_manual: 'Steer: WASD or left grip. Tip: drift sideways early, then to the wall.',
+    anchorEarly: 'Too early — the anchor zone starts in {d} mm',
+    anchorWrongSide: 'Wrong side — drift to the plaque (yellow arrow)',
+
     anchorNoWall: 'Anchor cannot grip — too far from the wall',
     anchorWrongSpot: 'Anchor only grips damaged endothelium (near the plaque)',
-    sweptPast: 'Swept past the plaque! Magnetic retrieval … (time lost)',
+    sweptPast: 'Swept past the plaque! Retrieving … Tip: drift to the wall earlier or switch on the autopilot (P).',
     marginate: 'Tip: flow is slower near the wall',
 
     st_scan: 'Measure the lesion: select the scanner (5) and click',
@@ -492,7 +512,7 @@ export const STRINGS = {
     m1_steps: [
       'The yellow mark on the cross-section map (right display) shows where the plaque is.',
       'Autopilot on: it drifts you there. Manual: use WASD to drift to that side of the wall (slower near the wall).',
-      'When “ANCHOR ZONE” appears: press Space — the anchor grips (automatic with autopilot).',
+      'When “PRESS SPACE NOW” flashes: press Space — the anchor harpoon grips from up to 200 µm and reels you to the wall (automatic with autopilot).',
       'Click with the scanner (5) to measure the lesion.',
       'Scalpel (2): click when the needle is over a bright field of the bar — that scores a calcium node.',
       'Choose the stent: length ≥ lesion + 2 mm, diameter = reference diameter.',

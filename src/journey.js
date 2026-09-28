@@ -432,7 +432,11 @@ export class Journey {
     const pulse = st.kind === 'artery' || st.kind === 'heart' ? Math.max(0, Math.sin(beat * Math.PI * 2)) : 0;
     const boost = input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') ? 3 : 1;
     const v = this.speed * (1 + (this.comfort ? 0.15 : 0.45) * pulse) * boost * (st.kind === 'lung' || st.kind === 'cap' ? 0.6 : 1);
+    const prevS = this.s;
     this.s = Math.min(this.total, this.s + v * dt);
+    // sound events: passing a valve
+    const events = [];
+    for (const vl of this.valves) if (prevS < vl.s && this.s >= vl.s) events.push('valve');
     if (this.s >= this.total - 0.5) this.done = true;
 
     // camera on the centre line, looking ahead; free look with the mouse
@@ -515,7 +519,7 @@ export class Journey {
 
     const changed = i !== this.stationIndex;
     this.stationIndex = i;
-    return { station: st, index: i, changed, progress: this.s / this.total };
+    return { station: st, index: i, changed, progress: this.s / this.total, events, radius: rNow, oxy };
   }
 
   dispose() {

@@ -30,8 +30,9 @@ const cockpit = new Cockpit($('#cockpit'));
 const hud = new Hud(cockpit, world);
 const audio = new Audio();
 
-const settings = { comfort: loadBool('md_comfort', false), sound: loadBool('md_sound', true) };
+const settings = { comfort: loadBool('md_comfort', false), sound: loadBool('md_sound', true), music: loadBool('md_music', true) };
 audio.setEnabled(settings.sound);
+audio.setMusic(settings.music);
 
 function loadBool(k, d) {
   try {
@@ -113,6 +114,7 @@ function renderMenu() {
           <button class="btn sm ${lang === 'en' ? 'sel' : ''}" data-lang="en">English</button></label>
         <label><input type="checkbox" id="m-comfort" ${settings.comfort ? 'checked' : ''}> ${t('comfort')}</label>
         <label><input type="checkbox" id="m-sound" ${settings.sound ? 'checked' : ''}> ${t('sound')}</label>
+        <label><input type="checkbox" id="m-music" ${settings.music ? 'checked' : ''}> ${t('music')}</label>
       </div>
       <p class="scale">${t('scaleInfo')}</p>
       <p class="controls"><b>${t('controlsTitle')}:</b> ${t('controls')}</p>
@@ -122,6 +124,10 @@ function renderMenu() {
   document.querySelectorAll('[data-lang]').forEach((b) => (b.onclick = () => (setLang(b.dataset.lang), renderMenu())));
   document.querySelectorAll('[data-train]').forEach((b) => (b.onclick = () => newTraining(b.dataset.train)));
   $('#m-comfort').onchange = (e) => saveBool('md_comfort', (settings.comfort = e.target.checked));
+  $('#m-music').onchange = (e) => {
+    saveBool('md_music', (settings.music = e.target.checked));
+    audio.setMusic(settings.music);
+  };
   $('#m-sound').onchange = (e) => {
     saveBool('md_sound', (settings.sound = e.target.checked));
     audio.setEnabled(settings.sound);
@@ -221,6 +227,7 @@ function finishVideos() {
   game.state = 'journey';
   showScreen(null);
   hud.showJourney(journey.stations, MAP_POINTS, { kicker: `${t('j_title')} · ${t('j_scale')}`, hint: t('j_skip') });
+  audioScene = '';
   layer.style.transition = 'opacity 1.2s ease';
   layer.style.opacity = 0;
   setTimeout(() => {
@@ -248,6 +255,8 @@ function startJourney(id) {
 
 function endJourney() {
   fadeT = 1;
+  audio.sfx('arrive');
+  audio.stopScene();
   journey.dispose();
   journey = null;
   hud.hideJourney();
@@ -256,6 +265,34 @@ function endJourney() {
   handover = HANDOVER;
   ship.controlsEnabled = false;
   ctx.controls = false;
+}
+
+// ---------------------------------------------------------------- journey sound
+let audioScene = '';
+function journeyAudio(r, beat, dt) {
+  const st = r.station;
+  // music: dark venous theme until the lungs, bright arterial theme after the gas exchange
+  const nearHeart = ['svc', 'pa', 'pv', 'aorta'].includes(st.key);
+  const scene = {
+    music: r.oxy > 0.5 ? 'arterial' : 'venous',
+    heart: st.kind === 'heart' ? 0.9 : nearHeart ? 0.35 : 0,
+    lung: st.kind === 'lung' ? 0.9 : 0,
+  };
+  const key = JSON.stringify(scene);
+  if (key !== audioScene) {
+    audioScene = key;
+    audio.setScene(scene);
+  }
+  for (const e of r.events) audio.sfx(e);
+  // heartbeat: loud inside the heart, a pressure surge in the arteries
+  if (beat < lastBeat) {
+    audio.heartbeat(st.kind === 'heart' ? 1.3 : st.kind === 'artery' ? 0.7 : 0.4);
+    if (st.kind === 'artery') audio.sfx('surge');
+  }
+  if (st.kind === 'lung' && Math.random() < dt * 1.2) audio.sfx('oxygen');
+  if (Math.random() < dt * 0.7) audio.sfx('swish');
+  // flow noise whistles higher in narrow vessels
+  audio.setFlow(Math.min(1, 0.3 + st.v), Math.max(0, Math.min(1, (8 - r.radius) / 6)));
 }
 
 function journeyFrame(dt) {
@@ -267,7 +304,8 @@ function journeyFrame(dt) {
   const frac = (journey.s - st.s0) / st.len;
   if (game.state === 'journey') {
     hud.updateJourney(r.index, Math.min(1, frac), stationName(st), stationFact(st), `Ø ${st.d} · ${st.v >= 0.01 ? st.v.toFixed(2) + ' m/s' : (st.v * 1000).toFixed(1) + ' mm/s'} ${t('j_real')}`, r.changed);
-    if (r.changed) audio.sfx('tool');
+    if (r.changed) audio.sfx('station');
+    journeyAudio(r, beat, dt);
   }
   tools.update(dt);
   hud.clearMarkers();
@@ -302,9 +340,7 @@ function journeyFrame(dt) {
     },
     dt,
   );
-  if (beat < lastBeat && game.state === 'journey') audio.heartbeat();
   lastBeat = beat;
-  audio.setFlow(Math.min(1, st.v));
   if (fadeT > 0) fadeT = Math.max(0, fadeT - dt * 0.8);
   $('#fade').style.opacity = fadeT;
   world.render(tools.scene);
@@ -547,7 +583,7 @@ requestAnimationFrame(frame);
 
 // debug/testing hook (used by the automated browser test)
 window.__md = {
-  game, ship, tools, ctx, input, world,
+  game, ship, tools, ctx, input, world, audio,
   get mission() { return mission; },
   get journey() { return journey; },
   skipJourney: () => journey && endJourney(),

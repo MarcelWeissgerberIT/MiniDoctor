@@ -4,10 +4,11 @@ import { t } from '../i18n.js';
 import { tex } from '../world.js';
 import * as L from './stentLogic.js';
 
-const LESION_AT = 7000; // µm downstream of the release point
-const ANCHOR_WINDOW = 350;
-const ANCHOR_WALL = 45;
-const ANCHOR_ANGLE = 0.5;
+const LESION_AT = 5000; // µm downstream of the release point
+// Anchor harpoon: grips within this window before the plaque, then reels the ship to the wall.
+const ANCHOR_WINDOW = 900;
+const ANCHOR_WALL = 200;
+const ANCHOR_ANGLE = 0.7; // ≈ 40°
 
 function angDiff(a, b) {
   let d = a - b;
@@ -116,13 +117,36 @@ export class StentMission {
     if (this.phase !== 'approach') return null;
     const R = this.vessel.radius;
     const toGo = LESION_AT - ship.dist;
-    // stay in the fast centre flow first, marginate to the wall when close
-    const p = this.anchorPoint();
-    const approachR = toGo > 2500 ? 0.72 : 1;
-    const r = Math.hypot(p.x, p.y) * (approachR === 1 ? 1 : 0.72);
-    const onArc = angDiff(Math.atan2(ship.y, ship.x), this.theta) < 0.05;
-    if (!onArc && toGo > 1000) return { x: Math.cos(this.theta) * R * 0.72, y: Math.sin(this.theta) * R * 0.72 };
+    // stay in the faster flow while far away, then marginate to ~150 µm from the
+    // wall (right at the wall the flow almost stops — the harpoon does the rest)
+    const r = toGo > 1800 ? R * 0.75 : R - 1.25 - 150;
     return { x: Math.cos(this.theta) * r, y: Math.sin(this.theta) * r };
+  }
+
+  /** Live step list for the approach (what to do right now). */
+  guide(ctx, zone, toGo) {
+    const { ship, hud } = ctx;
+    const R = this.vessel.radius;
+    const ang = (angDiff(Math.atan2(ship.y, ship.x), this.theta) * 180) / Math.PI;
+    const wall = ship.wallDistance(R);
+    const sideOk = ang < (ANCHOR_ANGLE * 180) / Math.PI;
+    const wallOk = wall < ANCHOR_WALL;
+    const timeOk = toGo < ANCHOR_WINDOW && toGo > 0;
+    const ok = (v) => (v ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>');
+    const cls = (done, now) => (done ? 'past-ok' : now ? 'now' : '');
+    const html =
+      `<b>${t('m1_name')}</b> · ${t('hud_dist')} ${(Math.max(0, toGo) / 1000).toFixed(2)} mm` +
+      `<ol class="guide">` +
+      `<li class="${cls(sideOk, !sideOk)}">${ok(sideOk)} ${t('st_g1', { a: Math.round(ang) })}</li>` +
+      `<li class="${cls(wallOk, sideOk && !wallOk)}">${ok(wallOk)} ${t('st_g2', { d: Math.round(wall) })}</li>` +
+      `<li class="${zone ? 'now' : ''}">${ok(timeOk)} ${zone ? t('st_g3_now') : t('st_g3', { d: (Math.max(0, toGo - ANCHOR_WINDOW) / 1000).toFixed(1) })}</li>` +
+      `</ol><span class="muted">${ship.autopilot ? t('st_g_auto') : t('st_g_manual')}</span>`;
+    if (html !== this._guide) {
+      this._guide = html;
+      hud.setObjective(html);
+    }
+    hud.setCenter(zone ? `<div class="zone big">${t('st_g3_now')}</div>` : '');
+    hud.setStats(`${t('hud_wall')}: <b>${Math.round(wall)} µm</b><br>${t('st_side')}: <b>${Math.round(ang)}°</b>`);
   }
 
   canRelease() {
@@ -147,12 +171,20 @@ export class StentMission {
     if (this.inAnchorZone(ship)) {
       this.phase = 'scan';
       this.anchorDist = ship.dist;
+      this.reel = true; // harpoon line pulls the ship to the wall
       hud.toast(t('hud_anchored'), 'ok');
       hud.setObjective(`<b>${t('m1_name')}</b><br>${t('st_scan')}`);
       ctx.tools.select('scanner');
       return true;
     }
-    hud.toast(ship.wallDistance(this.vessel.radius) > ANCHOR_WALL ? t('anchorNoWall') : t('anchorWrongSpot'), 'warn');
+    const toGo = LESION_AT - ship.dist;
+    const R = this.vessel.radius;
+    let msg;
+    if (toGo > ANCHOR_WINDOW) msg = t('anchorEarly', { d: ((toGo - ANCHOR_WINDOW) / 1000).toFixed(1) });
+    else if (angDiff(Math.atan2(ship.y, ship.x), this.theta) >= ANCHOR_ANGLE) msg = t('anchorWrongSide');
+    else if (ship.wallDistance(R) >= ANCHOR_WALL) msg = t('anchorNoWall');
+    else msg = t('anchorWrongSpot');
+    hud.toast(msg, 'warn', 3);
     return false;
   }
 
@@ -204,21 +236,34 @@ export class StentMission {
 
     if (this.phase === 'approach') {
       const zone = this.inAnchorZone(ship);
-      hud.setCenter(zone ? `<div class="zone">${t('anchorZone')}</div>` : '');
       if (zone && ship.autopilot) ctx.requestAnchor();
-      hud.setStats(
-        `${t('hud_dist')}: <b>${(toGo / 1000).toFixed(2)} mm</b><br>${t('hud_wall')}: <b>${Math.round(ship.wallDistance(R))} µm</b><br>` +
-          `${t('st_side')}: <b>${Math.round((angDiff(Math.atan2(ship.y, ship.x), this.theta) * 180) / Math.PI)}°</b>`,
-      );
+      this.guide(ctx, zone, toGo);
+      if (!zone) {
+        // yellow arrow towards the plaque side of the wall
+        const a = this.anchorPoint();
+        hud.pointer(new THREE.Vector3(a.x, a.y, -Math.max(80, Math.min(400, toGo))), '#ffd27f');
+      }
       if (toGo < -30) {
         this.missed++;
-        ship.dist = LESION_AT - 2600;
+        ship.dist = LESION_AT - 2200;
         audio.sfx('bad');
-        hud.toast(t('sweptPast'), 'bad', 4);
+        hud.toast(t('sweptPast'), 'bad', 6);
         ctx.fade();
       }
       tools.aimForward(40);
       return null;
+    }
+    // harpoon reel-in: glide to the wall after the anchor gripped
+    if (this.reel) {
+      const a = this.anchorPoint();
+      const dx = a.x - ship.x;
+      const dy = a.y - ship.y;
+      const d = Math.hypot(dx, dy);
+      const step = Math.min(d, 160 * dt);
+      if (d > 1) {
+        ship.x += (dx / d) * step;
+        ship.y += (dy / d) * step;
+      } else this.reel = false;
     }
     hud.setCenter('');
     hud.setStats(
