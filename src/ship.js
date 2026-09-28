@@ -23,6 +23,9 @@ export class Input {
     addEventListener('blur', () => this.keys.clear());
     addEventListener('mousemove', (e) => {
       if (!this.locked) return;
+      // browsers can report a huge jump right after the pointer gets locked
+      if (this.skipMoves > 0) return void this.skipMoves--;
+      if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
       this.mdx += e.movementX;
       this.mdy += e.movementY;
     });
@@ -40,6 +43,7 @@ export class Input {
     el.addEventListener('wheel', (e) => (this.wheel += Math.sign(e.deltaY)), { passive: true });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === el;
+      this.skipMoves = 2;
     });
     this.wantLock = true;
   }
@@ -83,6 +87,8 @@ export class Ship {
     this.autopilot = true;
     this.yawLimit = 1.2;
     this.pitchLimit = 0.8;
+    // cockpit control sticks, each axis −1..1 (x = right, y = forward)
+    this.stick = { lx: 0, ly: 0, rx: 0, ry: 0 };
   }
 
   get r() {
@@ -106,19 +112,23 @@ export class Ship {
       this.yaw = clamp(this.yaw - input.mdx * sens, -this.yawLimit, this.yawLimit);
       this.pitch = clamp(this.pitch - input.mdy * sens, -this.pitchLimit, this.pitchLimit);
     }
+    // right stick: look (push forward = nose down, like an aircraft)
+    if (this.controlsEnabled) {
+      const rate = opts.comfort ? 0.7 : 1.1; // rad/s
+      this.yaw = clamp(this.yaw - this.stick.rx * rate * dt, -this.yawLimit, this.yawLimit);
+      this.pitch = clamp(this.pitch - this.stick.ry * rate * dt, -this.pitchLimit, this.pitchLimit);
+    }
 
     // Flow flaps: max lateral drift depends on vessel size.
     const latMax = mission?.lateralSpeed ?? Math.max(2.5, R * 0.028);
     let ax = 0;
     let ay = 0;
-    const manual =
-      this.controlsEnabled &&
-      (input.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']) !== 0 ||
-        input.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']) !== 0);
+    // left stick + WASD: flow flaps (forward = drift up, back = down)
+    const sx = clamp(input.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']) + this.stick.lx, -1, 1);
+    const sy = clamp(input.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']) + this.stick.ly, -1, 1);
+    const manual = this.controlsEnabled && (Math.abs(sx) > 0.05 || Math.abs(sy) > 0.05);
     if (manual) {
       // steer relative to where the pilot looks (yaw only)
-      const sx = input.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
-      const sy = input.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']);
       const c = Math.cos(this.yaw);
       ax = sx * (Math.abs(c) < 0.3 ? Math.sign(c || 1) * 0.3 : c);
       ay = sy;

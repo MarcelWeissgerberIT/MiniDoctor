@@ -21,6 +21,12 @@ const LAMPS = [
   [1222, 1332], // 4 warning
 ];
 const LAMP_R = 17;
+// Control grips (separate animated layers, see tools/process-assets.mjs).
+// pivot = the mounting socket in the console.
+const GRIPS = {
+  left: { rect: [400, 1330, 470, 206], pivot: [696, 1417] },
+  right: { rect: [1885, 1330, 470, 206], pivot: [2064, 1417] },
+};
 const LEDS = [
   [1310, 1347],
   [1347, 1347],
@@ -70,6 +76,44 @@ export class Cockpit {
       this.frame.appendChild(d);
       return d;
     });
+    // Control sticks: drag with mouse/touch (forward, back, left, right)
+    this.sticks = {};
+    for (const [name, g] of Object.entries(GRIPS)) {
+      const [x, y, w, h] = g.rect;
+      const d = document.createElement('div');
+      d.className = 'grip';
+      Object.assign(d.style, { left: pct(x, IMG_W), top: pct(y, IMG_H), width: pct(w, IMG_W), height: pct(h, IMG_H) });
+      const im = document.createElement('img');
+      im.src = `assets/grip_${name}.webp`;
+      im.alt = '';
+      im.draggable = false;
+      im.style.transformOrigin = `${((g.pivot[0] - x) / w) * 100}% ${((g.pivot[1] - y) / h) * 100}%`;
+      d.appendChild(im);
+      this.frame.appendChild(d);
+      const st = { el: d, img: im, drag: null, x: 0, y: 0, vx: 0, vy: 0, auto: { x: 0, y: 0 } };
+      d.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        d.setPointerCapture(e.pointerId);
+        st.drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: 0, y: 0 };
+        d.classList.add('held');
+      });
+      d.addEventListener('pointermove', (e) => {
+        if (!st.drag || e.pointerId !== st.drag.id) return;
+        const range = d.getBoundingClientRect().width * 0.35;
+        st.drag.x = Math.max(-1, Math.min(1, (e.clientX - st.drag.x0) / range));
+        st.drag.y = Math.max(-1, Math.min(1, -(e.clientY - st.drag.y0) / range));
+      });
+      const end = (e) => {
+        if (!st.drag || e.pointerId !== st.drag.id) return;
+        st.drag = null;
+        d.classList.remove('held');
+      };
+      d.addEventListener('pointerup', end);
+      d.addEventListener('pointercancel', end);
+      this.sticks[name] = st;
+    }
+
     // HUD layer lives inside the frame so it always lines up with the canopy
     this.hud = document.createElement('div');
     this.hud.className = 'hud';
@@ -100,6 +144,28 @@ export class Cockpit {
     }
   }
 
+  /**
+   * Animate the sticks. `auto` = deflection caused by keyboard/mouse so the
+   * grips move along; a dragged grip overrides it. Returns the pilot's
+   * drag input per stick (−1..1, y = forward).
+   */
+  updateSticks(dt, auto, comfort) {
+    const out = {};
+    for (const [name, st] of Object.entries(this.sticks)) {
+      const target = st.drag ?? auto[name] ?? { x: 0, y: 0 };
+      // critically damped spring → smooth, slight overshoot-free motion
+      const k = st.drag ? 30 : 14;
+      st.x += (target.x - st.x) * (1 - Math.exp(-dt * k));
+      st.y += (target.y - st.y) * (1 - Math.exp(-dt * k));
+      const tilt = comfort ? 0.8 : 1;
+      st.img.style.transform =
+        `perspective(700px) rotateX(${(-st.y * 16 * tilt).toFixed(2)}deg) ` +
+        `rotate(${(st.x * 14 * tilt).toFixed(2)}deg) translateY(${(-st.y * 3).toFixed(2)}%)`;
+      out[name] = st.drag ? { x: st.drag.x, y: st.drag.y } : { x: 0, y: 0 };
+    }
+    return out;
+  }
+
   show(v) {
     this.frame.style.display = v ? 'block' : 'none';
   }
@@ -114,8 +180,8 @@ export class Cockpit {
   draw(s, dt) {
     this.drawMain(s, dt);
     this.drawSmall(this.canvases.s1, s.labels.flow, fmtFlow(s.flowReal), '#7ff3ff');
-    this.drawSmall(this.canvases.s2, s.labels.wall, fmtLen(s.wallDist), s.wallDist < 30 ? '#ffd27f' : '#7ff3ff');
-    this.drawSmall(this.canvases.s3, s.labels.dist, fmtLen(s.dist), '#7ff3ff');
+    this.drawSmall(this.canvases.s2, s.labels.wall, s.wallText ?? fmtLen(s.wallDist), s.wallDist < 30 ? '#ffd27f' : '#7ff3ff');
+    this.drawSmall(this.canvases.s3, s.labels.dist, s.distText ?? fmtLen(s.dist), '#7ff3ff');
     this.drawMap(s);
     const set = (el, on, cls = 'on') => el.classList.toggle(cls, !!on);
     set(this.lamps[0], s.autopilot);
@@ -232,7 +298,7 @@ export class Cockpit {
     g.font = `${Math.round(H * 0.15)}px ui-monospace, monospace`;
     g.textAlign = 'left';
     g.textBaseline = 'top';
-    g.fillText(`Ø ${fmtLen(s.R * 2)}`, W * 0.55, H * 0.12);
+    g.fillText(s.diamText ?? `Ø ${fmtLen(s.R * 2)}`, W * 0.55, H * 0.12);
     g.fillText(`1:${s.timeScale}`, W * 0.55, H * 0.4);
     g.fillStyle = s.autopilot ? '#56f59a' : 'rgba(127,243,255,0.5)';
     g.fillText(s.autopilot ? 'AUTO' : 'MAN', W * 0.55, H * 0.68);

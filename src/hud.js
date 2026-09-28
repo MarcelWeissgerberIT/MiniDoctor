@@ -36,6 +36,12 @@ export class Hud {
       this.toolBtns[k] = b;
     }
     this.toolName = el('div', 'tool-name', this.toolbar);
+    // journey overlay: body map with route + station card
+    this.jr = el('div', 'journey', h);
+    this.jr.innerHTML = `<div class="jr-map"><img src="assets/bodymap.webp" alt=""><canvas></canvas></div>
+      <div class="jr-card"><div class="jr-kicker"></div><div class="jr-name"></div><div class="jr-fact"></div><div class="jr-meta"></div></div>
+      <div class="jr-hint"></div>`;
+    this.jr.style.display = 'none';
     this.help = el('div', 'hud-panel hud-help', h);
     this.help.style.display = 'none';
     // markers canvas covers the whole viewport
@@ -56,6 +62,64 @@ export class Hud {
     this.root.style.display = v ? 'block' : 'none';
     this.markers.style.display = v ? 'block' : 'none';
   }
+  showJourney(route, points, texts) {
+    this.jrRoute = route;
+    this.jrPts = route.map((st) => points[st.map]);
+    this.jr.style.display = 'block';
+    this.jr.querySelector('.jr-kicker').textContent = texts.kicker;
+    this.jr.querySelector('.jr-hint').textContent = texts.hint;
+    for (const e of [this.objective, this.stats, this.toolbar, this.crosshair, this.apBtn]) e.style.visibility = 'hidden';
+  }
+  hideJourney() {
+    this.jr.style.display = 'none';
+    for (const e of [this.objective, this.stats, this.toolbar, this.crosshair, this.apBtn]) e.style.visibility = '';
+  }
+  updateJourney(index, frac, name, fact, meta, changed) {
+    if (changed) {
+      const card = this.jr.querySelector('.jr-card');
+      card.classList.remove('pop');
+      void card.offsetWidth;
+      card.classList.add('pop');
+      this.jr.querySelector('.jr-name').textContent = name;
+      this.jr.querySelector('.jr-fact').textContent = fact;
+    }
+    this.jr.querySelector('.jr-meta').textContent = meta;
+    const c = this.jr.querySelector('canvas');
+    const img = this.jr.querySelector('img');
+    const W = (c.width = img.clientWidth * 2 || 200);
+    const H = (c.height = img.clientHeight * 2 || 360);
+    const g = c.getContext('2d');
+    const P = this.jrPts.map(([x, y]) => [x * W, y * H]);
+    // position: between this station's landmark and the next one
+    const a = P[index];
+    const b = P[Math.min(P.length - 1, index + 1)];
+    const cur = [a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac];
+    const line = (from, to, style, w) => {
+      g.strokeStyle = style;
+      g.lineWidth = w;
+      g.beginPath();
+      g.moveTo(...from);
+      for (const p of to) g.lineTo(...p);
+      g.stroke();
+    };
+    g.lineJoin = 'round';
+    line(P[0], P.slice(1), 'rgba(255,210,127,0.35)', 3);
+    line(P[0], [...P.slice(1, index + 1), cur], 'rgba(255,210,127,0.95)', 4);
+    g.fillStyle = '#fff';
+    g.shadowColor = '#7ff3ff';
+    g.shadowBlur = 14;
+    g.beginPath();
+    g.arc(cur[0], cur[1], 7, 0, Math.PI * 2);
+    g.fill();
+    g.shadowBlur = 0;
+    const end = P[P.length - 1];
+    g.strokeStyle = '#ff6b6b';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(end[0], end[1], 10, 0, Math.PI * 2);
+    g.stroke();
+  }
+
   toggleHelp(html) {
     const show = this.help.style.display === 'none';
     this.help.innerHTML = html;
@@ -117,7 +181,7 @@ export class Hud {
   }
   /** Arrow near the crosshair pointing towards a world-space point. */
   pointer(pos, color = '#ffd27f') {
-    if (this.panel.style.display !== 'none') return;
+    if (this.panel.style.display !== 'none' || this.help.style.display !== 'none') return;
     const v = this._v.copy(pos).project(this.world.camera);
     const behind = v.z > 1;
     let x = v.x;
@@ -151,7 +215,7 @@ export class Hud {
 
   /** Draw a bracket around a world-space point. */
   marker(pos, { size = 18, color = '#7ff3ff', label = '', progress = -1 } = {}) {
-    if (this.panel.style.display !== 'none') return false;
+    if (this.panel.style.display !== 'none' || this.help.style.display !== 'none') return false;
     const v = this._v.copy(pos).project(this.world.camera);
     if (v.z > 1) return false;
     const g = this.mctx;

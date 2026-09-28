@@ -138,3 +138,20 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #07070c; col
 .brief-steps { padding-left: 1.3em; margin: .6em 0 1em; }
 .brief-steps li { margin: .25em 0; }
 .tool-name { text-shadow: 0 0 4px #000, 0 0 8px #000; }
+
+.grip { position: absolute; pointer-events: auto; cursor: grab; touch-action: none; }
+.grip.held { cursor: grabbing; }
+.grip img { width: 100%; height: 100%; display: block; user-select: none; -webkit-user-drag: none; will-change: transform; }
+.grip:hover img { filter: drop-shadow(0 0 6px rgba(127, 243, 255, 0.55)); }
+
+.journey { position: absolute; inset: 0; pointer-events: none; }
+.jr-map { position: absolute; left: 17.5%; top: 16.5%; height: 50%; aspect-ratio: 768 / 1376; border: 1px solid rgba(127,243,255,.35); border-radius: 8px; overflow: hidden; background: #07121c; }
+.jr-map img, .jr-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.jr-card { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); min-width: 34%; max-width: 50%; text-align: center; background: var(--panel); border: 1px solid rgba(127,243,255,.35); border-radius: 10px; padding: .6em 1.2em; }
+.jr-card.pop { animation: jrpop .6s ease; }
+@keyframes jrpop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.jr-kicker { font-size: .75em; letter-spacing: 1.5px; text-transform: uppercase; color: var(--cyan); opacity: .8; }
+.jr-name { font-size: 1.6em; font-weight: 700; margin: .1em 0; }
+.jr-fact { opacity: .9; }
+.jr-meta { margin-top: .3em; font-size: .85em; color: var(--warn); font-family: ui-monospace, monospace; }
+.jr-hint { position: absolute; right: 18%; top: 17%; background: var(--panel); border-radius: 6px; padding: .35em .8em; font-size: .85em; opacity: .85; }

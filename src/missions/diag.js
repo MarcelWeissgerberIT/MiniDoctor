@@ -166,7 +166,7 @@ export class DiagnosisMission {
       const to = s.mesh.position.clone().sub(cam.position);
       const d = to.length();
       const ang = to.normalize().angleTo(fwd);
-      if (!next || z < next.z) next = { s, d, z };
+      if (!next || z > next.z) next = { s, d, z }; // closest one ahead
       if (d < SCAN_RANGE && ang < lockAngle && (!best || d < best.d)) best = { s, d };
     }
     // Scanner: hold the mouse button while a sample is in the crosshair

@@ -12,6 +12,7 @@ import { StentMission } from './missions/stent.js';
 import { VirusMission } from './missions/virus.js';
 import { ClotMission } from './missions/clot.js';
 import { DISEASES, TREATMENT } from './missions/diagLogic.js';
+import { Journey, MAP_POINTS, stationName, stationFact } from './journey.js';
 
 const MISSIONS = { diag: DiagnosisMission, stent: StentMission, virus: VirusMission, clot: ClotMission };
 const BRIEF_IMG = { diag: 'ship_concept', stent: 'brief_stent', virus: 'brief_virus', clot: 'brief_clot' };
@@ -56,10 +57,13 @@ const game = {
 };
 
 let mission = null;
+let journey = null;
+let journeyTarget = null;
 let time = 0;
 let handover = 0;
 let fadeT = 0;
 let lastBeat = 0;
+const lookVel = { x: 0, y: 0 };
 
 const ctx = {
   world,
@@ -182,8 +186,8 @@ function playDropVideos(id) {
   const layer = $('#video-layer');
   const seq = ['assets/drop_intro.mp4', 'assets/transition.mp4'];
   let k = 0;
-  // prepare the live scene underneath so the last video frame blends into it
-  startMission(id);
+  // prepare the journey underneath so the last video frame blends into it
+  startJourney(id);
   showScreen('videoscreen');
   cockpit.show(true);
   layer.style.opacity = 1;
@@ -212,8 +216,9 @@ function finishVideos() {
   const layer = $('#video-layer');
   v.onended = v.onerror = v.ontimeupdate = null;
   if (game.state !== 'video') return;
-  game.state = 'play';
+  game.state = 'journey';
   showScreen(null);
+  hud.showJourney(journey.stations, MAP_POINTS, { kicker: `${t('j_title')} · ${t('j_scale')}`, hint: t('j_skip') });
   layer.style.transition = 'opacity 1.2s ease';
   layer.style.opacity = 0;
   setTimeout(() => {
@@ -221,9 +226,84 @@ function finishVideos() {
     layer.style.transition = '';
     v.pause();
   }, 1250);
+  ship.controlsEnabled = false;
+  ctx.controls = false;
+}
+
+function startJourney(id) {
+  mission?.dispose?.(ctx);
+  mission = null;
+  journey?.dispose();
+  journeyTarget = id;
+  journey = new Journey(world, id, { comfort: settings.comfort });
+  tools.setAvailable([]);
+  tools.select(null);
+  hud.closePanel();
+  hud.hideHelp();
+  hud.setBar('');
+  hud.setCenter('');
+}
+
+function endJourney() {
+  fadeT = 1;
+  journey.dispose();
+  journey = null;
+  hud.hideJourney();
+  startMission(journeyTarget);
+  game.state = 'play';
   handover = HANDOVER;
   ship.controlsEnabled = false;
   ctx.controls = false;
+}
+
+function journeyFrame(dt) {
+  time += dt;
+  const hr = patientBpm();
+  const beat = beatPhase(time, hr);
+  const r = journey.update(dt, input, beat);
+  const st = r.station;
+  const frac = (journey.s - st.s0) / st.len;
+  if (game.state === 'journey') {
+    hud.updateJourney(r.index, Math.min(1, frac), stationName(st), stationFact(st), `Ø ${st.d} · ${st.v >= 0.01 ? st.v.toFixed(2) + ' m/s' : (st.v * 1000).toFixed(1) + ' mm/s'} ${t('j_real')}`, r.changed);
+    if (r.changed) audio.sfx('tool');
+  }
+  tools.update(dt);
+  hud.clearMarkers();
+  hud.update(dt);
+  cockpit.updateSticks(dt, {}, settings.comfort);
+  cockpit.draw(
+    {
+      bpm: hr,
+      beat,
+      condition: game.condition,
+      flowReal: st.v,
+      timeScale: 10000,
+      wallDist: 999,
+      wallText: `Ø ${st.d}`,
+      dist: 0,
+      distText: `${Math.round(r.progress * 100)} %`,
+      diamText: `Ø ${st.d}`,
+      R: 1,
+      shipX: 0,
+      shipY: 0,
+      target: null,
+      autopilot: true,
+      anchored: false,
+      toolActive: false,
+      sound: settings.sound,
+      warning: game.condition < 30,
+      scanning: false,
+      labels: { flow: 'FLOW', wall: 'VES', dist: 'ROUTE' },
+    },
+    dt,
+  );
+  if (beat < lastBeat && game.state === 'journey') audio.heartbeat();
+  lastBeat = beat;
+  audio.setFlow(Math.min(1, st.v));
+  if (fadeT > 0) fadeT = Math.max(0, fadeT - dt * 0.8);
+  $('#fade').style.opacity = fadeT;
+  world.render(tools.scene);
+  if (game.state === 'journey' && (journey.done || input.pressed.has('Space') || input.pressed.has('Enter'))) endJourney();
 }
 
 // ---------------------------------------------------------------- mission lifecycle
@@ -353,7 +433,8 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   handleKeys();
-  const playing = game.state === 'play' || game.state === 'video';
+  if ((game.state === 'journey' || game.state === 'video') && journey) journeyFrame(dt);
+  const playing = game.state === 'play';
   if (playing && mission) {
     time += dt;
     ctx.time = time;
@@ -371,6 +452,23 @@ function frame(now) {
         audio.sfx('ok');
       }
     }
+    // control sticks: keyboard/mouse move the grips, dragging a grip steers
+    const kx = input.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
+    const ky = input.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']);
+    lookVel.x += (Math.max(-1, Math.min(1, input.mdx / 25)) - lookVel.x) * Math.min(1, dt * 12);
+    lookVel.y += (Math.max(-1, Math.min(1, -input.mdy / 25)) - lookVel.y) * Math.min(1, dt * 12);
+    const drag = cockpit.updateSticks(
+      dt,
+      {
+        left: ctx.controls ? { x: kx || ship.vx / (mission.lateralSpeed || 1) * 0.5, y: ky } : { x: 0, y: 0 },
+        right: ctx.controls ? { x: lookVel.x, y: -lookVel.y } : { x: 0, y: 0 },
+      },
+      settings.comfort,
+    );
+    ship.stick.lx = drag.left.x;
+    ship.stick.ly = drag.left.y;
+    ship.stick.rx = drag.right.x;
+    ship.stick.ry = drag.right.y;
     const wasAuto = ship.autopilot;
     if (!ctx.controls) ship.autopilot = true;
     ship.update(dt, input, world, time, mission, settings);
@@ -444,6 +542,8 @@ requestAnimationFrame(frame);
 window.__md = {
   game, ship, tools, ctx, input, world,
   get mission() { return mission; },
+  get journey() { return journey; },
+  skipJourney: () => journey && endJourney(),
   newTraining,
   finishVideos,
   skipHandover: () => (handover = 0.01),
