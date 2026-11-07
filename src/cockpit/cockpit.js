@@ -218,6 +218,9 @@ export class Cockpit {
       [SX + 0.015, WIN.x1 - 0.005],
     ];
     this.paneRects = panes.map(([a, b]) => ({ x: (a + b) / 2, w: b - a, y: wy, h: wh - 0.01 }));
+    // holographic HUD projected onto the canopy (no combiner glass)
+    this.hud = new HUD(WIN, { tilt: FRONT_TILT, origin: [0, 0, -0.97], z: -0.047 });
+    front.add(this.hud.mesh);
     for (const [a, b] of panes) this.addGlass(b - a, wh - 0.01, [(a + b) / 2, wy, -0.055], [0, 0, 0], 1, front);
     // brow above the canopy with an LED light line
     batch.add(rbox(1.8, 0.05, 0.12, 0.015, 0.5), m.armorDark, [0, WIN.y1 + 0.1, 0.06], [-0.3, 0, 0], front);
@@ -366,25 +369,6 @@ export class Cockpit {
       batch.add(cyl(0.015, 0.015, 0.2, 8), m.steel, [sx * 0.2, C.floor + 0.08, -0.82], [0.9, 0, 0]);
     }
 
-    // HUD combiner glass on the sill
-    this.hud = new HUD(0.36, 0.21);
-    const hudFrame = this.frame([0, -0.065, -0.62], [-0.05, 0, 0]);
-    this.hud.mesh.position.set(0, 0, 0);
-    hudFrame.add(this.hud.mesh);
-    batch.add(rbox(0.38, 0.012, 0.014, 0.003, 0.1), m.consoleMetal, [0, -0.111, 0], [0, 0, 0], hudFrame);
-    batch.add(rbox(0.38, 0.01, 0.012, 0.003, 0.1), m.consoleMetal, [0, 0.111, 0], [0, 0, 0], hudFrame);
-    for (const sx of [-1, 1]) {
-      batch.add(rbox(0.01, 0.232, 0.012, 0.003, 0.1), m.consoleMetal, [sx * 0.19, 0, 0], [0, 0, 0], hudFrame);
-      // mounting arms forward onto the sill
-      batch.add(rbox(0.014, 0.014, 0.26, 0.004, 0.1), m.consoleMetal, [sx * 0.19, -0.13, -0.12], [0.18, 0, 0], hudFrame);
-    }
-    // the combiner tint only: a glossy material caught the cabin lamps as a white blob
-    const comb = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.37, 0.22),
-      new THREE.MeshBasicMaterial({ color: 0x334433, transparent: true, opacity: 0.06, depthWrite: false }),
-    );
-    comb.position.z = -0.002;
-    hudFrame.add(comb);
   }
 
   /* ------------------------------------------------------------ overhead */
