@@ -27,6 +27,8 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 3. **Laufen:** Schub geben, zur ersten Wegmarke (grüner Signalrauch, blinkende Leuchte, Markierung im HUD und auf dem Radar), drehen, zweite Wegmarke, anhalten, Nachtsicht testen. Danach freies Bewegen.
 
+**Laufen fühlt sich nach Laufen an:** Bei jedem Schritt verlagert der Mech sein Gewicht aufs Standbein (Kabine kippt 3–4°), hebt sich über das Bein, sackt beim Aufsetzen ab und nickt nach vorn, der Rumpf verdreht sich leicht. Der Pilotenkopf hängt federnd darin und hält den Blick teilweise waagerecht – dadurch schaukelt das Cockpit sichtbar um dich herum. Kurven, Beschleunigen, Bremsen und Kraterränder neigen die Maschine, beim Anhalten schwingt sie nach. Erkennungsmarken an einer Kette pendeln über dem Sichtschlitz, Röhrendisplays springen kurz, das Licht flackert, die Kabine knarzt, Hydraulik zischt, Schritte kommen von links bzw. rechts. Der Gyro-Stabilisator (G) dämpft das Schwanken.
+
 Fehler werden realistisch behandelt: Reaktor ohne Kühlung/Hydraulik zündet nicht (der Schalter springt zurück), Kühlpumpe im Betrieb aus → Überhitzung, Master Caution, Alarmleuchte und schließlich Reaktor-Notabschaltung. **Schnellstart** im Titelmenü überspringt Einstieg und Checkliste.
 
 ## Starten
@@ -91,6 +93,7 @@ Alle Grafiken, Modelle und Sounds wurden für dieses Projekt generiert:
 | 3D-Modelle: Pilotensitz, Joystick, Schubhebel, Funkgerät, Feuerlöscher, Panzerwrack, Gebäuderuine, Panzersperre, Sandsäcke, Munitionskisten, Fässer, Stromgenerator | **Meshy 7 Image-to-3D** (über Higgsfield, mit PBR), Vorlagen von GPT Image 2.6 | `public/assets/models/*.glb` |
 | BB-07 von außen (5 m) | **Meshy Multi-Image-to-3D** aus Front-, Seiten- und Rückansicht (GPT Image 2.6, Rückansicht mit Luke und Leiter) | `public/assets/models/mech.glb` |
 | Cockpit-Brummen, Schlachtlärm, Mech-Schritt, Servo, Hochfahren, Schritte auf Schotter, Leiter, Luke auf/zu, Batterie-Relais, APU, Reaktorzündung, Hydraulikpumpe, Gyro, Beinverriegelung, Gurtschloss, Stützpunkt-Atmo | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
+| Kabinenknarzen, Hydraulik pro Schritt, klappernde Ausrüstung | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
 | 22 Funksprüche des Ausbilders (Deutsch) | Higgsfield (Seed Audio, Stimme „Barrett“) | `public/assets/voice/` |
 
 `tools/process-assets.mjs` macht daraus spielfertige Dateien: Normal-Maps und gepackte ORM-Maps (Ambient Occlusion, Rauheit, Metallanteil) werden aus den Farbtexturen abgeleitet (Rost = rau und nicht-metallisch, blanker Stahl = metallisch), Texturen werden nahtlos gemacht, das Panorama wird horizontal nahtlos überblendet, die Decals ausgeschnitten und die GLBs mit WebP-Texturen und Meshopt komprimiert. Die Rohdateien liegen in `assets-src/` (nicht im Repo).
@@ -113,6 +116,7 @@ src/
   tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken
   logic/mech.js        reine Bewegungslogik (getestet)
   logic/systems.js     Strom, APU, Hydraulik, Kühlung, Reaktor, Gyro, Beinverriegelung (getestet)
+  logic/gait.js        Gang: Gewichtsverlagerung, Nachschwingen, Kopf-Feder, Pendel (getestet)
   cockpit/cockpit.js   Cockpit-Aufbau und Beleuchtung
   cockpit/instruments.js  Rundinstrumente, Kippschalter, Leuchttaster, Alarmleuchte
   cockpit/displays.js  Röhrendisplays (Status, Kamera, Taktik)

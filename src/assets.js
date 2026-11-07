@@ -14,6 +14,7 @@ export const SOUNDS = [
   'cockpit_hum', 'battle_far', 'footstep', 'servo', 'startup',
   'walk_gravel', 'stairs_metal', 'hatch_open', 'hatch_close', 'battery_on', 'apu_start',
   'reactor_start', 'hyd_pump', 'gyro_spin', 'leg_release', 'harness', 'base_ambience',
+  'creak_1', 'creak_2', 'hyd_step', 'rattle',
 ];
 export const VOICES = Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0'));
 

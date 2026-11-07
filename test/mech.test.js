@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createMechState, stepMech, walkBob, wrapAngle, MECH, kmh } from '../src/logic/mech.js';
+import { createMechState, stepMech, wrapAngle, MECH, kmh, stepLength } from '../src/logic/mech.js';
 
 const run = (s, input, seconds, colliders = []) => {
   const events = [];
@@ -24,7 +24,7 @@ describe('mech throttle and speed', () => {
     expect(s.speed).toBeLessThan(MECH.maxForward * 0.5);
     run(s, {}, 10);
     expect(s.speed).toBeCloseTo(MECH.maxForward);
-    expect(kmh(s.speed)).toBeCloseTo(39.6);
+    expect(kmh(s.speed)).toBeCloseTo(32.4);
   });
 
   it('stop puts the throttle to zero and the mech brakes', () => {
@@ -76,7 +76,7 @@ describe('footsteps', () => {
     s.throttle = 1;
     s.speed = MECH.maxForward;
     const events = run(s, {}, 4);
-    const expected = s.odometer / MECH.stepLength;
+    const expected = s.odometer / stepLength(MECH.maxForward);
     expect(events.length).toBeGreaterThanOrEqual(Math.floor(expected) - 1);
     expect(events.length).toBeLessThanOrEqual(Math.ceil(expected) + 1);
     for (let i = 1; i < events.length; i++) expect(events[i].foot).toBe(-events[i - 1].foot);
@@ -87,14 +87,8 @@ describe('footsteps', () => {
     expect(run(s, {}, 3)).toHaveLength(0);
   });
 
-  it('walk bob is zero at rest and bounded while walking', () => {
-    const s = createMechState();
-    expect(walkBob(s).y).toBe(0);
-    s.speed = MECH.maxForward;
-    s.stepPhase = 0.5;
-    const b = walkBob(s);
-    expect(b.y).toBeGreaterThan(0.1);
-    expect(b.y).toBeLessThan(0.35);
+  it('takes longer strides at speed', () => {
+    expect(stepLength(MECH.maxForward)).toBeGreaterThan(stepLength(2) + 0.5);
   });
 });
 

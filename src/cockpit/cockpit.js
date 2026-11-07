@@ -55,6 +55,7 @@ export class Cockpit {
     this.buildLights();
     this.buildDust();
     this.buildMarker();
+    this.buildTags();
     this.batch.finalize();
   }
 
@@ -736,8 +737,53 @@ export class Cockpit {
     this.marker.visible = true;
   }
 
+  /** dog tags on a ball chain, hanging from the visor rail: they show every sway */
+  buildTags() {
+    const m = this.m;
+    const L = 0.12;
+    this.tags = new THREE.Group();
+    this.tags.position.set(-0.43, 0.355, -0.8);
+    const hook = new THREE.Mesh(rbox(0.016, 0.03, 0.016, 0.004, 0.05), m.steel);
+    hook.position.y = 0.012;
+    this.root.add(hook);
+    hook.position.add(this.tags.position);
+    // ball chain: tiny beads
+    const bead = new THREE.SphereGeometry(0.0022, 6, 4);
+    for (let i = 0; i < 26; i++) {
+      const b = new THREE.Mesh(bead, m.steel);
+      b.position.y = -(i / 25) * L;
+      this.tags.add(b);
+    }
+    this.tagPair = new THREE.Group();
+    this.tagPair.position.y = -L;
+    const tagMat = new THREE.MeshStandardMaterial({ color: 0x9a9890, metalness: 1, roughness: 0.35 });
+    for (const [i, off] of [
+      [0, -0.006],
+      [1, 0.006],
+    ]) {
+      const tag = new THREE.Mesh(rbox(0.028, 0.05, 0.0016, 0.006, 0.05), tagMat);
+      tag.position.set(off, -0.024 - i * 0.004, i * 0.002);
+      tag.rotation.z = (i ? -1 : 1) * 0.08;
+      tag.castShadow = true;
+      this.tagPair.add(tag);
+    }
+    this.tags.add(this.tagPair);
+    this.root.add(this.tags);
+    this.tagSpin = 0;
+  }
+
+  setTags(t, dt) {
+    if (!this.tags) return;
+    this.tags.rotation.set(-t.az, 0, t.ax);
+    // the pair twists a little on the chain
+    this.tagSpin += (t.vx * 0.6 - this.tagSpin) * Math.min(1, dt * 2);
+    this.tagPair.rotation.y = Math.sin(this.tagSpin) * 0.9;
+  }
+
   /** a footstep shakes dust loose */
   jolt(strength) {
+    for (const k in this.mfd) this.mfd[k].uniforms.jolt.value = Math.max(this.mfd[k].uniforms.jolt.value, strength);
+    this.flickerJolt = Math.max(this.flickerJolt ?? 0, strength);
     const v = this.dustVel;
     for (let i = 0; i < v.length; i += 3) {
       v[i] += (Math.random() - 0.5) * 0.08 * strength;
@@ -793,7 +839,10 @@ export class Cockpit {
     this.updateDust(dt, time);
 
     // lights follow the buses and switches
-    const flicker = 0.92 + 0.08 * Math.sin(time * 37) * Math.sin(time * 11.3) + (Math.random() < 0.004 ? -0.5 : 0);
+    this.flickerJolt = Math.max(0, (this.flickerJolt ?? 0) - dt * 5);
+    for (const k in this.mfd) this.mfd[k].uniforms.jolt.value = Math.max(0, this.mfd[k].uniforms.jolt.value - dt * 4);
+    const flicker =
+      0.92 + 0.08 * Math.sin(time * 37) * Math.sin(time * 11.3) + (Math.random() < 0.004 ? -0.5 : 0) - (Math.random() < this.flickerJolt * 0.5 ? 0.35 * this.flickerJolt : 0);
     const domeOn = this.lightsOn ? 1 : 0;
     this.dome.intensity = 6 * p * domeOn * flicker;
     this.domeLampMat.emissiveIntensity = 2.5 * p * domeOn * flicker;

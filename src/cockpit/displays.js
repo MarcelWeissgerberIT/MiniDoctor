@@ -18,11 +18,15 @@ uniform float nv;
 uniform float time;
 uniform float power;
 uniform float boot;
+uniform float jolt;
 varying vec2 vUv;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
 void main(){
   vec2 c = vUv - 0.5;
   vec2 uv = 0.5 + c * (1.0 + dot(c,c) * 0.12);
+  // a hard footstep makes the tube picture jump and tear for a moment
+  uv.y += jolt * 0.012 * sin(time * 90.0);
+  uv.x += jolt * 0.02 * step(0.92, fract(uv.y * 7.0 + time * 13.0)) * sin(time * 140.0);
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
   vec3 col = vec3(0.004, 0.012, 0.006);
   if (useFeed > 0.5) {
@@ -63,6 +67,7 @@ export class MFD {
       time: { value: 0 },
       power: { value: 0 },
       boot: { value: 0 },
+      jolt: { value: 0 },
     };
     this.mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(width, height),

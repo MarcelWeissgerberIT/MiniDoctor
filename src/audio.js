@@ -155,14 +155,20 @@ export class Sound {
     return { src: s, gain: g };
   }
 
-  one(name, gain = 1, rate = 1, dest = this.master, delay = 0) {
+  one(name, gain = 1, rate = 1, dest = this.master, delay = 0, pan = 0) {
     if (!this.ctx || !this.buf[name]) return;
     const s = this.ctx.createBufferSource();
     s.buffer = this.buf[name];
     s.playbackRate.value = rate;
     const g = this.ctx.createGain();
     g.gain.value = gain;
-    s.connect(g).connect(dest);
+    let node = s.connect(g);
+    if (pan && this.ctx.createStereoPanner) {
+      const p = this.ctx.createStereoPanner();
+      p.pan.value = Math.max(-1, Math.min(1, pan));
+      node = node.connect(p);
+    }
+    node.connect(dest || this.master);
     s.start(this.ctx.currentTime + delay);
   }
 
@@ -218,9 +224,10 @@ export class Sound {
     this.one('startup', 0.9);
   }
 
-  footstep(strength) {
+  /** foot: +1 right, -1 left -> panned to that side */
+  footstep(strength, foot = 0) {
     // an 18 t, 5 m machine: a bit higher pitched than a giant
-    this.one('footstep', 0.35 + strength * 0.45, 1.05 + Math.random() * 0.12);
+    this.one('footstep', 0.35 + strength * 0.45, 1.05 + Math.random() * 0.12, undefined, 0, foot * 0.35);
     this.thump(70 + Math.random() * 12, 0.35 * strength, 0.25);
   }
 

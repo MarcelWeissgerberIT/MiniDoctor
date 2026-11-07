@@ -152,7 +152,8 @@ export function stepSystems(s, sw, dt, throttle = 0) {
     if (!s.mainBus) w.push('GEN OFFLINE');
   }
   s.warnings = w;
-  s.canWalk = !s.legsLocked && s.reactorState === 'running' && s.hyd > 0.4 && s.gyro > 0.5;
+  // the gyro is needed to unlock the legs; afterwards it only steadies the walk
+  s.canWalk = !s.legsLocked && s.reactorState === 'running' && s.hyd > 0.4;
   s.prev = { ...sw };
   return ev;
 }

@@ -7,7 +7,8 @@ import { World, WORLD } from './world/world.js';
 import { Post } from './post.js';
 import { Input } from './input.js';
 import { Sound, Radio } from './audio.js';
-import { createMechState, stepMech, walkBob, MECH, clamp } from './logic/mech.js';
+import { createMechState, stepMech, MECH, clamp } from './logic/mech.js';
+import { BodyDynamics } from './logic/gait.js';
 import { createSystems, stepSystems, hotSwitches } from './logic/systems.js';
 import { Tutorial, VOICE_TEXT } from './tutorial.js';
 import { EntrySequence } from './entry.js';
@@ -70,6 +71,7 @@ class Game {
     this.ray = new THREE.Raycaster();
 
     this.mech = createMechState(0, 0, 0);
+    this.body = new BodyDynamics();
     this.groundY = this.world.heightAt(0, 0);
     this.sys = createSystems(false);
     this.sw = this.switchSnapshot();
@@ -100,7 +102,7 @@ class Game {
     addEventListener('resize', () => this.resize());
     this.input.onLockChange = (locked) => ui.lockHint(!locked && this.state !== 'title');
     this.post.cockpitPass.enabled = false;
-    this.placeMech(0);
+    this.placeMech();
     // title backdrop: a slow look at the parked mech
     this.worldCam.position.set(-9, 2.2, 15);
     this.worldCam.lookAt(0, 3, 0);
@@ -362,25 +364,43 @@ class Game {
       }
     } else {
       const events = stepMech(this.mech, { throttle: thr, turn, stop }, dt, this.world.colliders, WORLD.bounds);
-      for (const e of events) {
-        this.sound.footstep(e.strength);
-        this.headVel.y -= 0.16 * e.strength;
-        this.headVel.x += e.foot * 0.04 * e.strength;
-        this.shake += 0.4 * e.strength;
-        this.cockpit.jolt(e.strength);
-        for (const gg of Object.values(this.cockpit.gauges)) gg.kick(0.2 * e.strength);
-      }
+      for (const e of events) this.footstep(e);
     }
     const target = this.world.heightAt(this.mech.x, this.mech.z);
     this.groundY += (target - this.groundY) * Math.min(1, dt * 3);
   }
 
-  placeMech(bobY = 0, bob = null) {
+  /** one foot hits the ground: sound on that side, the frame groans, things rattle */
+  footstep(e) {
+    const s = e.strength;
+    this.sound.footstep(s, e.foot);
+    this.sound.one('hyd_step', 0.16 + 0.14 * s, 0.92 + Math.random() * 0.16, undefined, 0.03, e.foot * 0.25);
+    if (Math.random() < 0.5) this.sound.one(Math.random() < 0.5 ? 'creak_1' : 'creak_2', 0.18 + 0.25 * s, 0.85 + Math.random() * 0.3, undefined, 0.08 + Math.random() * 0.2);
+    if (s > 0.55 && Math.random() < 0.45) this.sound.one('rattle', 0.15 + 0.2 * s, 0.9 + Math.random() * 0.2, undefined, 0.05);
+    this.shake += 0.35 * s;
+    this.cockpit.jolt(s);
+    for (const gg of Object.values(this.cockpit.gauges)) gg.kick(0.2 * s);
+  }
+
+  /** slope of the ground under the feet (pitch: front higher = nose up, roll: right higher = +) */
+  groundSlope() {
     const m = this.mech;
-    this.mechObj.position.set(m.x, this.groundY + MECH.eyeHeight + bobY, m.z);
-    this.mechObj.rotation.set(bob ? bob.pitch : 0, m.heading, bob ? bob.roll : 0);
+    const fx = -Math.sin(m.heading);
+    const fz = -Math.cos(m.heading);
+    const h = (dx, dz) => this.world.heightAt(m.x + dx, m.z + dz);
+    const front = h(fx * 1.3, fz * 1.3);
+    const back = h(-fx * 1.3, -fz * 1.3);
+    const right = h(-fz * 1.0, fx * 1.0);
+    const left = h(fz * 1.0, -fx * 1.0);
+    return { pitch: Math.atan2(front - back, 2.6), roll: Math.atan2(right - left, 2.0) };
+  }
+
+  placeMech(b = null) {
+    const m = this.mech;
+    this.mechObj.position.set(m.x, this.groundY + MECH.eyeHeight + (b ? b.y : 0), m.z);
+    this.mechObj.rotation.set(b ? b.pitch : 0, m.heading + (b ? b.yaw : 0), b ? b.roll : 0);
     this.mechObj.updateMatrix();
-    if (bob) this.mechObj.translateX(bob.x);
+    if (b) this.mechObj.translateX(b.x);
     this.mechObj.updateMatrixWorld(true);
     // the exterior model rides along (its origin is at the feet)
     const pm = this.world.playerMech;
@@ -394,16 +414,18 @@ class Game {
 
   updateCameras(dt, pose) {
     const stab = this.sw.stab && this.sys.gyro > 0.9;
-    const bob = walkBob(this.mech);
-    const k = 90;
-    const d = stab ? 13 : 7;
-    this.headVel.addScaledVector(this.headOff, -k * dt).multiplyScalar(Math.max(0, 1 - d * dt));
+    const m = this.mech;
+    // the walker's torso (= cockpit) pose from the gait, and the pilot's head inside it
+    const b = this.body.update(dt, m, this.groundSlope(), stab);
+    const head = this.body.head;
+    // extra impulses (leg release, impacts) on a separate spring
+    this.headVel.addScaledVector(this.headOff, -90 * dt).multiplyScalar(Math.max(0, 1 - (stab ? 13 : 8) * dt));
     this.headOff.addScaledVector(this.headVel, dt);
-    this.shake = Math.max(0, this.shake - dt * 2.2);
+    this.shake = Math.max(0, this.shake - dt * 2.4);
     this.shock = Math.max(0, this.shock - dt * 2) + this.shake * 0.02;
-    const sh = this.shake * (stab ? 0.4 : 1) * 0.004;
+    const sh = this.shake * (stab ? 0.5 : 1) * 0.004;
     const t = this.time;
-    const n = (a, b) => Math.sin(t * a) * Math.sin(t * b * 1.37);
+    const n = (a, c) => Math.sin(t * a) * Math.sin(t * c * 1.37);
     const idle = 0.0004 * (this.sys.reactorState === 'running' ? 1 : this.sys.apuRpm * 0.4);
     if (pose) {
       this.cockpitCam.position.copy(pose.pos);
@@ -412,28 +434,34 @@ class Game {
       this.cockpitCam.rotateX(pose.lookOff.pitch);
     } else {
       this.cockpitCam.position.set(
-        this.headOff.x + n(41, 23) * sh + n(97, 61) * idle,
-        this.headOff.y + n(37, 29) * sh + n(89, 53) * idle,
-        this.headOff.z,
+        head.p[0] + this.headOff.x + n(41, 23) * sh + n(97, 61) * idle,
+        head.p[1] + this.headOff.y + n(37, 29) * sh + n(89, 53) * idle,
+        head.p[2] + this.headOff.z,
       );
-      this.cockpitCam.rotation.set(this.pitch + n(43, 31) * sh * 1.5, this.yaw + n(29, 47) * sh, n(33, 19) * sh);
+      // the head partly keeps level while the cabin rolls and pitches around it
+      this._qs ??= new THREE.Quaternion();
+      this._ql ??= new THREE.Quaternion();
+      this._e ??= new THREE.Euler();
+      this._qs.setFromEuler(this._e.set(head.pitch + n(43, 31) * sh * 1.5, head.yaw, head.roll + n(33, 19) * sh, 'XYZ'));
+      this._ql.setFromEuler(this._e.set(this.pitch, this.yaw + n(29, 47) * sh, 0, 'YXZ'));
+      this.cockpitCam.quaternion.copy(this._qs).multiply(this._ql);
     }
     if (this.debugCam) {
       this.cockpitCam.position.set(...this.debugCam.pos);
       this.cockpitCam.lookAt(...this.debugCam.look);
     }
     this.cockpitCam.updateMatrixWorld(true);
+    this.cockpit.setTags(this.body.tags, dt);
 
-    const sbob = { pitch: bob.pitch, roll: bob.roll * (stab ? 0.5 : 1), x: bob.x * (stab ? 0.5 : 1) };
-    this.placeMech(bob.y * (stab ? 0.6 : 1), sbob);
+    this.placeMech(b);
     if (this.freeCam || this.state === 'title' || (this.state === 'entry' && this.entry.phase === 'outside')) return;
     const wm = new THREE.Matrix4().multiplyMatrices(this.mechObj.matrixWorld, this.cockpitCam.matrixWorld);
     wm.decompose(this.worldCam.position, this.worldCam.quaternion, this.worldCam.scale);
     this.worldCam.updateMatrixWorld(true);
 
-    const m = this.mech;
+    // the hull camera for the centre display sways with the torso
     this.feedCam.position.copy(this.mechObj.position).add(new THREE.Vector3(-Math.sin(m.heading), -0.3, -Math.cos(m.heading)).multiplyScalar(1.2));
-    this.feedCam.rotation.set(-1.5 * DEG, m.heading, 0, 'YXZ');
+    this.feedCam.rotation.set(-1.5 * DEG + b.pitch, m.heading + b.yaw, b.roll, 'YXZ');
     this.feedCam.updateMatrixWorld(true);
   }
 

@@ -29,12 +29,25 @@ export class Input {
       if (this.locked && performance.now() - this.lockTime > 120) {
         this.dx += Math.max(-250, Math.min(250, e.movementX));
         this.dy += Math.max(-250, Math.min(250, e.movementY));
+      } else if (!this.locked && this.drag) {
+        // fallback where pointer lock is not allowed (e.g. embedded pages): drag to look
+        this.dx += e.movementX * 1.4;
+        this.dy += e.movementY * 1.4;
+        this.drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
       }
+    });
+    addEventListener('mouseup', (e) => {
+      if (e.button !== 0 || !this.drag) return;
+      // a click without dragging presses the control under the mouse
+      if (!this.locked && this.drag.moved < 6) this.clicked = true;
+      this.drag = null;
     });
     canvas.addEventListener('mousedown', (e) => {
       if (!this.enabled || e.button !== 0) return;
-      if (!this.locked) this.lock();
-      else this.clicked = true;
+      if (!this.locked) {
+        this.drag = { moved: 0 };
+        this.lock();
+      } else this.clicked = true;
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;

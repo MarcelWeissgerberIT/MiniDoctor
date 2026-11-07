@@ -7,7 +7,7 @@
 export const MECH = {
   height: 5.0,
   eyeHeight: 3.95, // pilot eye above the ground (behind the visor slit)
-  maxForward: 11, // m/s  (~40 km/h)
+  maxForward: 9, // m/s  (~32 km/h)
   maxReverse: 3.5, // m/s
   accel: 2.8, // m/s^2
   brake: 4.2, // m/s^2
@@ -15,7 +15,7 @@ export const MECH = {
   minThrottle: -0.3,
   turnRate: 0.6, // rad/s at standstill
   turnRateMoving: 0.42, // rad/s at full speed
-  stepLength: 2.4, // metres per footstep
+  stepLength: 2.4, // metres per footstep at half speed (see stepLength())
   radius: 1.7, // collision radius of the feet/legs
 };
 
@@ -35,6 +35,11 @@ export function createMechState(x = 0, z = 0, heading = 0) {
 }
 
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/** short, lumbering steps when slow, long strides at speed */
+export function stepLength(speed) {
+  return 1.8 + 0.11 * Math.abs(speed);
+}
 
 export function approach(v, target, rate) {
   if (v < target) return Math.min(target, v + rate);
@@ -101,7 +106,7 @@ export function stepMech(s, input, dt, colliders = [], bounds = 900) {
   // legs keep walking while turning on the spot
   const stride = Math.abs(dist) + Math.abs(s.turn) * dt * 2.2;
   if (stride > 0) {
-    s.stepPhase += stride / MECH.stepLength;
+    s.stepPhase += stride / stepLength(s.speed);
     while (s.stepPhase >= 1) {
       s.stepPhase -= 1;
       s.steps++;
@@ -113,14 +118,6 @@ export function stepMech(s, input, dt, colliders = [], bounds = 900) {
     s.stepPhase = approach(s.stepPhase, 0, dt * 0.5);
   }
   return events;
-}
-
-/** Vertical body motion of the walk cycle: highest mid-stride, drops at foot impact. */
-export function walkBob(s) {
-  const moving = Math.min(1, (Math.abs(s.speed) + Math.abs(s.turn) * 4) / 3);
-  const lift = Math.sin(Math.PI * s.stepPhase);
-  const sway = s.foot * Math.sin(Math.PI * s.stepPhase); // lean towards the stance leg
-  return { y: lift * 0.2 * moving, x: sway * 0.1 * moving, roll: -sway * 0.014 * moving, pitch: lift * 0.007 * moving };
 }
 
 export const kmh = (ms) => ms * 3.6;
