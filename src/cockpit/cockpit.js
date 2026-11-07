@@ -736,35 +736,71 @@ export class Cockpit {
     this.root.add(this.dust);
   }
 
-  /** pulsing ring the tutorial puts around the control to use next */
+  /**
+   * Tutorial highlight: a soft amber frame lying flat on the panel around the control
+   * to use next (depth-tested, so it never floats in front of other parts).
+   */
   buildMarker() {
-    const mat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(3, 1.9, 0.5),
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 320;
+    const g = c.getContext('2d');
+    const frame = (lw, alpha, blur) => {
+      g.save();
+      g.strokeStyle = `rgba(255,190,80,${alpha})`;
+      g.lineWidth = lw;
+      g.shadowColor = 'rgba(255,170,40,1)';
+      g.shadowBlur = blur;
+      const r = 26;
+      const x0 = 22;
+      const y0 = 22;
+      const x1 = 256 - 22;
+      const y1 = 320 - 22;
+      g.beginPath();
+      g.moveTo(x0 + r, y0);
+      g.arcTo(x1, y0, x1, y1, r);
+      g.arcTo(x1, y1, x0, y1, r);
+      g.arcTo(x0, y1, x0, y0, r);
+      g.arcTo(x0, y0, x1, y0, r);
+      g.closePath();
+      g.stroke();
+      g.restore();
+    };
+    frame(10, 0.35, 24);
+    frame(4, 1, 8);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this.markerMat = new THREE.MeshBasicMaterial({
+      map: tex,
+      color: new THREE.Color(1.6, 1.3, 1.0),
       transparent: true,
-      depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
     });
-    this.marker = new THREE.Group();
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.026, 0.031, 40), mat);
-    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.04, 0.043, 40), mat);
-    this.marker.add(ring, ring2);
-    this.marker.renderOrder = 20;
-    ring.renderOrder = ring2.renderOrder = 20;
+    this.marker = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.markerMat);
+    this.marker.renderOrder = 12;
     this.marker.visible = false;
-    this.markerMat = mat;
     this.scene.add(this.marker);
   }
 
-  setMarker(mesh, cam, time) {
-    if (!mesh) {
+  /** ctl: a ToggleSwitch or LampButton (or null) */
+  setMarker(ctl, cam, time) {
+    if (!ctl) {
       this.marker.visible = false;
       return;
     }
-    mesh.getWorldPosition(this.marker.position);
-    this.marker.quaternion.copy(cam.quaternion);
-    this.marker.scale.setScalar(1 + 0.18 * Math.sin(time * 6));
-    this.markerMat.opacity = 0.55 + 0.45 * Math.abs(Math.sin(time * 3));
+    const grp = ctl.group;
+    grp.updateMatrixWorld(true);
+    const isSwitch = !!ctl.hit;
+    // frame the switch and its label; a lamp button is framed as a whole
+    const off = new THREE.Vector3(0, isSwitch ? -0.012 : 0, 0.012);
+    this.marker.position.copy(off.applyMatrix4(grp.matrixWorld));
+    grp.getWorldQuaternion(this.marker.quaternion);
+    if (isSwitch) this.marker.scale.set(0.085, 0.105, 1);
+    else this.marker.scale.set(0.15, 0.085, 1);
+    this.markerMat.opacity = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(time * 4));
     this.marker.visible = true;
   }
 

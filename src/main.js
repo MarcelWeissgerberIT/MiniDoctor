@@ -576,7 +576,7 @@ class Game {
     const key = this.tutorial.active ? this.tutorial.targetKey() : null;
     const ctl = key ? this.cockpit.switches[key] || this.cockpit.lamps[key] : null;
     const mesh = ctl ? ctl.hit || ctl.cap : null;
-    this.cockpit.setMarker(mesh, this.cockpitCam, this.time);
+    this.cockpit.setMarker(ctl, this.cockpitCam, this.time);
     if (!mesh) return ui.arrow(null);
     const p = mesh.getWorldPosition(new THREE.Vector3()).project(this.cockpitCam);
     const behind = p.z > 1;

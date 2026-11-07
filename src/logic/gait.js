@@ -7,13 +7,13 @@
 import { MECH, clamp, stepLength } from './mech.js';
 
 export const GAIT = {
-  roll: 0.075, // rad weight shift onto the stance leg (slow walk)
+  roll: 0.038, // rad weight shift onto the stance leg (slow walk)
   sway: 0.065, // m sideways over the stance foot
-  lift: 0.1, // m vault over the stance leg (slow walk), a bit more when running
+  lift: 0.07, // m vault over the stance leg (slow walk), a bit more when running
   dip: 0.035, // m sag right after heel strike
-  nod: 0.024, // rad nose-down at heel strike
-  twist: 0.02, // rad torso twist
-  stab: 0.72, // how much of the cabin roll the pilot's head cancels (vestibular reflex)
+  nod: 0.012, // rad nose-down at heel strike
+  twist: 0.008, // rad torso twist
+  stab: 0.6, // how much of the cabin roll the pilot's head cancels (vestibular reflex)
 };
 
 /**
@@ -106,7 +106,7 @@ export class BodyDynamics {
     const K = 85;
     const C = stab ? 13 : 10;
     for (let i = 0; i < 3; i++) {
-      h.v[i] += (-K * h.p[i] - C * h.v[i] - 0.9 * a[i]) * dt;
+      h.v[i] += (-K * h.p[i] - C * h.v[i] - 0.5 * a[i]) * dt;
       h.p[i] = clamp(h.p[i] + h.v[i] * dt, -0.09, 0.09);
     }
     // ...and partly keeps itself level while the cabin rolls around it

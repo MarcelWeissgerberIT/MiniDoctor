@@ -40,7 +40,7 @@ describe('gait pose', () => {
     const mid = gaitPose(s);
     expect(strike.y).toBeLessThan(0);
     expect(strike.pitch).toBeLessThan(0);
-    expect(mid.y).toBeGreaterThan(0.08);
+    expect(mid.y).toBeGreaterThan(0.05);
   });
 });
 

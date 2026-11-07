@@ -101,8 +101,9 @@ export class EntrySequence {
     this.video?.pause();
     this.g.ui.showVideo(false);
     this.fade(1, 0);
-    this.t = 28.4;
-    this.cueIndex = this.cues.findIndex((c) => c[0] > 28.4);
+    // the film already shows climbing in: continue seated, the hatch still open behind
+    this.t = 33.8;
+    this.cueIndex = this.cues.findIndex((c) => c[0] > 33.8);
     this.enterCockpit();
     this.fade(0, 0.9);
   }
