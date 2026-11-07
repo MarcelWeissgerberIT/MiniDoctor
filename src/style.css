@@ -211,7 +211,7 @@ body {
   pointer-events: none;
 }
 #comms .line {
-  font-family: 'DejaVu Sans Mono', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', Consolas, monospace;
   font-size: 13px;
   color: #b9f5c2;
   background: rgba(0, 10, 2, 0.55);
@@ -470,12 +470,15 @@ body {
   display: none;
   gap: 4px;
   z-index: 7;
+  width: max-content;
+  max-width: calc(100vw - 16px);
 }
 #views.show {
   display: flex;
 }
 #views button {
   font: inherit;
+  white-space: nowrap;
   font-size: 13px;
   letter-spacing: 0.06em;
   color: #d9d4c4;
@@ -720,4 +723,41 @@ body.hovering #scene {
   color: #e6e2d6;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* phones held upright: the cockpit is made for landscape */
+#rotatehint {
+  display: none;
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 6px 14px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: #120c02;
+  background: rgba(231, 181, 78, 0.9);
+  pointer-events: none;
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  body.playing #rotatehint {
+    display: block;
+  }
+}
+
+@media (max-width: 760px) {
+  #views {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: calc(100vw - 16px);
+    gap: 3px;
+  }
+  #views button {
+    font-size: 11px;
+    padding: 3px 6px;
+  }
+  #views button.ext {
+    margin-left: 0;
+  }
 }

@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import '@fontsource/jetbrains-mono/latin-400.css';
+import '@fontsource/jetbrains-mono/latin-700.css';
+import '@fontsource/barlow-condensed/latin-500.css';
+import '@fontsource/barlow-condensed/latin-600.css';
+import '@fontsource/barlow-condensed/latin-700.css';
 import './style.css';
 import { Assets } from './assets.js';
 import { Cockpit } from './cockpit/cockpit.js';
@@ -315,8 +320,9 @@ class Game {
     const gy = this.world.heightAt(cam.position.x, cam.position.z) + 1.2;
     if (cam.position.y < gy) cam.position.y = gy;
     cam.lookAt(pivot.addScaledVector(fwd, 40));
-    if (cam.fov !== 60) {
-      cam.fov = 60;
+    const fov = this.fitFov(60);
+    if (cam.fov !== fov) {
+      cam.fov = fov;
       cam.updateProjectionMatrix();
     }
     cam.updateMatrixWorld(true);
@@ -582,7 +588,19 @@ class Game {
     this.radio.say('v21', this.voiceText.v21);
   }
 
+  /**
+   * Field of view designed for 16:9. Wider screens keep the same horizontal view,
+   * narrow and portrait screens (phones) get more vertical view so the cockpit is not
+   * cut down to a keyhole and the panels are not seen at extreme angles.
+   */
+  fitFov(v) {
+    const aspect = innerWidth / innerHeight;
+    const f = (2 * Math.atan((Math.tan((v * DEG) / 2) * (16 / 9)) / aspect)) / DEG;
+    return clamp(f, v * 0.8, Math.max(v, Math.min(95, v * 1.6)));
+  }
+
   resize() {
+    this.fov = -1; // recompute the field of view for the new aspect
     const w = innerWidth;
     const h = innerHeight;
     renderer.setSize(w, h);
@@ -897,7 +915,7 @@ class Game {
         this.cockpitCam.position.addScaledVector(this.focusPose.pos, e);
       }
       this.cockpitCam.quaternion.copy(this._qs).multiply(this._ql);
-      const fov = THREE.MathUtils.lerp(THREE.MathUtils.lerp(70, this.focusPose.fov, e), ZOOM_FOV, this.zoom);
+      const fov = this.fitFov(THREE.MathUtils.lerp(THREE.MathUtils.lerp(70, this.focusPose.fov, e), ZOOM_FOV, this.zoom));
       if (Math.abs(fov - this.fov) > 0.01) {
         this.fov = fov;
         for (const cam of [this.cockpitCam, this.worldCam]) {
@@ -1232,8 +1250,13 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-assets
-  .loadAll()
+/** canvas text (displays, HUD, panel labels) needs the bundled fonts before the first draw */
+function loadFonts() {
+  const faces = ['400 20px "JetBrains Mono"', '700 20px "JetBrains Mono"', '500 20px "Barlow Condensed"', '600 20px "Barlow Condensed"', '700 20px "Barlow Condensed"'];
+  return Promise.all(faces.map((f) => document.fonts?.load(f).catch(() => null)));
+}
+
+Promise.all([assets.loadAll(), loadFonts()])
   .then(() => {
     game = new Game();
     window.__game = game;

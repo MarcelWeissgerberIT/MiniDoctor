@@ -269,20 +269,20 @@ export class Cockpit {
     // light line along the top edge of the dash
     batch.add(rbox(1.6, 0.006, 0.008, 0.002, 0.2), m.led, [0, 0.288, 0.0], [0, 0, 0], dash);
 
-    // three MFDs
+    // three MFDs, low enough that the glare shield never hides their top line
     const screens = [-0.52, 0, 0.52];
+    const my = 0.058;
     this.mfd = {};
     const kinds = ['status', 'camera', 'tactical'];
     screens.forEach((x, i) => {
-      batch.add(rbox(0.42, 0.33, 0.04, 0.02, 0.4), m.consoleMetal, [x, 0.1, 0.012], [0, 0, 0], dash);
-      batch.add(rbox(0.35, 0.265, 0.01, 0.004, 0.4), m.blackPaint, [x, 0.1, 0.03], [0, 0, 0], dash);
+      batch.add(rbox(0.42, 0.31, 0.04, 0.02, 0.4), m.consoleMetal, [x, my, 0.012], [0, 0, 0], dash);
+      batch.add(rbox(0.35, 0.265, 0.01, 0.004, 0.4), m.blackPaint, [x, my, 0.03], [0, 0, 0], dash);
       // bezel push buttons
       for (let k = -2; k <= 2; k++) {
-        for (const sx of [-1, 1]) batch.add(rbox(0.026, 0.022, 0.014, 0.003, 0.1), m.rubber, [x + sx * 0.185, 0.1 + k * 0.05, 0.036], [0, 0, 0], dash);
+        for (const sx of [-1, 1]) batch.add(rbox(0.026, 0.022, 0.014, 0.003, 0.1), m.rubber, [x + sx * 0.185, my + k * 0.05, 0.036], [0, 0, 0], dash);
       }
-      for (let k = -1.5; k <= 1.5; k++) batch.add(rbox(0.03, 0.018, 0.014, 0.003, 0.1), m.rubber, [x + k * 0.07, -0.045, 0.036], [0, 0, 0], dash);
       const mfd = new MFD(0.34, 0.255, { feed: kinds[i] === 'camera' ? feedTarget : null });
-      mfd.mesh.position.set(x, 0.1, 0.0365);
+      mfd.mesh.position.set(x, my, 0.0365);
       dash.add(mfd.mesh);
       this.mfd[kinds[i]] = mfd;
     });
@@ -310,7 +310,7 @@ export class Cockpit {
     ];
     for (const [key, txt, col, x] of ann) {
       const lb = new LampButton(m, { text: txt, color: col, w: 0.115, h: 0.05, blink: key === 'lock' });
-      lb.group.position.set(x, -0.115, 0);
+      lb.group.position.set(x, -0.13, 0);
       dash.add(lb.group);
       this.lamps[key] = lb;
       this.controls.push(lb);
