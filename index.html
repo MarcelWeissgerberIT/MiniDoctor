@@ -8,6 +8,10 @@
   </head>
   <body>
     <canvas id="scene"></canvas>
+    <div id="smoke"></div>
+    <div id="foam"></div>
+    <div id="dmg"></div>
+    <canvas id="hmd"></canvas>
 
     <div id="crosshair" class="hidden"></div>
     <div id="tooltip"></div>
@@ -22,6 +26,8 @@
       <button data-view="left"><b>3</b> Links</button>
       <button data-view="right"><b>4</b> Rechts</button>
       <button data-view="center"><b>5</b> Mitte</button>
+      <button data-view="displays"><b>6</b> Displays</button>
+      <button data-view="external" class="ext"><b>9</b> Außen</button>
     </nav>
     <div id="skiphint">Leertaste: Einstieg überspringen</div>
     <aside id="checklist">
@@ -39,23 +45,32 @@
     <section id="title">
       <div class="shade"></div>
       <div class="content">
-        <div class="tag">MECH-SIMULATION · PROTOTYP 0.2</div>
+        <div class="tag">MECH-SIMULATION · PROTOTYP 0.3</div>
         <h1>BATTLEBOT</h1>
-        <div class="mission">
-          <div class="mtag">MISSION 1 · EINWEISUNG</div>
-          <div class="mname">Kalt &amp; dunkel</div>
-          <p>BB-07 steht abgeschaltet an Rampe drei – fünf Meter Stahl, 18 Tonnen. Steig über die Leiter ein, fahr den Mech nach Checkliste hoch (Batterie, APU, Generatoren, Hydraulik, Reaktor, Gyro) und bring ihn zum Laufen.</p>
+        <div class="missions">
+          <button class="mission sel" data-m="1">
+            <div class="mtag">MISSION 1 · EINWEISUNG</div>
+            <div class="mname">Kalt &amp; dunkel</div>
+            <p>BB-07 steht abgeschaltet an Rampe drei – fünf Meter Stahl, 18 Tonnen. Steig über die Leiter ein, fahr den Mech nach Checkliste hoch und bring ihn zum Laufen.</p>
+          </button>
+          <button class="mission" data-m="2">
+            <div class="mtag">MISSION 2 · GEFECHT</div>
+            <div class="mname">Feuertaufe</div>
+            <p>Eine Panzerkolonne rollt auf Sektor Kilo zu. Waffen scharf machen, an der Panzersperre Stellung beziehen und zwei Angriffswellen abwehren.</p>
+          </button>
         </div>
         <div class="load"><div id="loadbar"></div></div>
         <div class="buttons">
           <button id="start" disabled>Lade Ressourcen …</button>
-          <button id="quick" class="secondary" disabled>Schnellstart</button>
+          <button id="quick" class="secondary" disabled>Freies Spiel</button>
         </div>
         <ul class="keys">
           <li><b>Maus</b> umsehen</li>
           <li><b>W / S</b> Schub</li>
           <li><b>A / D</b> drehen</li>
-          <li><b>Klick</b> Schalter</li>
+          <li><b>Klick</b> Schalter / Feuer</li>
+          <li><b>F</b> Rakete</li>
+          <li><b>9</b> Außenansicht</li>
           <li><b>F1</b> Hilfe</li>
         </ul>
       </div>
@@ -68,7 +83,8 @@
         <tr><td>W / S</td><td>Schubhebel vor / zurück (bis −30 % Rückwärts)</td></tr>
         <tr><td>X / Leertaste</td><td>Schub auf null, Mech bremst</td></tr>
         <tr><td>A / D</td><td>Mech drehen</td></tr>
-        <tr><td>Linksklick</td><td>Schalter / Knopf unter dem Fadenkreuz betätigen</td></tr>
+        <tr><td>Linksklick</td><td>Schalter / Knopf unter dem Fadenkreuz betätigen · sonst (Waffen scharf) Kanone feuern, gedrückt halten = Dauerfeuer</td></tr>
+        <tr><td>F</td><td>Rakete starten (Ziel im gestrichelten Kreis halten bis LOCK)</td></tr>
         <tr><td>L</td><td>Kabinenlicht</td></tr>
         <tr><td>H</td><td>Head-up-Display</td></tr>
         <tr><td>N</td><td>Nachtsicht auf dem Kamera-Display</td></tr>
@@ -76,7 +92,8 @@
         <tr><td>R</td><td>Radarreichweite 500 / 1000 m</td></tr>
         <tr><td>G</td><td>Gyro-Stabilisator</td></tr>
         <tr><td>Q</td><td>Master Caution quittieren</td></tr>
-        <tr><td>1 – 5</td><td>Ansicht: Vorne, Overhead, linke / rechte Konsole, Mittelkonsole (Schalter dann direkt mit dem Mauszeiger anklicken)</td></tr>
+        <tr><td>1 – 6</td><td>Ansicht: Vorne, Overhead, linke / rechte Konsole, Mittelkonsole, Displays (Schalter dann direkt mit dem Mauszeiger anklicken)</td></tr>
+        <tr><td>9</td><td>Außenansicht an / aus (Maus: Kamera drehen, Mausrad: Abstand)</td></tr>
         <tr><td>Rechte Maustaste</td><td>halten = Zoom · in einer Panel-Ansicht: zurück nach vorne</td></tr>
         <tr><td>Esc</td><td>aus der Panel-Ansicht zurück</td></tr>
         <tr><td>C</td><td>Blick zentrieren</td></tr>
@@ -84,7 +101,21 @@
         <tr><td>F1 / Tab</td><td>diese Hilfe</td></tr>
         <tr><td>Leertaste</td><td>Einstiegssequenz überspringen</td></tr>
       </table>
+      <p>Waffen: Overhead-Panel WEAPONS ARM (Schutzkappe), MAIN GUN, MISSILE. Brand an Bord: FIRE SUPPR auf der Mittelkonsole.</p>
       <p>Kaltstart: BATT → APU (warten bis APU READY) → GEN 1 + GEN 2 → HYD PRESS → COOLANT PUMP → REACTOR START → APU aus → STAB ASSIST → OPTICS/HUD → LEG LOCK aus.</p>
+    </section>
+
+    <section id="result">
+      <div class="box">
+        <div class="rtag">MISSION 2 · FEUERTAUFE</div>
+        <h2></h2>
+        <p class="rsub"></p>
+        <table></table>
+        <div class="buttons">
+          <button id="retry">Nochmal</button>
+          <button id="menu">Hauptmenü</button>
+        </div>
+      </div>
     </section>
 
     <script type="module" src="/src/main.js"></script>

@@ -16,6 +16,8 @@ export class Input {
     this.cursorMode = false; // panel focus views: free cursor, clicks press controls
     this.rmb = false; // right mouse button held (zoom)
     this.rmbClicked = false;
+    this.lmb = false; // left button held with a captured mouse (trigger)
+    this.wheel = 0;
 
     addEventListener('keydown', (e) => {
       if (!this.enabled) return;
@@ -24,7 +26,11 @@ export class Input {
       this.keys.add(e.code);
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
-    addEventListener('blur', () => this.keys.clear());
+    addEventListener('blur', () => {
+      this.keys.clear();
+      this.lmb = false;
+    });
+    canvas.addEventListener('wheel', (e) => (this.wheel += Math.sign(e.deltaY)), { passive: true });
     addEventListener('mousemove', (e) => {
       this.mouse.x = (e.clientX / innerWidth) * 2 - 1;
       this.mouse.y = -(e.clientY / innerHeight) * 2 + 1;
@@ -46,6 +52,7 @@ export class Input {
         this.rmbDown = 0;
         return;
       }
+      if (e.button === 0) this.lmb = false;
       if (e.button !== 0 || !this.drag) return;
       // a click without dragging presses the control under the mouse
       if (!this.locked && this.drag.moved < 6) this.clicked = true;
@@ -67,7 +74,10 @@ export class Input {
       if (!this.locked) {
         this.drag = { moved: 0 };
         this.lock();
-      } else this.clicked = true;
+      } else {
+        this.clicked = true;
+        this.lmb = true;
+      }
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
@@ -116,8 +126,9 @@ export class Input {
   }
 
   consume() {
-    const r = { dx: this.dx, dy: this.dy, clicked: this.clicked, rmbClicked: this.rmbClicked };
+    const r = { dx: this.dx, dy: this.dy, clicked: this.clicked, rmbClicked: this.rmbClicked, wheel: this.wheel };
     this.dx = this.dy = 0;
+    this.wheel = 0;
     this.clicked = false;
     this.rmbClicked = false;
     this.frameHits = this.pressed;

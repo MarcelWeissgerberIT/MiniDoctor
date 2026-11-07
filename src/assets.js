@@ -8,15 +8,19 @@ export const TEXTURE_SETS = ['armor', 'rivets', 'floor', 'console', 'hazard', 'c
 export const DECALS = ['nameplate', 'danger', 'eject', 'reactor', 'hydraulic', 'radiation', 'weapons', 'nostep'];
 export const MODELS = [
   'seat', 'stick', 'throttle', 'radio', 'extinguisher', 'tank', 'hedgehog', 'ruin',
-  'mech', 'sandbags', 'crates', 'drums', 'generator',
+  'mech', 'sandbags', 'crates', 'drums', 'generator', 'enemy_tank', 'enemy_apc', 'mech_rigged',
 ];
 export const SOUNDS = [
   'cockpit_hum', 'battle_far', 'footstep', 'servo', 'startup',
   'walk_gravel', 'stairs_metal', 'hatch_open', 'hatch_close', 'battery_on', 'apu_start',
   'reactor_start', 'hyd_pump', 'gyro_spin', 'leg_release', 'harness', 'base_ambience',
   'creak_1', 'creak_2', 'hyd_step', 'rattle',
+  'gun_shot', 'missile_launch', 'explosion_near', 'armor_hit', 'sparks', 'enemy_cannon', 'shell_whizz', 'extinguisher',
 ];
-export const VOICES = Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0'));
+export const VOICES = [
+  ...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')),
+  ...Array.from({ length: 12 }, (_, i) => 'm2_' + String(i).padStart(2, '0')),
+];
 
 /**
  * Loads every generated asset (Higgsfield images/audio, Meshy models) and
@@ -79,6 +83,7 @@ export class Assets {
           if (o.material.map) o.material.map.anisotropy = Math.min(8, this.maxAniso);
         }
       });
+      gltf.scene.animations = gltf.animations;
       this.models[name] = gltf.scene;
     } catch (e) {
       console.warn('model missing', name, e);
@@ -105,8 +110,8 @@ export class Assets {
       jobs.push(this._texture(`tex/${s}_n.webp`, false).then((t) => (this.tex[s].n = t)));
       jobs.push(this._texture(`tex/${s}_orm.webp`, false).then((t) => (this.tex[s].orm = t)));
     }
-    for (const f of ['glass_grime', 'smoke', 'fire']) {
-      jobs.push(this._texture(`fx/${f}.webp`, f === 'fire', f === 'glass_grime').then((t) => (this.fx[f] = t)));
+    for (const f of ['glass_grime', 'smoke', 'fire', 'fireball', 'muzzle', 'crack']) {
+      jobs.push(this._texture(`fx/${f}.webp`, f === 'fire' || f === 'fireball' || f === 'muzzle', f === 'glass_grime').then((t) => (this.fx[f] = t)));
     }
     jobs.push(this._json('decals/decals.json').then((j) => (this.decalAspect = j)));
     for (const d of DECALS) jobs.push(this._texture(`decals/${d}.webp`, true, false).then((t) => (this.decals[d] = t)));

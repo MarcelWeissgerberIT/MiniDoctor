@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 
 const FONT = "'DejaVu Sans Mono','Consolas','Courier New',monospace";
-const G = '#7dff8a';
-const GD = 'rgba(125,255,138,0.35)';
+const G = '#8dffa0';
+const W = '#e8fff0';
+const GD = 'rgba(125,255,138,0.4)';
 const AMBER = '#ffb347';
 const RED = '#ff4a3a';
 
@@ -23,12 +24,12 @@ varying vec2 vUv;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
 void main(){
   vec2 c = vUv - 0.5;
-  vec2 uv = 0.5 + c * (1.0 + dot(c,c) * 0.12);
-  // a hard footstep makes the tube picture jump and tear for a moment
-  uv.y += jolt * 0.012 * sin(time * 90.0);
-  uv.x += jolt * 0.02 * step(0.92, fract(uv.y * 7.0 + time * 13.0)) * sin(time * 140.0);
+  vec2 uv = vUv;
+  // flat glass display; a hard jolt or a hit makes the picture tear for a moment
+  uv.y += jolt * 0.006 * sin(time * 90.0);
+  uv.x += jolt * 0.015 * step(0.94, fract(uv.y * 7.0 + time * 13.0)) * sin(time * 140.0);
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
-  vec3 col = vec3(0.004, 0.012, 0.006);
+  vec3 col = vec3(0.004, 0.009, 0.012);
   if (useFeed > 0.5) {
     vec3 f = texture2D(feed, uv).rgb;
     float l = dot(f, vec3(0.299, 0.587, 0.114));
@@ -37,28 +38,27 @@ void main(){
     col += mix(vec3(0.32, 0.9, 0.42), vec3(0.25, 1.0, 0.3), nv) * l * 0.9;
   }
   vec4 o = texture2D(map, uv);
-  col = mix(col, o.rgb * 1.6, o.a);
-  // phosphor scan lines, shadow mask, flicker, roll bar
-  col *= 0.9 + 0.1 * sin(uv.y * 384.0 * 3.14159);
-  col *= 0.96 + 0.04 * sin(time * 50.0);
-  col *= 0.92 + 0.08 * smoothstep(0.0, 0.08, abs(fract(uv.y * 0.6 - time * 0.11) - 0.5));
-  col *= smoothstep(0.78, 0.38, length(c * vec2(1.0, 1.2)));
+  col = mix(col, o.rgb, o.a);
+  // a faint backlight falloff towards the corners, nothing that blurs the symbols
+  col *= mix(0.86, 1.0, smoothstep(0.75, 0.35, length(c * vec2(1.0, 1.2))));
   // boot: line expands vertically
   float b = clamp(boot, 0.0, 1.0);
   float open = smoothstep(0.0, 0.5, b);
   col *= step(abs(c.y), 0.5 * open + 0.004) * (1.0 + (1.0 - smoothstep(0.4, 1.0, b)) * 3.0);
-  gl_FragColor = vec4(col * power * 1.35, 1.0);
+  gl_FragColor = vec4(col * power * 0.95, 1.0);
 }`;
 
 /** One CRT multifunction display: canvas overlay + optional live camera feed. */
 export class MFD {
   constructor(width, height, { feed = null } = {}) {
+    // drawn in 512 x 384 units on a double-resolution canvas so the symbols stay sharp
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 512;
-    this.canvas.height = 384;
+    this.canvas.width = 1024;
+    this.canvas.height = 768;
     this.ctx = this.canvas.getContext('2d');
     this.tex = new THREE.CanvasTexture(this.canvas);
     this.tex.colorSpace = THREE.SRGBColorSpace;
+    this.tex.anisotropy = 8;
     this.uniforms = {
       map: { value: this.tex },
       feed: { value: feed ? feed.texture : null },
@@ -87,10 +87,10 @@ export class MFD {
 
   begin(clearAlpha = 1) {
     const g = this.ctx;
-    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.setTransform(2, 0, 0, 2, 0, 0);
     if (clearAlpha < 1) g.clearRect(0, 0, 512, 384);
     else {
-      g.fillStyle = '#010401';
+      g.fillStyle = '#02070a';
       g.fillRect(0, 0, 512, 384);
     }
     g.lineJoin = 'round';
@@ -108,7 +108,7 @@ function text(g, s, x, y, { size = 20, color = G, align = 'left', weight = 'norm
   g.textAlign = align;
   g.textBaseline = 'middle';
   g.shadowColor = color;
-  g.shadowBlur = 6;
+  g.shadowBlur = 2;
   g.fillText(s, x, y);
   g.shadowBlur = 0;
 }
@@ -121,8 +121,8 @@ function frame(g, title, right) {
   g.moveTo(10, 44);
   g.lineTo(502, 44);
   g.stroke();
-  text(g, title, 20, 28, { size: 20, weight: 'bold' });
-  if (right) text(g, right, 492, 28, { size: 16, align: 'right' });
+  text(g, title, 20, 28, { size: 21, weight: 'bold', color: W });
+  if (right) text(g, right, 492, 28, { size: 19, align: 'right' });
 }
 
 const bar = (g, x, y, w, h, v, color = G) => {
@@ -169,8 +169,8 @@ export function drawStatus(mfd, s) {
   ];
   const col = (v) => (v > 0.7 ? G : v > 0.4 ? AMBER : RED);
   parts.forEach(([n, v], i) => {
-    text(g, n.padEnd(6), 24, 70 + i * 30, { size: 19 });
-    text(g, String(Math.round(v * 100)).padStart(3) + '%', 180, 70 + i * 30, { size: 19, color: col(v), align: 'right' });
+    text(g, n.padEnd(6), 22, 70 + i * 30, { size: 22, weight: 'bold' });
+    text(g, String(Math.round(v * 100)).padStart(3) + '%', 196, 70 + i * 30, { size: 22, color: col(v), align: 'right', weight: 'bold' });
   });
   // wireframe mech silhouette
   const cx = 360;
@@ -222,15 +222,15 @@ export function drawStatus(mfd, s) {
   g.moveTo(10, 252);
   g.lineTo(502, 252);
   g.stroke();
-  text(g, 'REACTOR', 24, 272, { size: 17 });
-  bar(g, 120, 262, 150, 20, s.reactor, s.reactor > 0.9 ? AMBER : G);
-  text(g, 'HEAT', 290, 272, { size: 17 });
+  text(g, 'REACT', 20, 272, { size: 19, weight: 'bold' });
+  bar(g, 100, 262, 170, 20, s.reactor, s.reactor > 0.9 ? AMBER : G);
+  text(g, 'HEAT', 286, 272, { size: 19, weight: 'bold' });
   bar(g, 346, 262, 146, 20, s.heat, s.heat > 0.75 ? RED : s.heat > 0.55 ? AMBER : G);
-  text(g, 'COOLANT', 24, 304, { size: 17 });
-  bar(g, 120, 294, 150, 20, s.coolant);
-  text(g, 'HYD', 290, 304, { size: 17 });
+  text(g, 'COOL', 20, 304, { size: 19, weight: 'bold' });
+  bar(g, 100, 294, 170, 20, s.coolant);
+  text(g, 'HYD', 286, 304, { size: 19, weight: 'bold' });
   bar(g, 346, 294, 146, 20, s.hyd);
-  text(g, s.message, 24, 345, { size: 17, color: s.messageColor || G });
+  text(g, s.message, 20, 346, { size: 20, color: s.messageColor || W, weight: 'bold' });
   mfd.end();
 }
 
@@ -292,10 +292,10 @@ export function drawCamera(mfd, s) {
     g.lineTo(x + sx * k, y);
   }
   g.stroke();
-  text(g, `RNG ${s.range ? String(Math.round(s.range)).padStart(4, '0') + ' m' : '----'}`, 30, 358, { size: 19 });
-  text(g, s.nv ? 'NV' : 'OPT', 256, 358, { size: 19, align: 'center', color: s.nv ? AMBER : G });
-  text(g, `ZOOM x${s.zoom}`, 482, 358, { size: 19, align: 'right' });
-  if (s.contact) text(g, s.contact, 256, 78, { size: 17, align: 'center', color: AMBER });
+  text(g, `RNG ${s.range ? String(Math.round(s.range)).padStart(4, '0') + ' m' : '----'}`, 26, 356, { size: 22, weight: 'bold', color: W });
+  text(g, s.nv ? 'NV' : 'OPT', 256, 356, { size: 22, align: 'center', color: s.nv ? AMBER : G, weight: 'bold' });
+  text(g, `x${s.zoom}`, 486, 356, { size: 22, align: 'right', weight: 'bold' });
+  if (s.contact) text(g, s.contact, 256, 78, { size: 20, align: 'center', color: s.contactColor || AMBER, weight: 'bold' });
   mfd.end();
 }
 
@@ -393,14 +393,14 @@ export function drawTactical(mfd, s) {
   g.closePath();
   g.fill();
   // legend
-  const lx = 360;
-  text(g, '■ STRUCT', lx, 80, { size: 16 });
-  text(g, '■ FIRE', lx, 106, { size: 16, color: AMBER });
-  text(g, '▲ HOSTILE', lx, 132, { size: 16, color: RED });
-  text(g, `HDG ${String(Math.round(((-s.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}`, lx, 190, { size: 18 });
-  text(g, `SPD ${String(Math.round(Math.abs(s.speed) * 3.6)).padStart(3)} km/h`, lx, 218, { size: 18 });
-  text(g, `THR ${String(Math.round(s.throttle * 100)).padStart(4)} %`, lx, 246, { size: 18 });
-  text(g, `GRID ${s.grid}`, lx, 274, { size: 18 });
-  text(g, `HOSTILES ${s.hostiles}`, lx, 330, { size: 18, color: s.hostiles ? RED : G });
+  const lx = 350;
+  text(g, '■ STRUCT', lx, 78, { size: 18 });
+  text(g, '■ FIRE', lx, 104, { size: 18, color: AMBER });
+  text(g, '▲ HOSTILE', lx, 130, { size: 18, color: RED });
+  text(g, `HDG ${String(Math.round(((-s.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}`, lx, 178, { size: 21, weight: 'bold', color: W });
+  text(g, `SPD ${String(Math.round(Math.abs(s.speed) * 3.6)).padStart(3)}`, lx, 208, { size: 21, weight: 'bold', color: W });
+  text(g, `THR ${String(Math.round(s.throttle * 100)).padStart(4)}%`, lx, 238, { size: 21, weight: 'bold', color: W });
+  text(g, `${s.grid}`, lx, 268, { size: 18 });
+  text(g, `HOSTILE ${s.hostiles}`, lx, 330, { size: 21, weight: 'bold', color: s.hostiles ? RED : G });
   mfd.end();
 }

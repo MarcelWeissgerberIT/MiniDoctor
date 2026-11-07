@@ -29,13 +29,78 @@ export class UI {
     this.bar.style.width = `${Math.round(p * 100)}%`;
   }
 
-  ready(onMission, onFree) {
+  ready(onMission, onFree, onMission2) {
     this.title.classList.add('loaded');
     this.start.disabled = false;
     this.quick.disabled = false;
-    this.start.textContent = 'Mission starten';
-    this.start.addEventListener('click', onMission, { once: true });
+    // mission cards: pick one, then start it
+    let pick = new URLSearchParams(location.search).get('mission') === '2' ? '2' : '1';
+    const cards = this.title.querySelectorAll('.mission');
+    const select = (m) => {
+      pick = m;
+      cards.forEach((c) => c.classList.toggle('sel', c.dataset.m === m));
+      this.start.textContent = m === '2' ? 'Mission 2 starten' : 'Mission 1 starten';
+    };
+    cards.forEach((c) => {
+      c.addEventListener('click', () => select(c.dataset.m));
+      c.addEventListener('dblclick', () => this.start.click());
+    });
+    select(pick);
+    this.start.addEventListener('click', () => (pick === '2' ? onMission2() : onMission()), { once: true });
     this.quick.addEventListener('click', onFree, { once: true });
+  }
+
+  /** end of a fight: title, stats, retry / menu */
+  result({ win, rows }, onRetry, onMenu) {
+    const el = $('result');
+    el.classList.toggle('win', win);
+    el.classList.toggle('lose', !win);
+    el.querySelector('h2').textContent = win ? 'MISSION ERFÜLLT' : 'MECH ZERSTÖRT';
+    el.querySelector('.rsub').textContent = win ? 'Sektor Kilo ist gehalten.' : 'BB-07 ist ausgefallen. Mission fehlgeschlagen.';
+    const t = el.querySelector('table');
+    t.innerHTML = '';
+    for (const [k, v] of rows) {
+      const tr = document.createElement('tr');
+      const a = document.createElement('td');
+      const b = document.createElement('td');
+      a.textContent = k;
+      b.textContent = v;
+      tr.append(a, b);
+      t.appendChild(tr);
+    }
+    $('retry').onclick = onRetry;
+    $('menu').onclick = onMenu;
+    el.classList.add('show');
+    this.checklist(null);
+  }
+
+  hideResult() {
+    $('result').classList.remove('show');
+    $('dmg').className = '';
+    this.fade(0, 0.6);
+  }
+
+  /** cabin smoke from a fire (0..1) */
+  smoke(level) {
+    const el = $('smoke');
+    const v = String(Math.round(level * 100) / 100);
+    if (el.style.opacity !== v) el.style.opacity = v;
+  }
+
+  /** the extinguisher fogs the cabin for a moment */
+  extinguish() {
+    const el = $('foam');
+    el.classList.remove('burst');
+    void el.offsetWidth;
+    el.classList.add('burst');
+  }
+
+  /** red flash at the edges on a hit; dead = stays red */
+  damageFlash(dead) {
+    const el = $('dmg');
+    el.className = '';
+    void el.offsetWidth;
+    el.className = dead ? 'dead' : 'hit';
   }
 
   error(e) {
@@ -123,11 +188,12 @@ export class UI {
   }
 
   /** steps: tutorial steps, current: index; null hides the card */
-  checklist(steps, current) {
+  checklist(steps, current, title) {
     if (!steps) {
       this.card.classList.remove('show');
       return;
     }
+    if (title) this.card.querySelector('header span').textContent = title;
     this.card.classList.add('show');
     const list = this.card.querySelector('ol');
     list.innerHTML = '';

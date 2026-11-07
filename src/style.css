@@ -202,6 +202,7 @@ body {
   opacity: 1;
 }
 #comms {
+  /* sits under the helmet throttle display */
   position: fixed;
   left: 24px;
   bottom: 22px;
@@ -544,4 +545,179 @@ body.hovering #scene {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* ---------------------------------------------------------- mission select */
+.missions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 22px;
+}
+.missions .mission {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.28);
+  border: 0;
+  border-left: 3px solid rgba(217, 164, 65, 0.35);
+  padding: 6px 14px 8px 16px;
+  margin: 0;
+  cursor: pointer;
+}
+.missions .mission.sel {
+  border-left-color: #d9a441;
+  background: rgba(217, 164, 65, 0.13);
+}
+.missions .mission:not(.sel) p {
+  display: none;
+}
+.missions .mission:not(.sel) .mname {
+  font-size: 22px;
+  opacity: 0.7;
+}
+.missions .mission:hover {
+  background: rgba(217, 164, 65, 0.09);
+}
+
+/* ------------------------------------------------- helmet display + damage */
+#hmd {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+#smoke {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  background: radial-gradient(ellipse at 50% 70%, rgba(70, 62, 55, 0.15), rgba(30, 26, 22, 0.9));
+}
+#foam {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  background: radial-gradient(ellipse at 50% 60%, rgba(235, 240, 245, 0.85), rgba(200, 208, 214, 0.6));
+}
+#foam.burst {
+  animation: foam 3.2s ease-out;
+}
+@keyframes foam {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+#dmg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  box-shadow: inset 0 0 180px 50px rgba(255, 30, 10, 0.75);
+}
+#dmg.hit {
+  animation: dmg 0.9s ease-out;
+}
+#dmg.dead {
+  animation: none;
+  opacity: 1;
+  background: rgba(120, 10, 0, 0.35);
+  transition: opacity 0.3s;
+}
+@keyframes dmg {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+#views button.ext {
+  margin-left: 10px;
+}
+
+/* ----------------------------------------------------------- result screen */
+#result {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 5, 4, 0.72);
+}
+#result.show {
+  display: flex;
+}
+#result .box {
+  width: min(460px, calc(100vw - 32px));
+  padding: 26px 30px;
+  background: rgba(14, 15, 13, 0.94);
+  border-left: 3px solid #d9a441;
+}
+#result .rtag {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: #c9a24a;
+}
+#result h2 {
+  margin: 6px 0 4px;
+  font-size: 34px;
+  letter-spacing: 0.06em;
+}
+#result.lose h2 {
+  color: #ff5a48;
+}
+#result.win h2 {
+  color: #a6ffb8;
+}
+#result .rsub {
+  margin: 0 0 16px;
+  color: #bdb7a8;
+}
+#result table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 22px;
+  font-size: 16px;
+}
+#result td {
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+#result td:last-child {
+  text-align: right;
+  color: #fff;
+}
+#retry,
+#menu {
+  font: inherit;
+  font-size: 17px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 12px 24px;
+  cursor: pointer;
+}
+#retry {
+  color: #120c02;
+  background: linear-gradient(#e7b54e, #b9862a);
+  border: 0;
+}
+#menu {
+  color: #e6e2d6;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
 }

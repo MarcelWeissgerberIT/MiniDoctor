@@ -21,7 +21,8 @@ import sharp from 'sharp';
 const SRC = 'assets-src';
 const OUT = 'public/assets';
 const steps = process.argv.slice(2);
-const want = (s) => steps.length === 0 || steps.includes(s);
+const KNOWN = ['tex', 'fx', 'decals', 'pano', 'ui', 'glb', 'audio'];
+const want = (s) => !steps.some((x) => KNOWN.includes(x)) || steps.includes(s);
 const mk = (d) => fs.mkdirSync(d, { recursive: true });
 
 /* ------------------------------------------------------------------ helpers */
@@ -211,6 +212,12 @@ async function processFx() {
   await sharp(s, { raw: { width: 512, height: 512, channels: 1 } }).webp({ quality: 85 }).toFile(path.join(dir, 'smoke.webp'));
 
   await sharp(path.join(SRC, 'img/fire.png')).resize(512, 512).webp({ quality: 85 }).toFile(path.join(dir, 'fire.webp'));
+  // combat: fireball and muzzle flash (additive, black = transparent), visor crack (alpha mask)
+  await sharp(path.join(SRC, 'combat/fireball.png')).resize(512, 512).webp({ quality: 85 }).toFile(path.join(dir, 'fireball.webp'));
+  await sharp(path.join(SRC, 'combat/muzzle.png')).resize(512, 512).webp({ quality: 85 }).toFile(path.join(dir, 'muzzle.webp'));
+  const cr = await sharp(path.join(SRC, 'combat/crack.png')).resize(1024, 1024).greyscale().raw().toBuffer();
+  for (let i = 0; i < cr.length; i++) cr[i] = Math.min(255, Math.max(0, (cr[i] - 18) * 1.4));
+  await sharp(cr, { raw: { width: 1024, height: 1024, channels: 1 } }).webp({ quality: 88 }).toFile(path.join(dir, 'crack.webp'));
   console.log('fx');
 }
 
@@ -320,12 +327,15 @@ async function processGlb() {
   await MeshoptEncoder.ready;
   await MeshoptSimplifier.ready;
   // battlefield props are instanced many times and seen from afar: fewer triangles
-  const SIMPLIFY = { hedgehog: 0.25, ruin: 0.4, tank: 0.4, sandbags: 0.5 };
+  const SIMPLIFY = { hedgehog: 0.25, ruin: 0.4, tank: 0.4, sandbags: 0.5, mech_rigged: 0.35, enemy_tank: 0.35, enemy_apc: 0.35 };
+  // `glb name1 name2` limits the run to those models
+  const only = steps.filter((s) => !['tex', 'fx', 'decals', 'pano', 'ui', 'glb', 'audio'].includes(s));
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
   const srcDir = path.join(SRC, 'glb');
   const dir = path.join(OUT, 'models');
   mk(dir);
   for (const f of fs.readdirSync(srcDir).filter((f) => f.endsWith('.glb'))) {
+    if (only.length && !only.includes(f.replace('.glb', ''))) continue;
     const doc = await io.read(path.join(srcDir, f));
     // the player's own mech is seen up close during boarding
     const max = f === 'mech.glb' ? 2048 : 1024;

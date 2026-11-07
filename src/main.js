@@ -7,18 +7,25 @@ import { World, WORLD } from './world/world.js';
 import { Post } from './post.js';
 import { Input } from './input.js';
 import { Sound, Radio } from './audio.js';
-import { createMechState, stepMech, MECH, clamp } from './logic/mech.js';
+import { createMechState, stepMech, MECH, clamp, stepLength } from './logic/mech.js';
 import { BodyDynamics } from './logic/gait.js';
 import { createSystems, stepSystems, hotSwitches } from './logic/systems.js';
 import { Tutorial, VOICE_TEXT } from './tutorial.js';
 import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
 import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
+import { Arsenal } from './combat/arsenal.js';
+import { Enemies } from './combat/enemies.js';
+import { HMD } from './combat/hmd.js';
+import { Mission2, M2_STEPS, M2_TEXT } from './mission2.js';
+import { MISSILE, PART_NAMES, createParts, applyHit, mechDestroyed, weaponState, gunInLimits } from './logic/combat.js';
+import { fitModel } from './geom.js';
 
 const params = new URLSearchParams(location.search);
 const DEG = Math.PI / 180;
 const LOOK = { yaw: 125 * DEG, up: 62 * DEG, down: 68 * DEG, sens: 0.0022 };
-const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv'];
+const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv', 'wpnArm', 'gun', 'missile', 'firesup'];
+const newStats = () => ({ kills: 0, hitsTaken: 0, start: 0 });
 const EXTRA_VOICE = {
   v18: 'Negativ. Ohne Kühlmittelpumpe und Hydraulikdruck zündet der Reaktor nicht. Prüfen Sie Ihre Checkliste.',
   v19: 'Achtung, Master Caution. Prüfen Sie die Warnung und quittieren Sie mit Q.',
@@ -67,9 +74,27 @@ class Game {
     this.input = new Input(canvas);
     this.sound = new Sound(assets.audio);
     this.radio = new Radio(this.sound, ui);
-    this.voiceText = { ...VOICE_TEXT, ...EXTRA_VOICE };
+    this.voiceText = { ...VOICE_TEXT, ...EXTRA_VOICE, ...M2_TEXT };
     this.tutorial = new Tutorial(this, ui);
     this.ray = new THREE.Raycaster();
+    this.assets = assets;
+
+    // combat
+    this.enemies = new Enemies(this);
+    this.arsenal = new Arsenal(this);
+    this.hmd = new HMD(document.getElementById('hmd'));
+    this.parts = createParts();
+    this.fire = null;
+    this.fireCharges = 3;
+    this.dead = false;
+    this.stats = newStats();
+    this.lockBeep = 0;
+    this.radioBusyUntil = 0;
+    this.mission = null;
+    // third-person view (key 9)
+    this.external = false;
+    this.ext = { yaw: 0.6, pitch: 0.2, dist: 19 };
+    this.buildRig();
 
     this.mech = createMechState(0, 0, 0);
     this.body = new BodyDynamics();
@@ -157,15 +182,20 @@ class Game {
     bind('optics');
     bind('ir', (on) => say(on ? 'IR SENSOR: THERMAL OVERLAY N/A' : 'IR SENSOR STANDBY', on ? '#ffb347' : null));
     bind('stab', (on) => on && this.sys.mainBus && this.sound.one('gyro_spin', 0.6));
-    bind('wpnArm', (on) => say(on ? 'WEAPONS: NO HARDPOINTS FITTED' : 'WEAPONS SAFE', on ? '#ffb347' : null));
-    for (const k of ['gun', 'missile', 'mg', 'aux']) bind(k, (on) => on && say(`${k.toUpperCase()}: OFFLINE`, '#ffb347'));
+    bind('wpnArm', (on) => {
+      say(on ? 'MASTER ARM - WEAPONS HOT' : 'WEAPONS SAFE', on ? '#ff4a3a' : null);
+      if (on && this.sys.mainBus) this.sound.beep(980, 0.09, 0.08);
+    });
+    bind('gun', (on) => say(on ? 'MAIN GUN 30MM READY' : 'MAIN GUN SAFE'));
+    bind('missile', (on) => say(on ? `MISSILES ${this.arsenal.w.missiles.count} READY` : 'MISSILES SAFE'));
+    for (const k of ['mg', 'aux']) bind(k, (on) => on && say(`${k.toUpperCase()}: OFFLINE`, '#ffb347'));
     bind('pump', (on) => say(on ? 'COOLANT PUMP ON' : 'COOLANT PUMP OFF', on ? null : '#ffb347'));
     bind('hydp', (on) => {
       if (on && this.sys.mainBus) this.sound.one('hyd_pump', 0.7);
       say(on ? 'HYDRAULIC PUMP ON' : 'HYDRAULIC PUMP OFF');
     });
     bind('ecm', (on) => say(on ? 'ECM JAMMING' : 'ECM OFF'));
-    bind('firesup', (on) => on && say('FIRE SUPPRESSION ARMED', '#ffb347'));
+    bind('firesup', (on) => on && this.dischargeExtinguisher());
     bind('coolant', (on) => say(on ? 'COOLANT BYPASS OPEN' : 'COOLANT BYPASS CLOSED'));
     bind('reactor');
     bind('legLock');
@@ -174,6 +204,8 @@ class Game {
   /** lean to a panel (focus view) or back to free look */
   setView(name) {
     if (this.state !== 'cockpit') return;
+    if (name === 'external') return this.setExternal(!this.external);
+    if (this.external) this.setExternal(false);
     if (name === this.view && name !== 'front') name = 'front';
     const v = VIEWS[name];
     if (!v) return;
@@ -193,6 +225,355 @@ class Game {
     this.sound.click('button');
     ui.setView(name);
     ui.lockHint(false);
+  }
+
+  /** radio line that also tells the mission how long the channel is busy */
+  say(key, text) {
+    const dur = this.radio.say(key, text ?? this.voiceText[key]);
+    this.radioBusyUntil = this.time + (dur || 3) + 0.5;
+  }
+
+  /* ------------------------------------------------------- external view */
+
+  /** the rigged, animated copy of the mech for the third-person view */
+  buildRig() {
+    const src = assets.models.mech_rigged;
+    const clip = src?.animations?.[0];
+    if (!src || !clip) return;
+    const body = fitModel(src, { height: MECH.height, rotY: Math.PI });
+    body.traverse((o) => {
+      if (o.isMesh) {
+        o.material.envMapIntensity = 0.45;
+        o.material.metalness = 0.55;
+        o.frustumCulled = false;
+      }
+    });
+    this.world.playerMech.add(body);
+    this.world.playerMech.updateMatrixWorld(true);
+    this.world.centreOnTorso(body);
+    body.visible = false;
+    const mixer = new THREE.AnimationMixer(src);
+    const action = mixer.clipAction(clip);
+    action.play();
+    action.setEffectiveWeight(0);
+    let hips = null;
+    src.traverse((o) => {
+      if (o.isBone && !hips && /hips/i.test(o.name)) hips = o;
+    });
+    this.rig = { body, mixer, action, dur: clip.duration, phase: 0, weight: 0, hips, hipsBind: hips?.position.clone() };
+  }
+
+  setExternal(on) {
+    if (on === this.external || this.state !== 'cockpit') return;
+    this.external = on;
+    if (on && this.view !== 'front') {
+      this.view = 'front';
+      this.viewBlend = 0;
+      this.input.cursorMode = false;
+    }
+    this.post.cockpitPass.enabled = !on;
+    ui.setView(on ? 'external' : 'front');
+    this.sound.click('button');
+    this.fov = -1; // refresh the cockpit field of view on the way back in
+    if (on) {
+      this.ext.yaw = 0.5;
+      this.ext.pitch = 0.22;
+      this.ext.h = this.mech.heading;
+    }
+  }
+
+  /** walk cycle synced to the simulated steps (one clip cycle = two steps) */
+  updateRig(dt) {
+    const r = this.rig;
+    if (!r || !this.external) return;
+    const m = this.mech;
+    const sp = Math.abs(m.speed);
+    const rate = sp > 0.05 ? sp / stepLength(sp) : Math.abs(m.turn) * 1.4;
+    r.phase = (r.phase + ((dt * rate) / 2) * (m.speed < -0.05 ? -1 : 1) + 1) % 1;
+    const w = clamp(sp / 1.2 + Math.abs(m.turn) * 0.8, 0, 1);
+    r.weight += (w - r.weight) * Math.min(1, dt * 4);
+    r.action.setEffectiveWeight(r.weight);
+    r.action.time = r.phase * r.dur;
+    r.mixer.update(0);
+    // the clip walks forward on its own: keep it on the spot, our simulation moves the mech
+    if (r.hips) {
+      r.hips.position.x = r.hipsBind.x;
+      r.hips.position.z = r.hipsBind.z;
+    }
+  }
+
+  updateExternalCam(dt) {
+    const m = this.mech;
+    const e = this.ext;
+    e.h += Math.atan2(Math.sin(m.heading - e.h), Math.cos(m.heading - e.h)) * Math.min(1, dt * 2.5);
+    const yaw = e.h + e.yaw;
+    const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const pivot = new THREE.Vector3(m.x, this.groundY + 4.4, m.z);
+    const cam = this.worldCam;
+    cam.position.copy(pivot).addScaledVector(fwd, -e.dist * Math.cos(e.pitch));
+    cam.position.y += e.dist * Math.sin(e.pitch);
+    const gy = this.world.heightAt(cam.position.x, cam.position.z) + 1.2;
+    if (cam.position.y < gy) cam.position.y = gy;
+    cam.lookAt(pivot.addScaledVector(fwd, 40));
+    if (cam.fov !== 60) {
+      cam.fov = 60;
+      cam.updateProjectionMatrix();
+    }
+    cam.updateMatrixWorld(true);
+  }
+
+  /* -------------------------------------------------------------- combat */
+
+  updateCombat(dt) {
+    const live = weaponState(this.sw, this.sys.mainBus);
+    live.gun = live.gun && this.parts.rarm > 0 && !this.dead;
+    live.missile = live.missile && !this.dead;
+    const cam = this.worldCam;
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    // the gun is slaved to the helmet within its traverse (measured in the torso frame)
+    const local = dir.clone().applyQuaternion(this.mechObj.quaternion.clone().invert());
+    const inLimits = gunInLimits(Math.atan2(-local.x, -local.z), Math.asin(clamp(local.y, -1, 1)));
+    const aiming = this.view === 'front' && !this.hovered && !this.dead && (this.input.locked || this.external);
+    this.arsenal.update(dt, {
+      live,
+      trigger: aiming && this.input.lmb,
+      launch: !this.dead && this.input.hit('KeyF'),
+      inLimits,
+      origin: cam.position.clone(),
+      dir,
+      mechObj: this.mechObj,
+    });
+    this.weaponLive = { ...live, inLimits };
+    if (live.master && this.frame % 6 === 0) this.aimRange = this.arsenal.aimPoint(cam.position, dir).distanceTo(cam.position);
+    // seeker tone: slow growl while locking, fast high tone once locked
+    const ms = this.arsenal.w.missiles;
+    this.lockBeep -= dt;
+    if (live.missile && ms.lockT > 0 && this.lockBeep <= 0) {
+      if (ms.locked) {
+        this.sound.beep(1650, 0.08, 0.045);
+        this.lockBeep = 0.12;
+      } else {
+        this.sound.beep(860, 0.06, 0.03);
+        this.lockBeep = 0.34 - (ms.lockT / MISSILE.lockTime) * 0.2;
+      }
+    }
+    const m = this.mech;
+    this.enemies.update(dt, {
+      player: { x: m.x, z: m.z, speed: this.dead ? 0 : m.speed },
+      playerCenter: this.mechObj.position.clone().add(new THREE.Vector3(0, -0.7, 0)),
+    });
+    this.updateFire(dt);
+  }
+
+  onGunFired() {
+    this.sound.one('gun_shot', 0.55, 0.94 + Math.random() * 0.1, undefined, 0, this.external ? 0 : 0.45);
+    this.shake += 0.2;
+    this.headVel.z += 0.04;
+    this.cockpit.gunFlash();
+    this.cockpit.jolt(0.12);
+  }
+
+  onGunOverheat() {
+    this.hmd.notify('KANONE ÜBERHITZT', '#ff5a48', 2);
+    this.sound.beep(480, 0.2, 0.08);
+    this.mission?.call('m2_08', 40);
+  }
+
+  onMissileLaunched() {
+    this.sound.one('missile_launch', 0.8, 0.95 + Math.random() * 0.1, undefined, 0, this.external ? 0 : -0.4);
+    this.shake += 0.4;
+    this.cockpit.jolt(0.3);
+  }
+
+  onEnemyKilled(e) {
+    this.stats.kills++;
+    this.hmd.notify(`${e.type === 'tank' ? 'PANZER' : 'SCHÜTZENPANZER'} ZERSTÖRT`, '#a6ffb8', 2.5);
+    this.mission?.call('m2_04', 12);
+  }
+
+  /** -1 (left) .. 1 (right) relative to where the pilot looks */
+  panOf(p) {
+    const b = Math.atan2(-(p.x - this.mech.x), -(p.z - this.mech.z));
+    const view = this.mech.heading + (this.external ? this.ext.yaw : this.yaw);
+    return clamp(Math.sin(view - b), -0.9, 0.9);
+  }
+
+  explosionSound(p, size = 1) {
+    const d = p.distanceTo(this.mechObj.position);
+    if (d < 450) this.sound.one('explosion_near', clamp((size * 110) / (d + 40), 0.04, 1), 0.85 + Math.random() * 0.25, this.sound.outside, d / 343, this.panOf(p));
+    else this.sound.boom(d, size * 0.6);
+    if (d < 140) {
+      const k = size * (1 - d / 140);
+      setTimeout(() => (this.shake += k * 1.4), (d / 343) * 1000);
+    }
+  }
+
+  distantGun(p, size) {
+    const d = p.distanceTo(this.mechObj.position);
+    this.sound.one('enemy_cannon', clamp((size * 160) / (d + 60), 0.04, 0.9), 0.9 + Math.random() * 0.15, this.sound.outside, Math.min(4, d / 343), this.panOf(p));
+  }
+
+  shellWhizz(p) {
+    this.sound.one('shell_whizz', 0.75, 0.9 + Math.random() * 0.2, undefined, 0, this.panOf(p));
+  }
+
+  onPlayerHit(shell) {
+    if (this.dead) return;
+    const part = applyHit(this.parts, shell.dmg);
+    this.stats.hitsTaken++;
+    const strength = clamp(shell.dmg / 15, 0.3, 1.3);
+    const b = Math.atan2(-(shell.from.x - this.mech.x), -(shell.from.z - this.mech.z));
+    const view = this.mech.heading + (this.external ? this.ext.yaw : this.yaw);
+    const rel = Math.atan2(Math.sin(view - b), Math.cos(view - b)); // + = from the right
+    this.hmd.hitFrom(rel);
+    this.shake += 1.2 + strength;
+    this.shock = Math.max(this.shock, 0.8);
+    this.headVel.x -= Math.sin(rel) * 0.35 * strength;
+    this.headVel.z += 0.3 * strength;
+    this.sound.one('armor_hit', 0.9 + 0.3 * strength, 0.9 + Math.random() * 0.2, undefined, 0, clamp(Math.sin(rel), -0.8, 0.8));
+    this.sound.thump(50, 0.7 * strength, 0.5);
+    this.sound.one('sparks', 0.4, 1, undefined, 0.05);
+    this.cockpit.hit(strength, part);
+    ui.damageFlash(false);
+    const pct = Math.round(this.parts[part] * 100);
+    this.hmd.notify(`TREFFER ${PART_NAMES[part]} ${pct}%`, pct < 40 ? '#ff5a48' : '#ffc15e', 2.5);
+    if (part === 'rarm' && this.parts.rarm <= 0) this.hmd.notify('KANONE AUSGEFALLEN', '#ff5a48', 3);
+    if (this.mech.speed < 2) this.mission?.call('m2_05', 30);
+    if (!this.fire && Math.random() < 0.22) this.startFire(part);
+    if (mechDestroyed(this.parts)) this.destroyed();
+  }
+
+  startFire(part) {
+    this.fire = { part, t: 0 };
+    this.sound.alarm();
+    if (this.mission) this.mission.call('m2_06', 5);
+    else this.say('m2_06');
+  }
+
+  updateFire(dt) {
+    const f = this.fire;
+    this.cockpit.fireLevel = f ? 1 : 0;
+    ui.smoke(f ? Math.min(0.5, 0.12 + f.t * 0.02) : 0);
+    if (!f) return;
+    f.t += dt;
+    this.parts[f.part] = Math.max(0, this.parts[f.part] - 0.006 * dt);
+    this.parts.torso = Math.max(0, this.parts.torso - 0.003 * dt);
+    this.sys.heat = Math.min(0.95, this.sys.heat + 0.025 * dt);
+    if (Math.random() < dt * 0.8) this.sound.one('sparks', 0.22, 0.8 + Math.random() * 0.4);
+    if (mechDestroyed(this.parts)) this.destroyed();
+  }
+
+  /** FIRE SUPPR is a guarded momentary switch: one bottle per throw, then it springs back */
+  dischargeExtinguisher() {
+    setTimeout(() => this.cockpit.switches.firesup.set(false), 900);
+    if (!this.sys.battBus) return this.complainNoPower();
+    if (this.fireCharges <= 0) {
+      this.message = 'FIRE SUPPR: BOTTLES EMPTY';
+      this.messageColor = '#ff4a3a';
+      this.sound.beep(400, 0.25, 0.1);
+      return;
+    }
+    this.fireCharges--;
+    this.sound.one('extinguisher', 0.9);
+    ui.extinguish();
+    this.message = `FIRE SUPPR DISCHARGED - ${this.fireCharges} LEFT`;
+    this.messageColor = null;
+    if (this.fire) {
+      this.fire = null;
+      this.hmd.notify('BRAND GELÖSCHT', '#a6ffb8', 2.5);
+      setTimeout(() => this.say('m2_11'), 1400);
+    }
+  }
+
+  destroyed() {
+    if (this.dead) return;
+    this.dead = true;
+    const p = this.mechObj.position;
+    this.world.effects.explosion(p.x, p.y - 1.5, p.z, 9);
+    this.sound.one('explosion_near', 1, 0.8);
+    this.sound.thump(38, 1, 1.6);
+    this.shake += 4;
+    this.cockpit.hit(1.5, 'head');
+    this.cockpit.crack();
+    this.sound.alarm();
+    this.mech.throttle = 0;
+    this.tutorial.active = false;
+    ui.checklist(null);
+    this.say('m2_10');
+    ui.damageFlash(true);
+    setTimeout(() => ui.fade(1, 2.5), 2600);
+    setTimeout(() => this.showResult(false), 5400);
+  }
+
+  showResult(win) {
+    const w = this.arsenal.w;
+    const t = Math.max(0, this.time - this.stats.start);
+    ui.result(
+      {
+        win,
+        rows: [
+          ['Abschüsse', `${this.stats.kills} / 6`],
+          ['Kanone', `${w.gun.hits} Treffer · ${w.gun.shots} Schuss`],
+          ['Raketen', `${w.missiles.hits} Treffer · ${w.missiles.fired} gestartet`],
+          ['Erlittene Treffer', String(this.stats.hitsTaken)],
+          ['Torso', `${Math.round(this.parts.torso * 100)} %`],
+          ['Einsatzzeit', `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`],
+        ],
+      },
+      () => this.restartMission2(),
+      () => location.reload(),
+    );
+    this.input.unlock();
+  }
+
+  /** clean slate for a new fight */
+  resetCombat() {
+    this.enemies.clear();
+    this.arsenal.reset();
+    this.parts = createParts();
+    this.fire = null;
+    this.fireCharges = 3;
+    this.dead = false;
+    this.cockpit.clearDamage();
+    this.stats = newStats();
+    this.stats.start = this.time;
+    ui.smoke(0);
+  }
+
+  async startMission2() {
+    await this.sound.init();
+    this.sound.startAmbience();
+    this.input.enabled = true;
+    this.input.lock();
+    ui.hideTitle();
+    this.beginMission2();
+  }
+
+  beginMission2() {
+    this.mode = 'mission2';
+    this.goHot();
+    this.setSwitches({ wpnArm: false, gun: false, missile: false, firesup: false });
+    this.sys.prev = { ...this.switchSnapshot() };
+    this.resetCombat();
+    this.mech = createMechState(0, 0, 0);
+    this.groundY = this.world.heightAt(0, 0);
+    this.body = new BodyDynamics();
+    for (const h of this.world.hostiles) h.hidden = true;
+    this.mission = new Mission2(this);
+    this.tutorial = new Tutorial(this, ui, M2_STEPS, this.voiceText, 'GEFECHT · FEUERTAUFE');
+    this.onTutorialDone = () => this.showResult(true);
+    if (this.external) this.setExternal(false);
+    if (this.state !== 'cockpit') this.enterCockpitState();
+    else this.tutorial.start();
+    ui.fade(1, 0);
+    ui.fade(0, 1.2);
+    ui.comms('HQ: BB-07, Feindkolonne im Anmarsch auf Sektor Kilo.');
+  }
+
+  restartMission2() {
+    ui.hideResult();
+    this.input.lock();
+    this.beginMission2();
   }
 
   complainNoPower() {
@@ -235,6 +616,8 @@ class Game {
     this.input.lock();
     ui.hideTitle();
     this.goHot();
+    this.setSwitches({ wpnArm: true, gun: true, missile: true });
+    this.sys.prev = { ...this.switchSnapshot() };
     this.mode = 'free';
     this.enterCockpitState();
     ui.comms('HQ: BB-07, Sektor Kilo ist feindlich. Freies Manöver.');
@@ -258,7 +641,7 @@ class Game {
     ui.skipHint(false);
     ui.fade(0, 0.4);
     this.updateMix();
-    if (this.mode === 'mission') this.tutorial.start();
+    if (this.mode === 'mission' || this.mode === 'mission2') this.tutorial.start();
   }
 
   setWaypoint(i) {
@@ -324,9 +707,9 @@ class Game {
     // the reactor shakes the cabin while it lights
     if (s.reactorState === 'igniting') this.shake = Math.max(this.shake, 0.3 + s.ignT * 0.1);
 
-    // electrics drive the cockpit
-    c.setElectrics(s.battBus, s.mainBus, this.sw.lights);
-    for (const k in c.mfd) c.mfd[k].on = s.mainBus;
+    // electrics drive the cockpit (a destroyed mech only keeps its battery)
+    c.setElectrics(s.battBus, s.mainBus && !this.dead, this.sw.lights);
+    for (const k in c.mfd) c.mfd[k].on = s.mainBus && !this.dead;
     c.hud.on = s.mainBus && this.sw.hud;
     c.mfd.camera.uniforms.useFeed.value = s.mainBus && this.sw.optics ? 1 : 0;
     c.mfd.camera.uniforms.nv.value = this.sw.nv ? 1 : 0;
@@ -348,7 +731,7 @@ class Game {
     L.pwrA.on = s.mainBus && this.sw.gen1;
     L.pwrB.on = s.mainBus && this.sw.gen2;
     L.heat.on = s.heat > 0.7;
-    L.armor.on = s.mainBus;
+    L.armor.on = s.mainBus && Object.values(this.parts).some((v) => v < 0.6);
     L.lock.on = caution && !this.caution.acked;
     c.alarm.active = caution && !this.caution.acked;
 
@@ -362,6 +745,15 @@ class Game {
   }
 
   updateLook(dt, inp) {
+    if (this.external) {
+      // orbit the camera around the mech; view keys bring you back inside
+      this.ext.yaw = Math.atan2(Math.sin(this.ext.yaw - inp.dx * 0.004), Math.cos(this.ext.yaw - inp.dx * 0.004));
+      this.ext.pitch = clamp(this.ext.pitch + inp.dy * 0.003, -0.2, 1.0);
+      this.ext.dist = clamp(this.ext.dist + inp.wheel * 1.6, 9, 45);
+      for (const name of VIEW_ORDER) if (this.input.hit(VIEWS[name].key)) this.setView(name);
+      if (this.input.hit('Escape')) this.setExternal(false);
+      return;
+    }
     const free = this.view === 'front';
     const dyaw = free ? -inp.dx * LOOK.sens * (1 - this.zoom * 0.6) : 0;
     const dpitch = free ? -inp.dy * LOOK.sens * (1 - this.zoom * 0.6) : 0;
@@ -385,7 +777,7 @@ class Game {
 
   updateMech(dt) {
     const I = this.input;
-    const playing = this.state === 'cockpit';
+    const playing = this.state === 'cockpit' && !this.dead;
     const thr = playing ? (I.down('KeyW', 'ArrowUp') ? 1 : I.down('KeyS', 'ArrowDown') ? -1 : 0) : 0;
     const turn = playing ? (I.down('KeyA', 'ArrowLeft') ? 1 : I.down('KeyD', 'ArrowRight') ? -1 : 0) : 0;
     const stop = playing && (I.down('KeyX', 'Space') || I.hit('KeyX') || I.hit('Space'));
@@ -403,8 +795,11 @@ class Game {
         else this.complainNoPower();
       }
     } else {
-      const events = stepMech(this.mech, { throttle: thr, turn, stop }, dt, this.world.colliders, WORLD.bounds);
+      const events = stepMech(this.mech, { throttle: thr, turn, stop: stop || this.dead }, dt, this.world.colliders, WORLD.bounds);
       for (const e of events) this.footstep(e);
+      // damaged legs cannot carry the full stride
+      const vmax = MECH.maxForward * (0.45 + 0.55 * Math.min(this.parts.lleg, this.parts.rleg));
+      if (this.mech.speed > vmax) this.mech.speed = vmax;
     }
     const target = this.world.heightAt(this.mech.x, this.mech.z);
     this.groundY += (target - this.groundY) * Math.min(1, dt * 3);
@@ -445,10 +840,21 @@ class Game {
     // the exterior model rides along (its origin is at the feet)
     const pm = this.world.playerMech;
     // from inside, the (double-sided) exterior model would block the visor
-    pm.visible = !(this.state === 'cockpit' || (this.state === 'entry' && this.entry?.phase === 'inside'));
-    pm.position.copy(this.mechObj.position);
-    pm.position.y -= MECH.eyeHeight;
-    pm.quaternion.copy(this.mechObj.quaternion);
+    pm.visible = this.external || !(this.state === 'cockpit' || (this.state === 'entry' && this.entry?.phase === 'inside'));
+    if (this.rig) {
+      // outside view: the rigged model walks by itself, the static one stays for the base scenes
+      this.rig.body.visible = this.external;
+      this.world.mechBody.visible = !this.external;
+      this.world.mechHatch.visible = this.world.mechOpening.visible = !this.external;
+    }
+    if (this.external) {
+      pm.position.set(m.x, this.groundY, m.z);
+      pm.rotation.set(0, m.heading, 0);
+    } else {
+      pm.position.copy(this.mechObj.position);
+      pm.position.y -= MECH.eyeHeight;
+      pm.quaternion.copy(this.mechObj.quaternion);
+    }
     pm.updateMatrixWorld(true);
   }
 
@@ -508,6 +914,11 @@ class Game {
     this.cockpit.setTags(this.body.tags, dt);
 
     this.placeMech(b);
+    if (this.external) {
+      this.updateRig(dt);
+      this.updateExternalCam(dt);
+      return;
+    }
     if (this.freeCam || this.state === 'title' || (this.state === 'entry' && this.entry.phase === 'outside')) return;
     const wm = new THREE.Matrix4().multiplyMatrices(this.mechObj.matrixWorld, this.cockpitCam.matrixWorld);
     wm.decompose(this.worldCam.position, this.worldCam.quaternion, this.worldCam.scale);
@@ -545,7 +956,7 @@ class Game {
   }
 
   updateInteraction(inp) {
-    if (this.state !== 'cockpit') {
+    if (this.state !== 'cockpit' || this.external) {
       this.hovered = null;
       ui.hover(null, false);
       return;
@@ -567,6 +978,7 @@ class Game {
     const map = { KeyL: 'lights', KeyH: 'hud', KeyN: 'nv', KeyR: 'radar', KeyG: 'stab', KeyO: 'optics' };
     for (const [code, key] of Object.entries(map)) if (I.hit(code)) sw[key].toggle();
     if (I.hit('KeyM')) this.sound.setMuted(!this.sound.muted);
+    if (I.hit('Digit9') || I.hit('Numpad9')) this.setExternal(!this.external);
     if (I.hit('KeyQ') && this.caution.active) this.cockpit.lamps.lock.toggle();
     if (I.hit('F1') || I.hit('Tab') || I.hit('Slash')) ui.toggleHelp();
   }
@@ -576,8 +988,11 @@ class Game {
     const key = this.tutorial.active ? this.tutorial.targetKey() : null;
     const ctl = key ? this.cockpit.switches[key] || this.cockpit.lamps[key] : null;
     const mesh = ctl ? ctl.hit || ctl.cap : null;
-    this.cockpit.setMarker(mesh, this.cockpitCam, this.time);
-    if (!mesh) return ui.arrow(null);
+    this.cockpit.setMarker(ctl, this.cockpitCam, this.time);
+    if (!mesh) {
+      ui.viewHint(null);
+      return ui.arrow(null);
+    }
     const p = mesh.getWorldPosition(new THREE.Vector3()).project(this.cockpitCam);
     const behind = p.z > 1;
     const on = !behind && Math.abs(p.x) < 0.92 && Math.abs(p.y) < 0.9;
@@ -599,11 +1014,11 @@ class Game {
     const m = this.mech;
     const s = this.sys;
     const clock = new Date();
-    const warning = s.warnings[0];
+    const warning = this.fire ? 'FIRE ON BOARD' : s.warnings[0];
     if (f % 4 === 0)
       drawStatus(c.mfd.status, {
         ...s,
-        parts: { head: 0.94, torso: 0.81, larm: 0.62, rarm: 0.9, lleg: 0.77, rleg: 0.88 },
+        parts: this.parts,
         time: `${String(clock.getHours()).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}`,
         message: warning || this.statusLine(),
         messageColor: warning ? '#ff4a3a' : this.messageColor,
@@ -614,7 +1029,8 @@ class Game {
         range: this.range,
         nv: this.sw.nv,
         zoom: 4,
-        contact: this.sw.optics ? null : 'OPTICS OFF',
+        contact: this.sw.optics ? this.cameraContact() : 'OPTICS OFF',
+        contactColor: '#ff4a3a',
       });
     if (f % 4 === 2)
       drawTactical(c.mfd.tactical, {
@@ -624,8 +1040,86 @@ class Game {
         contacts: this.world.contacts,
         look: this.yaw,
         grid: `${String(Math.round(1000 + m.x / 10)).padStart(4, '0')}-${String(Math.round(1000 - m.z / 10)).padStart(4, '0')}`,
-        hostiles: this.world.hostiles.filter((h) => Math.hypot(h.x - m.x, h.z - m.z) < this.radarRange).length,
+        hostiles: [...this.world.hostiles.filter((h) => !h.hidden), ...this.enemies.alive()].filter((h) => Math.hypot(h.x - m.x, h.z - m.z) < this.radarRange).length,
       });
+  }
+
+  /** what the hull camera reports: the locked target */
+  cameraContact() {
+    const ms = this.arsenal.w.missiles;
+    const e = ms.target != null && this.enemies.list.find((x) => x.id === ms.target);
+    if (!e) return null;
+    const d = Math.hypot(e.x - this.mech.x, e.z - this.mech.z);
+    return `${ms.locked ? 'LOCK' : 'TRK'} ${e.type === 'tank' ? 'MBT' : 'APC'} ${Math.round(d)} m`;
+  }
+
+  /** screen positions of the enemies for the helmet display (datalink) */
+  hmdTargets() {
+    if (!this.sys.mainBus || this.dead) return null;
+    const out = [];
+    const cam = this.worldCam;
+    const W = innerWidth;
+    const H = innerHeight;
+    const ms = this.arsenal.w.missiles;
+    const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const f = H / 2 / Math.tan((cam.fov * DEG) / 2);
+    const v = new THREE.Vector3();
+    for (const e of this.enemies.alive()) {
+      this.enemies.center(e, v);
+      const dist = v.distanceTo(cam.position);
+      if (dist > 2400) continue;
+      const front = v.clone().sub(cam.position).dot(camDir) > 0;
+      const p = v.clone().project(cam);
+      const onScreen = front && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.92;
+      const mine = ms.target === e.id;
+      const t = { dist, label: e.type === 'tank' ? 'PZ' : 'SPZ', lock: mine ? ms.lockT / MISSILE.lockTime : 0, locked: mine && ms.locked, onScreen };
+      if (onScreen) {
+        t.x = ((p.x + 1) / 2) * W;
+        t.y = ((1 - p.y) / 2) * H;
+        t.r = (e.radius * f) / dist;
+      } else t.edge = Math.atan2(front ? p.y : -p.y, front ? p.x : -p.x);
+      out.push(t);
+    }
+    return out;
+  }
+
+  drawHMD(dt) {
+    const m = this.mech;
+    const w = this.arsenal.w;
+    const live = this.weaponLive || {};
+    const cam = this.worldCam;
+    const damaged = Object.values(this.parts).some((v) => v < 1);
+    this.hmd.draw(dt, {
+      visible: this.state === 'cockpit',
+      power: this.sys.battBus ? Math.max(0.6, this.cockpit.power) : 0.4,
+      external: this.external,
+      throttle: m.throttle,
+      speed: m.speed,
+      maxSpeed: MECH.maxForward,
+      legsLocked: this.sys.legsLocked,
+      canWalk: this.sys.canWalk,
+      aimRange: live.master ? this.aimRange : 0,
+      weapons:
+        this.mode === 'mission2' || this.sw.wpnArm
+          ? {
+              master: live.master,
+              gun: live.gun,
+              gunDamaged: this.parts.rarm <= 0,
+              ammo: w.gun.ammo,
+              heat: w.gun.heat,
+              overheated: w.gun.overheated,
+              inLimits: live.inLimits,
+              missile: live.missile,
+              missiles: w.missiles.count,
+              lockT: w.missiles.lockT / MISSILE.lockTime,
+              locked: w.missiles.locked,
+              coneR: (innerHeight / 2 / Math.tan((cam.fov * DEG) / 2)) * Math.tan(MISSILE.lockCone),
+            }
+          : null,
+      parts: this.mode === 'mission2' || damaged ? this.parts : null,
+      targets: this.hmdTargets(),
+      fire: !!this.fire,
+    });
   }
 
   statusLine() {
@@ -670,6 +1164,7 @@ class Game {
     if (this.frame % 6 === 0) this.measureRange();
     this.updateInteraction(inp);
     this.updateMarker();
+    if (this.state === 'cockpit') this.updateCombat(dt);
 
     this.world.update(dt, this.time, this.worldCam.position);
     const fx = this.world.effects;
@@ -686,11 +1181,12 @@ class Game {
       stab: this.sw.stab && this.sys.gyro >= 1,
       nv: this.sw.nv,
       lights: this.sw.lights,
-      warning: this.sys.warnings[0] || (this.sys.legsLocked ? 'LEG LOCK' : ''),
+      warning: this.fire ? 'FIRE' : this.sys.warnings[0] || (this.sys.legsLocked ? 'LEG LOCK' : ''),
       waypoint: this.hudWaypoint(),
       time: this.time,
     });
     this.drawDisplays();
+    this.drawHMD(dt);
     this.sound.update({ turn: this.mech.turn, lookRate: this.state === 'cockpit' ? this.lookRate : 0, speed: this.mech.speed, reactor: this.sys.reactor });
     ui.update(this);
   }
@@ -698,7 +1194,7 @@ class Game {
   render() {
     // the boarding video covers the screen: no need to draw the world behind it
     if (this.state === 'entry' && this.entry.phase === 'video') return;
-    if (this.frame % 2 === 0 && this.sw.optics && this.sys.mainBus && this.state === 'cockpit') {
+    if (this.frame % 2 === 0 && this.sw.optics && this.sys.mainBus && this.state === 'cockpit' && !this.external) {
       renderer.setRenderTarget(this.feedRT);
       renderer.render(this.world.scene, this.feedCam);
       renderer.setRenderTarget(null);
@@ -752,7 +1248,12 @@ assets
       game.input.enabled = true;
       ui.hideTitle();
       game.enterCockpitState();
-    } else ui.ready(() => game.startMission(), () => game.startFree());
+    } else if (params.has('m2')) {
+      // test hook: straight into mission 2
+      game.input.enabled = true;
+      ui.hideTitle();
+      game.beginMission2();
+    } else ui.ready(() => game.startMission(), () => game.startFree(), () => game.startMission2());
     renderer.compile(game.world.scene, game.worldCam);
     renderer.compile(game.cockpit.scene, game.cockpitCam);
     if (params.has('manual')) {
