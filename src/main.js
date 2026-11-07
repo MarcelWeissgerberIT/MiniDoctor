@@ -13,10 +13,11 @@ import { createSystems, stepSystems, hotSwitches } from './logic/systems.js';
 import { Tutorial, VOICE_TEXT } from './tutorial.js';
 import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
+import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
 
 const params = new URLSearchParams(location.search);
 const DEG = Math.PI / 180;
-const LOOK = { yaw: 105 * DEG, up: 38 * DEG, down: 62 * DEG, sens: 0.0022 };
+const LOOK = { yaw: 125 * DEG, up: 62 * DEG, down: 68 * DEG, sens: 0.0022 };
 const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv'];
 const EXTRA_VOICE = {
   v18: 'Negativ. Ohne Kühlmittelpumpe und Hydraulikdruck zündet der Reaktor nicht. Prüfen Sie Ihre Checkliste.',
@@ -77,6 +78,11 @@ class Game {
     this.sw = this.switchSnapshot();
     this.yaw = 0;
     this.pitch = -9 * DEG;
+    this.view = 'front'; // panel focus view
+    this.viewBlend = 0;
+    this.focusPose = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 70 };
+    this.zoom = 0;
+    this.fov = 70;
     this.lookRate = 0;
     this.headOff = new THREE.Vector3();
     this.headVel = new THREE.Vector3();
@@ -100,7 +106,7 @@ class Game {
       if (d < 600) setTimeout(() => (this.shake += 0.6 * s), (d / 343) * 1000);
     };
     addEventListener('resize', () => this.resize());
-    this.input.onLockChange = (locked) => ui.lockHint(!locked && this.state !== 'title');
+    this.input.onLockChange = (locked) => ui.lockHint(!locked && this.state !== 'title' && !this.input.cursorMode);
     this.post.cockpitPass.enabled = false;
     this.placeMech();
     // title backdrop: a slow look at the parked mech
@@ -165,6 +171,30 @@ class Game {
     bind('legLock');
   }
 
+  /** lean to a panel (focus view) or back to free look */
+  setView(name) {
+    if (this.state !== 'cockpit') return;
+    if (name === this.view && name !== 'front') name = 'front';
+    const v = VIEWS[name];
+    if (!v) return;
+    if (name !== 'front') {
+      // remember where we were and fix the target pose
+      const eye = new THREE.Vector3().fromArray(v.pos);
+      const look = new THREE.Matrix4().lookAt(eye, new THREE.Vector3().fromArray(v.target), new THREE.Vector3(0, 1, 0));
+      this.focusPose.pos.copy(eye);
+      this.focusPose.q.setFromRotationMatrix(look);
+      this.focusPose.fov = v.fov;
+      this.input.cursorMode = true;
+      this.input.unlock();
+    } else {
+      this.input.cursorMode = false;
+    }
+    this.view = name;
+    this.sound.click('button');
+    ui.setView(name);
+    ui.lockHint(false);
+  }
+
   complainNoPower() {
     if (this.time - this.nag < 12) return;
     this.nag = this.time;
@@ -222,6 +252,7 @@ class Game {
   enterCockpitState() {
     this.state = 'cockpit';
     this.post.cockpitPass.enabled = true;
+    ui.showViews(true, (name) => this.setView(name));
     this.cockpit.setHatch(0);
     this.world.setMechHatch(0);
     ui.skipHint(false);
@@ -331,14 +362,23 @@ class Game {
   }
 
   updateLook(dt, inp) {
-    const dyaw = -inp.dx * LOOK.sens;
-    const dpitch = -inp.dy * LOOK.sens;
+    const free = this.view === 'front';
+    const dyaw = free ? -inp.dx * LOOK.sens * (1 - this.zoom * 0.6) : 0;
+    const dpitch = free ? -inp.dy * LOOK.sens * (1 - this.zoom * 0.6) : 0;
+    // focus views fade in and out; the right mouse button zooms in free look
+    const vt = free ? 0 : 1;
+    this.viewBlend += (vt - this.viewBlend) * Math.min(1, dt * 5.5);
+    if (Math.abs(this.viewBlend - vt) < 0.002) this.viewBlend = vt;
+    const zt = free && this.input.rmb ? 1 : 0;
+    this.zoom += (zt - this.zoom) * Math.min(1, dt * 8);
     this.yaw = clamp(this.yaw + dyaw, -LOOK.yaw, LOOK.yaw);
     this.pitch = clamp(this.pitch + dpitch, -LOOK.down, LOOK.up);
     if (this.input.hit('KeyC')) {
       this.yaw = 0;
       this.pitch = -9 * DEG;
     }
+    for (const name of VIEW_ORDER) if (this.input.hit(VIEWS[name].key)) this.setView(name);
+    if (!free && (this.input.hit('Escape') || inp.rmbClicked)) this.setView('front');
     const rate = Math.hypot(dyaw, dpitch) / Math.max(dt, 1e-3);
     this.lookRate += (rate - this.lookRate) * Math.min(1, dt * 8);
   }
@@ -444,7 +484,21 @@ class Game {
       this._e ??= new THREE.Euler();
       this._qs.setFromEuler(this._e.set(head.pitch + n(43, 31) * sh * 1.5, head.yaw, head.roll + n(33, 19) * sh, 'XYZ'));
       this._ql.setFromEuler(this._e.set(this.pitch, this.yaw + n(29, 47) * sh, 0, 'YXZ'));
+      const e = this.viewBlend * this.viewBlend * (3 - 2 * this.viewBlend);
+      if (e > 0) {
+        // lean towards the panel in focus
+        this._ql.slerp(this.focusPose.q, e);
+        this.cockpitCam.position.addScaledVector(this.focusPose.pos, e);
+      }
       this.cockpitCam.quaternion.copy(this._qs).multiply(this._ql);
+      const fov = THREE.MathUtils.lerp(THREE.MathUtils.lerp(70, this.focusPose.fov, e), ZOOM_FOV, this.zoom);
+      if (Math.abs(fov - this.fov) > 0.01) {
+        this.fov = fov;
+        for (const cam of [this.cockpitCam, this.worldCam]) {
+          cam.fov = fov;
+          cam.updateProjectionMatrix();
+        }
+      }
     }
     if (this.debugCam) {
       this.cockpitCam.position.set(...this.debugCam.pos);
@@ -496,13 +550,14 @@ class Game {
       ui.hover(null, false);
       return;
     }
-    this.ray.setFromCamera(this.input.locked ? new THREE.Vector2(0, 0) : new THREE.Vector2(this.input.mouse.x, this.input.mouse.y), this.cockpitCam);
+    const center = this.input.locked && !this.input.cursorMode;
+    this.ray.setFromCamera(center ? new THREE.Vector2(0, 0) : new THREE.Vector2(this.input.mouse.x, this.input.mouse.y), this.cockpitCam);
     this.ray.far = 2.2;
     const hits = this.ray.intersectObjects(this.cockpit.hitTargets, false);
     const ctl = hits.length ? hits[0].object.userData.control : null;
     this.hovered = ctl;
     const hint = ctl && KEY_HINTS[ctl.label];
-    ui.hover(ctl ? (hint ? `${ctl.label.replace('\n', ' ')}  [${hint}]` : ctl.label.replace('\n', ' ')) : null, this.input.locked);
+    ui.hover(ctl ? (hint ? `${ctl.label.replace('\n', ' ')}  [${hint}]` : ctl.label.replace('\n', ' ')) : null, center, !center && this.input.mouse);
     if (inp.clicked && ctl) ctl.toggle();
   }
 
@@ -526,7 +581,10 @@ class Game {
     const p = mesh.getWorldPosition(new THREE.Vector3()).project(this.cockpitCam);
     const behind = p.z > 1;
     const on = !behind && Math.abs(p.x) < 0.92 && Math.abs(p.y) < 0.9;
-    ui.arrow(on ? null : Math.atan2(behind ? -p.y : p.y, behind ? -p.x : p.x));
+    const view = CONTROL_VIEW[key];
+    const vi = VIEW_ORDER.indexOf(view);
+    ui.arrow(on ? null : Math.atan2(behind ? -p.y : p.y, behind ? -p.x : p.x), view && this.view !== view ? `Taste ${vi + 1}: ${VIEWS[view].label}` : null);
+    ui.viewHint(view && this.view !== view ? view : null);
   }
 
   drawDisplays() {
@@ -638,6 +696,8 @@ class Game {
   }
 
   render() {
+    // the boarding video covers the screen: no need to draw the world behind it
+    if (this.state === 'entry' && this.entry.phase === 'video') return;
     if (this.frame % 2 === 0 && this.sw.optics && this.sys.mainBus && this.state === 'cockpit') {
       renderer.setRenderTarget(this.feedRT);
       renderer.render(this.world.scene, this.feedCam);

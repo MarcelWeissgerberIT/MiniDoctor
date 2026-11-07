@@ -8,8 +8,8 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 ## Mission 1 · Einweisung: Kalt & dunkel
 
-1. **Einstieg:** Du gehst über den Stützpunkt (Sandsackring, Generator mit Versorgungskabel, Treibstofffässer, Munitionskisten, Arbeitsscheinwerfer) zum abgeschalteten BB-07, schaust an der 5-m-Maschine hoch, kletterst die Leiter am linken Bein hinauf, öffnest die Einstiegsluke am Rücken, steigst ein, schnallst dich an – die Luke fällt zu. (Leertaste überspringt.)
-2. **Kaltstart nach Checkliste:** Das Cockpit ist komplett tot. Ein Ausbilder führt per Funk (deutsche Sprachausgabe mit Funkfilter und Untertiteln) durch den Start. Der nächste Schalter wird im Cockpit mit einem pulsierenden Ring markiert, ein Pfeil zeigt die Richtung, wenn er außerhalb des Blickfelds liegt:
+1. **Einstieg (Video, ~22 s):** In Ego-Perspektive gehst du über den Stützpunkt zum abgeschalteten BB-07, kletterst mit den Händen die Leiter am Bein hinauf, drehst das Handrad und öffnest die Einstiegsluke am Rücken. Das Video ist mit Higgsfield (Kling 3.0) aus Standbildern unseres Mechs erzeugt; Schritte, Leiter, Luke und Funk werden im Spiel synchron dazugemischt. Danach setzt du dich im Spiel-Cockpit hin, schnallst dich an, die Luke fällt zu. (Leertaste überspringt. Ohne abspielbares Video läuft eine Kamerafahrt um das 3D-Modell.)
+2. **Kaltstart nach Checkliste:** Das Cockpit ist komplett tot. Ein Ausbilder führt per Funk (deutsche Sprachausgabe mit leichtem Funkfilter und Untertiteln) durch den Start. Der nächste Schalter wird im Cockpit mit einem pulsierenden Ring markiert, ein Pfeil zeigt die Richtung, und die passende Panel-Ansicht (Taste 1–5) wird eingeblendet:
 
    | Schritt | Wirkung |
    |---|---|
@@ -61,11 +61,19 @@ Bei jedem Push auf `main` baut und veröffentlicht GitHub Actions das Spiel auf 
 
 Ein zerbombtes Stadtrandgebiet: Krater, ausgebrannte Panzerwracks, Gebäuderuinen, Panzersperren-Linien, verkohlte Bäume, Trümmer, brennende Feuer mit Rauchsäulen, Ascheflocken, Leuchtspurgarben und Artillerieeinschläge am Horizont (mit Donner, verzögert um die Schallgeschwindigkeit). Dahinter ein 360°-Panorama einer brennenden Stadt.
 
+## Panel-Ansichten und Zoom
+
+Wie in Flugsimulatoren kann man sich zu einzelnen Bedienfeldern hinbeugen: **1** Vorne (freier Blick), **2** Overhead-Panel, **3** linke Konsole (Elektrik: BATT, APU, Generatoren), **4** rechte Konsole, **5** Mittelkonsole (Reaktor, Gyro, Licht, Optik, HUD, Beinverriegelung). In einer Panel-Ansicht ist der Mauszeiger frei und Schalter werden direkt angeklickt; Esc, Rechtsklick oder dieselbe Taste führen zurück. Im freien Blick zoomt die **gedrückte rechte Maustaste** (z. B. um Displays zu lesen). Die Leiste unten am Bildschirm zeigt die Ansichten auch zum Anklicken.
+
+Die Instrumententafeln haben einen helleren Anstrich, größere hinterleuchtete Beschriftungen mit ON-Markierung und eigene kleine Panel-Leuchten.
+
 ## Steuerung
 
 | Eingabe | Aktion |
 |---|---|
-| Maus | umsehen (Klick fängt die Maus ein) |
+| Maus | umsehen (Klick fängt die Maus ein; alternativ mit gedrückter Taste ziehen) |
+| 1 – 5 | Panel-Ansicht: Vorne, Overhead, links, rechts, Mitte |
+| Rechte Maustaste | halten = Zoom · in Panel-Ansicht: zurück |
 | W / S | Schubhebel vor / zurück (bis −30 % rückwärts) |
 | X / Leertaste | Schub auf null |
 | A / D | Mech drehen |
@@ -94,7 +102,8 @@ Alle Grafiken, Modelle und Sounds wurden für dieses Projekt generiert:
 | BB-07 von außen (5 m) | **Meshy Multi-Image-to-3D** aus Front-, Seiten- und Rückansicht (GPT Image 2.6, Rückansicht mit Luke und Leiter) | `public/assets/models/mech.glb` |
 | Cockpit-Brummen, Schlachtlärm, Mech-Schritt, Servo, Hochfahren, Schritte auf Schotter, Leiter, Luke auf/zu, Batterie-Relais, APU, Reaktorzündung, Hydraulikpumpe, Gyro, Beinverriegelung, Gurtschloss, Stützpunkt-Atmo | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
 | Kabinenknarzen, Hydraulik pro Schritt, klappernde Ausrüstung | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
-| 22 Funksprüche des Ausbilders (Deutsch) | Higgsfield (Seed Audio, Stimme „Barrett“) | `public/assets/voice/` |
+| 22 Funksprüche des Ausbilders (Deutsch) | Higgsfield (Text-to-Speech, ElevenLabs-Engine, Stimme „Barrett“ – ausgewählt per deutscher Spracherkennung aus 8 Engine/Stimmen-Kandidaten) | `public/assets/voice/` |
+| Einstiegsvideo (Ego-Perspektive) | Higgsfield: Startbilder GPT Image 2.6 mit dem Mech als Referenz, Clips Kling 3.0 Pro, geschnitten mit ffmpeg | `public/assets/video/entry.{webm,mp4}` |
 
 `tools/process-assets.mjs` macht daraus spielfertige Dateien: Normal-Maps und gepackte ORM-Maps (Ambient Occlusion, Rauheit, Metallanteil) werden aus den Farbtexturen abgeleitet (Rost = rau und nicht-metallisch, blanker Stahl = metallisch), Texturen werden nahtlos gemacht, das Panorama wird horizontal nahtlos überblendet, die Decals ausgeschnitten und die GLBs mit WebP-Texturen und Meshopt komprimiert. Die Rohdateien liegen in `assets-src/` (nicht im Repo).
 
@@ -112,7 +121,8 @@ Das Cockpit selbst (Hülle, Armaturen, Displays, Schalter, Leitungen) ist in Thr
 ```
 src/
   main.js              Spielablauf, Kamera-Rig, Verdrahtung der Systeme
-  entry.js             Einstiegssequenz (Kamerafahrt, Leiter, Luke, Hinsetzen)
+  entry.js             Einstiegssequenz (Video mit Ton-Cues, Hinsetzen, Luke; Fallback-Kamerafahrt)
+  cockpit/views.js     Panel-Ansichten (Position, Blickziel, Blickfeld)
   tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken
   logic/mech.js        reine Bewegungslogik (getestet)
   logic/systems.js     Strom, APU, Hydraulik, Kühlung, Reaktor, Gyro, Beinverriegelung (getestet)

@@ -20,6 +20,8 @@ export class UI {
     this.skipEl = $('skiphint');
     this.lines = [];
     this.subUntil = 0;
+    this.viewsEl = $('views');
+    this.arrowLabel = $('arrowlabel');
     this.title.style.backgroundImage = `url(${import.meta.env.BASE_URL}assets/ui/keyart.webp)`;
   }
 
@@ -64,13 +66,50 @@ export class UI {
     this.fadeEl.style.opacity = String(to);
   }
 
-  hover(label, locked) {
+  /** label: control under the crosshair/cursor; center: crosshair mode; mouse: cursor position (NDC) */
+  hover(label, center, mouse) {
     this.cross.classList.toggle('active', !!label);
-    this.cross.classList.toggle('hidden', !locked);
+    this.cross.classList.toggle('hidden', !center);
+    document.body.classList.toggle('hovering', !!label && !center);
     if (label) {
       this.tip.textContent = label;
       this.tip.classList.add('show');
+      if (!center && mouse) {
+        this.tip.style.left = `${((mouse.x + 1) / 2) * innerWidth}px`;
+        this.tip.style.top = `${((1 - mouse.y) / 2) * innerHeight + 26}px`;
+      } else {
+        this.tip.style.left = '';
+        this.tip.style.top = '';
+      }
     } else this.tip.classList.remove('show');
+  }
+
+  showVideo(show) {
+    document.getElementById('videolayer').classList.toggle('show', show);
+  }
+
+  /** bar with the panel focus views */
+  showViews(show, onPick) {
+    this.viewsEl.classList.toggle('show', show);
+    if (onPick && !this.viewsBound) {
+      this.viewsBound = true;
+      this.viewsEl.querySelectorAll('button').forEach((b) =>
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onPick(b.dataset.view);
+        }),
+      );
+    }
+  }
+
+  setView(name) {
+    this.viewsEl.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.view === name));
+    document.body.classList.toggle('focusview', name !== 'front');
+  }
+
+  /** highlight the view button the tutorial wants */
+  viewHint(name) {
+    this.viewsEl.querySelectorAll('button').forEach((b) => b.classList.toggle('hint', b.dataset.view === name));
   }
 
   subtitle(text, seconds) {
@@ -114,7 +153,9 @@ export class UI {
   }
 
   /** angle (radians, screen space) of the direction to look, or null */
-  arrow(angle) {
+  arrow(angle, label = null) {
+    this.arrowLabel.textContent = label || '';
+    this.arrowLabel.classList.toggle('show', !!label && angle != null);
     if (angle == null) {
       this.arrowEl.classList.remove('show');
       return;

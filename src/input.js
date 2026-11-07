@@ -13,6 +13,9 @@ export class Input {
     this.locked = false;
     this.lockTime = 0;
     this.enabled = false;
+    this.cursorMode = false; // panel focus views: free cursor, clicks press controls
+    this.rmb = false; // right mouse button held (zoom)
+    this.rmbClicked = false;
 
     addEventListener('keydown', (e) => {
       if (!this.enabled) return;
@@ -29,26 +32,44 @@ export class Input {
       if (this.locked && performance.now() - this.lockTime > 120) {
         this.dx += Math.max(-250, Math.min(250, e.movementX));
         this.dy += Math.max(-250, Math.min(250, e.movementY));
-      } else if (!this.locked && this.drag) {
+      } else if (!this.locked && this.drag && !this.drag.noLook) {
         // fallback where pointer lock is not allowed (e.g. embedded pages): drag to look
         this.dx += e.movementX * 1.4;
         this.dy += e.movementY * 1.4;
         this.drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
-      }
+      } else if (this.drag?.noLook) this.drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
     });
     addEventListener('mouseup', (e) => {
+      if (e.button === 2) {
+        if (this.rmbDown && performance.now() - this.rmbDown < 250) this.rmbClicked = true;
+        this.rmb = false;
+        this.rmbDown = 0;
+        return;
+      }
       if (e.button !== 0 || !this.drag) return;
       // a click without dragging presses the control under the mouse
       if (!this.locked && this.drag.moved < 6) this.clicked = true;
       this.drag = null;
     });
     canvas.addEventListener('mousedown', (e) => {
-      if (!this.enabled || e.button !== 0) return;
+      if (!this.enabled) return;
+      if (e.button === 2) {
+        this.rmb = true;
+        this.rmbDown = performance.now();
+        return;
+      }
+      if (e.button !== 0) return;
+      if (this.cursorMode) {
+        // focus view: the cursor stays free; a click presses what is under it
+        this.drag = { moved: 0, noLook: true };
+        return;
+      }
       if (!this.locked) {
         this.drag = { moved: 0 };
         this.lock();
       } else this.clicked = true;
     });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
       this.lockTime = performance.now();
@@ -72,6 +93,10 @@ export class Input {
     canvas.addEventListener('touchend', () => (last = null));
   }
 
+  unlock() {
+    if (document.pointerLockElement) document.exitPointerLock?.();
+  }
+
   lock() {
     try {
       const p = this.canvas.requestPointerLock?.({ unadjustedMovement: true });
@@ -91,9 +116,10 @@ export class Input {
   }
 
   consume() {
-    const r = { dx: this.dx, dy: this.dy, clicked: this.clicked };
+    const r = { dx: this.dx, dy: this.dy, clicked: this.clicked, rmbClicked: this.rmbClicked };
     this.dx = this.dy = 0;
     this.clicked = false;
+    this.rmbClicked = false;
     this.frameHits = this.pressed;
     this.pressed = new Set();
     return r;

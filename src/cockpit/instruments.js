@@ -32,22 +32,25 @@ export function labelTexture(text, { w = 256, h = 64, size = 34, color = '#e9e4d
 
 const labelGeo = new THREE.PlaneGeometry(1, 1);
 /** Label plane, softly back-lit like real panel lighting. */
+/** every back-lit label; the cockpit dims them with the electrical power */
+export const LABEL_MATERIALS = [];
+
 export function makeLabel(text, width, height = width * 0.25, opts = {}) {
   const tex = labelTexture(text, opts);
-  const m = new THREE.Mesh(
-    labelGeo,
-    new THREE.MeshStandardMaterial({
-      map: tex,
-      transparent: true,
-      alphaTest: 0.25,
-      roughness: 0.7,
-      emissive: 0xb8d0b0,
-      emissiveMap: tex,
-      emissiveIntensity: opts.glow ?? 0.18,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-    }),
-  );
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex,
+    transparent: true,
+    alphaTest: 0.25,
+    roughness: 0.7,
+    emissive: 0xd8f0d8,
+    emissiveMap: tex,
+    emissiveIntensity: opts.glow ?? 0.18,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+  });
+  mat.userData.glow = opts.glow ?? 1;
+  LABEL_MATERIALS.push(mat);
+  const m = new THREE.Mesh(labelGeo, mat);
   m.scale.set(width, height, 1);
   return m;
 }
@@ -196,9 +199,9 @@ export class Gauge {
 let leverGeo, tipGeo, nutGeo;
 export class ToggleSwitch {
   constructor(mat, { label, on = false, action, labelBelow = true, guard = false }) {
-    leverGeo ??= cyl(0.0035, 0.0045, 0.03, 10, 0.1);
-    tipGeo ??= new THREE.SphereGeometry(0.0055, 12, 8);
-    nutGeo ??= cyl(0.011, 0.011, 0.008, 6, 0.1);
+    leverGeo ??= cyl(0.0042, 0.0055, 0.036, 10, 0.1);
+    tipGeo ??= new THREE.SphereGeometry(0.0068, 14, 10);
+    nutGeo ??= cyl(0.013, 0.013, 0.009, 6, 0.1);
     this.group = new THREE.Group();
     this.on = on;
     this.action = action;
@@ -208,9 +211,9 @@ export class ToggleSwitch {
     nut.position.z = 0.004;
     this.lever = new THREE.Group();
     const stem = new THREE.Mesh(leverGeo, mat.steel);
-    stem.position.y = 0.015;
-    const tip = new THREE.Mesh(tipGeo, mat.steel);
-    tip.position.y = 0.03;
+    stem.position.y = 0.018;
+    const tip = new THREE.Mesh(tipGeo, mat.chrome || mat.steel);
+    tip.position.y = 0.036;
     this.lever.add(stem, tip);
     this.lever.position.z = 0.008;
     this.lever.rotation.x = Math.PI / 2;
@@ -233,9 +236,14 @@ export class ToggleSwitch {
       this.guardOpen = 0;
     }
     if (label) {
-      const l = makeLabel(label, 0.07, 0.022, { size: 30, h: 80 });
-      l.position.set(0, labelBelow ? -0.037 : 0.037, 0.001);
+      const l = makeLabel(label, 0.088, 0.032, { size: 40, h: 96 });
+      l.position.set(0, labelBelow ? -0.046 : 0.046, 0.001);
       this.group.add(l);
+      if (!guard) {
+        const on = makeLabel('ON', 0.03, 0.012, { size: 50, w: 128, h: 52, glow: 0.45 });
+        on.position.set(0, 0.03, 0.001);
+        this.group.add(on);
+      }
     }
     this.angle = this.on ? 0.5 : -0.5;
   }
@@ -321,7 +329,7 @@ export class LampButton {
 
   update(dt, hovered, time, power = 1) {
     const lit = this.on ? (this.blink ? (Math.sin(time * 9) > -0.2 ? 1 : 0.25) : 1) : 0;
-    const target = (lit * 1.25 + 0.03) * power + (hovered ? 0.25 : 0);
+    const target = (lit * 0.3 + 0.025) * power + (hovered ? 0.15 : 0);
     this.level += (target - this.level) * Math.min(1, dt * 25);
     this.mat.emissiveIntensity = this.level;
     this.press = Math.max(0, this.press - dt * 6);
