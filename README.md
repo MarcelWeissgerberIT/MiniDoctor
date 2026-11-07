@@ -69,7 +69,7 @@ Modern und aufgeräumt wie im Einstiegsvideo: satiniertes Gunmetal, schlanke Str
   - *Kamera*: Live-Bild der Bugkamera mit 4-fach-Zoom, Kompassband, Entfernungsmesser, Nachtsicht.
   - *Taktik*: Radar mit Sweep, Strukturen, Brände und feindliche Kontakte (500/1000 m).
 - **Analoge Instrumente** (Reaktor, Hydraulikdruck, Temperatur, Geschwindigkeit) mit gedämpften Zeigern, die bei jedem Schritt zittern.
-- **Head-up-Display** auf einer Combiner-Glasscheibe: Kompass, Geschwindigkeit, Schubhebel, Kopfdrehung, Warnungen.
+- **Holo-Visier statt HUD-Scheibe:** leuchtende Vektorsymbolik direkt auf der Panzerglaskanzel – Kompassband mit Blickrichtungsmarke, Horizontlinien, die mit dem Gang des Mechs wanken und kippen, Fadenkreuz, Bögen für Schub (links) und Geschwindigkeit (rechts), Wegmarke an ihrer echten Richtung im Gelände, Waffenzeile und blinkende Warnungen. Schalter HUD bzw. Taste H.
 - **Bedienbare Schalter und Knöpfe** (Fadenkreuz + Klick): Kabinenlicht, HUD, Nachtsicht, Optik, Radarreichweite, Gyro-Stabilisator, Kühlmittelpumpe, Hydraulik, Generatoren, Master Caution u. a. Pumpe aus → Überhitzung mit Alarm; Hydraulik aus → der Mech kommt kaum noch vom Fleck; alle Generatoren aus → Cockpit wird dunkel.
 - **Joystick und Schubhebel** bewegen sich mit den Eingaben.
 - **Licht**: Tageslicht fällt mit weichen Schatten durch den Sichtschlitz, warme Deckenleuchte, rote Fußraumbeleuchtung, grünes Display-Streulicht, rote Alarmleuchte mit Drahtkäfig; Artillerieblitze erhellen kurz die Kabine. Staub schwebt in der Luft und wird bei jedem Schritt aufgewirbelt.

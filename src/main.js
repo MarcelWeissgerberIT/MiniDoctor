@@ -1173,7 +1173,12 @@ class Game {
     this.cockpit.setDaylight(0.85 + 0.15 * Math.sin(this.mech.heading * 1.3), fx.flashLevel * (0.25 + inFront), new THREE.Color(1, 0.6, 0.3));
 
     this.cockpit.update(dt, this.time, { throttle: this.mech.throttle, turnInput: this.turnInput || 0, lookPitchRate: 0 }, this.hovered);
+    const w = this.arsenal.w;
+    const live = this.weaponLive || {};
     this.cockpit.hud.update(dt, {
+      q: this.mechObj.quaternion.clone().invert(),
+      maxSpeed: MECH.maxForward,
+      weapons: { master: live.master, ammo: w.gun.ammo, heat: w.gun.heat, overheated: w.gun.overheated, missiles: w.missiles.count, locked: w.missiles.locked },
       heading: this.mech.heading,
       speed: this.mech.speed,
       throttle: this.mech.throttle,
