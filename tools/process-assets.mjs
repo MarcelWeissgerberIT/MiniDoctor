@@ -12,7 +12,7 @@
 //   decals the 2x4 decal sheet cut into single trimmed decals
 //   pano   battlefield panorama made horizontally seamless and split in two halves
 //   ui     title key art
-//   glb    Meshy GLBs: textures to WebP (max 1024), welded, pruned, meshopt-compressed
+//   glb    Meshy GLBs: textures to WebP (max 1024), welded, world props simplified, meshopt-compressed
 //   audio  copied as is (loops are made seamless at runtime)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -315,9 +315,12 @@ async function processUi() {
 async function processGlb() {
   const { NodeIO } = await import('@gltf-transform/core');
   const { ALL_EXTENSIONS } = await import('@gltf-transform/extensions');
-  const { dedup, prune, weld, textureCompress, meshopt } = await import('@gltf-transform/functions');
-  const { MeshoptEncoder } = await import('meshoptimizer');
+  const { dedup, prune, weld, simplify, textureCompress, meshopt } = await import('@gltf-transform/functions');
+  const { MeshoptEncoder, MeshoptSimplifier } = await import('meshoptimizer');
   await MeshoptEncoder.ready;
+  await MeshoptSimplifier.ready;
+  // battlefield props are instanced many times and seen from afar: fewer triangles
+  const SIMPLIFY = { hedgehog: 0.25, ruin: 0.4, tank: 0.4 };
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
   const srcDir = path.join(SRC, 'glb');
   const dir = path.join(OUT, 'models');
@@ -325,9 +328,11 @@ async function processGlb() {
   for (const f of fs.readdirSync(srcDir).filter((f) => f.endsWith('.glb'))) {
     const doc = await io.read(path.join(srcDir, f));
     const max = 1024;
+    const ratio = SIMPLIFY[f.replace('.glb', '')];
     await doc.transform(
       dedup(),
       weld(),
+      ...(ratio ? [simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.012 })] : []),
       prune(),
       textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [max, max], quality: 85 }),
       meshopt({ encoder: MeshoptEncoder, level: 'medium' }),

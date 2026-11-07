@@ -470,10 +470,12 @@ const KEY_HINTS = {
 /* ----------------------------------------------------------------- boot */
 
 let game;
-const clock = new THREE.Clock();
+let last = performance.now();
 
 function loop() {
-  const dt = Math.min(0.05, clock.getDelta());
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
   game.update(dt);
   game.render();
   requestAnimationFrame(loop);

@@ -255,7 +255,11 @@ export class World {
 
   /* --------------------------------------------------------------- props */
 
-  instanced(name, count) {
+  /**
+   * Instanced copies of a Meshy model. Instances are grouped into clusters
+   * (one InstancedMesh each) so whole clusters outside the view get culled.
+   */
+  instanced(name, perCluster = 24) {
     const src = this.assets.models[name];
     if (!src) return null;
     let mesh = null;
@@ -280,17 +284,25 @@ export class World {
     const size = geo.boundingBox.getSize(new THREE.Vector3());
     const mat = mesh.material.clone();
     mat.envMapIntensity = 0.8;
-    const im = new THREE.InstancedMesh(geo, mat, count);
-    im.castShadow = true;
-    im.receiveShadow = true;
-    im.count = 0;
-    this.scene.add(im);
+    const clusters = new Map();
+    const cluster = (key) => {
+      if (!clusters.has(key)) {
+        const im = new THREE.InstancedMesh(geo, mat, perCluster);
+        im.castShadow = true;
+        im.receiveShadow = true;
+        im.count = 0;
+        this.scene.add(im);
+        clusters.set(key, im);
+      }
+      return clusters.get(key);
+    };
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     return {
-      mesh: im,
       size,
-      add: (x, z, rotY, scale, sink = 0, tilt = 0) => {
+      add: (x, z, rotY, scale, sink = 0, tilt = 0, group = 0) => {
+        const im = cluster(group);
+        if (im.count >= perCluster) return;
         const y = this.heightAt(x, z) - sink * scale;
         q.setFromEuler(new THREE.Euler(tilt * (R() - 0.5), rotY, tilt * (R() - 0.5)));
         m4.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(scale, scale, scale));
@@ -317,7 +329,7 @@ export class World {
     };
 
     // Meshy ruins
-    const ruins = this.instanced('ruin', 24);
+    const ruins = this.instanced('ruin', 1);
     if (ruins) {
       const fixed = [
         [-60, -210],
@@ -327,9 +339,9 @@ export class World {
       for (let i = 0; i < 22; i++) {
         const p = i < fixed.length ? fixed[i] : spot(140, 780, 18);
         if (!p) continue;
-        const height = 20 + r() * 16;
+        const height = 26 + r() * 20;
         const s = height / ruins.size.y;
-        ruins.add(p[0], p[1], r() * Math.PI * 2, s, 0.03);
+        ruins.add(p[0], p[1], r() * Math.PI * 2, s, 0.03, 0, i);
         const rad = Math.max(ruins.size.x, ruins.size.z) * s * 0.42;
         this.colliders.push({ x: p[0], z: p[1], r: rad });
         this.contacts.push({ x: p[0], z: p[1], type: 'struct' });
@@ -338,7 +350,7 @@ export class World {
     }
 
     // burnt-out tanks
-    const tanks = this.instanced('tank', 12);
+    const tanks = this.instanced('tank', 1);
     if (tanks) {
       const fixed = [
         [-22, -95],
@@ -348,7 +360,7 @@ export class World {
         const p = i < fixed.length ? fixed[i] : spot(70, 700, 8);
         if (!p) continue;
         const s = 10.2 / Math.max(tanks.size.x, tanks.size.z);
-        tanks.add(p[0], p[1], r() * Math.PI * 2, s, 0.05, 0.12);
+        tanks.add(p[0], p[1], r() * Math.PI * 2, s, 0.05, 0.12, i);
         this.colliders.push({ x: p[0], z: p[1], r: 4.8 });
         this.contacts.push({ x: p[0], z: p[1], type: 'struct' });
         if (i < 2 || r() < 0.45) this.fires.push({ x: p[0], z: p[1], scale: 3 + r() * 2.5, smoke: 1, y: 2.0 });
@@ -356,7 +368,7 @@ export class World {
     }
 
     // anti-tank hedgehog lines
-    const hog = this.instanced('hedgehog', 90);
+    const hog = this.instanced('hedgehog', 16);
     if (hog) {
       const s = 1.9 / hog.size.y;
       const lines = [
@@ -367,12 +379,12 @@ export class World {
         [-200, 220, -0.2, 14],
         [320, -420, 0.1, 12],
       ];
-      for (const [x0, z0, ang, n] of lines) {
+      for (const [li, [x0, z0, ang, n]] of lines.entries()) {
         for (let i = 0; i < n; i++) {
           const x = x0 + Math.cos(ang) * i * 7 + (r() - 0.5) * 2.5;
           const z = z0 + Math.sin(ang) * i * 7 + (r() - 0.5) * 2.5;
           if (Math.hypot(x, z) < 40) continue;
-          hog.add(x, z, r() * Math.PI, s * (0.9 + r() * 0.2), 0.05, 0.2);
+          hog.add(x, z, r() * Math.PI, s * (0.9 + r() * 0.2), 0.05, 0.2, li);
           this.colliders.push({ x, z, r: 1.4 });
         }
       }
