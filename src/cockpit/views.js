@@ -7,9 +7,10 @@ export const VIEWS = {
   left: { key: 'Digit3', label: 'Linke Konsole', pos: [-0.3, -0.06, -0.02], target: [-0.8, -0.48, 0.05], fov: 42 },
   right: { key: 'Digit4', label: 'Rechte Konsole', pos: [0.26, -0.08, 0.02], target: [0.76, -0.6, -0.06], fov: 48 },
   center: { key: 'Digit5', label: 'Mittelkonsole', pos: [0, -0.16, -0.22], target: [0, -0.76, -0.72], fov: 52 },
+  displays: { key: 'Digit6', label: 'Displays', pos: [0, -0.04, 0.02], target: [0, -0.37, -0.8], fov: 50 },
 };
 
-export const VIEW_ORDER = ['front', 'overhead', 'left', 'right', 'center'];
+export const VIEW_ORDER = ['front', 'overhead', 'left', 'right', 'center', 'displays'];
 
 /** which view shows a given control best (used by the tutorial hints) */
 export const CONTROL_VIEW = {
@@ -20,6 +21,8 @@ export const CONTROL_VIEW = {
   hydp: 'overhead',
   pump: 'overhead',
   wpnArm: 'overhead',
+  gun: 'overhead',
+  missile: 'overhead',
   ecm: 'overhead',
   reactor: 'center',
   stab: 'center',

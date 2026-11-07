@@ -83,6 +83,7 @@ export class Assets {
           if (o.material.map) o.material.map.anisotropy = Math.min(8, this.maxAniso);
         }
       });
+      gltf.scene.animations = gltf.animations;
       this.models[name] = gltf.scene;
     } catch (e) {
       console.warn('model missing', name, e);

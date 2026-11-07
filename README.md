@@ -1,10 +1,10 @@
 # BattleBot
 
-Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18 Tonnen schweren Kampfroboter (Mech), mitten in einem Krieg – aus einem engen, rostigen Cockpit. Wie in einem Flugzeug- oder Panzercockpit ist die Sicht nach draußen auf einen schmalen Panzerglasschlitz und zwei seitliche Sichtblöcke begrenzt.
+Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18 Tonnen schweren Kampfroboter (Mech), mitten in einem Krieg – außen verdreckter, rostiger Stahl, innen ein modernes, dunkles Cockpit. Wie in einem Flugzeug- oder Panzercockpit ist die Sicht nach draußen auf die Panzerglaskanzel und zwei seitliche Sichtblöcke begrenzt.
 
 *A browser first-person mech game. You board a 5 m combat robot, bring it up from cold and dark and walk it out of a forward base.*
 
-**Stand: Prototyp 0.2 – Cockpit und Mission 1 „Kalt & dunkel“.** Waffen und Gegner folgen in den nächsten Schritten.
+**Stand: Prototyp 0.3 – Mission 1 „Kalt & dunkel“ und Mission 2 „Feuertaufe“ mit Waffen, Gegnern und Außenansicht.**
 
 ## Mission 1 · Einweisung: Kalt & dunkel
 
@@ -31,12 +31,28 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 Fehler werden realistisch behandelt: Reaktor ohne Kühlung/Hydraulik zündet nicht (der Schalter springt zurück), Kühlpumpe im Betrieb aus → Überhitzung, Master Caution, Alarmleuchte und schließlich Reaktor-Notabschaltung. **Schnellstart** im Titelmenü überspringt Einstieg und Checkliste.
 
+## Mission 2 · Gefecht: Feuertaufe
+
+Eine Panzerkolonne rollt auf Sektor Kilo zu. Der Mech steht betriebsbereit an der Basis, die Waffen sind gesichert.
+
+1. **Waffen scharf machen** – Overhead-Panel (Taste 2): Schutzkappe öffnen, WEAPONS ARM, dann MAIN GUN und MISSILE.
+2. **Stellung beziehen** an der Panzersperre (Wegmarke 3, grüner Rauch).
+3. **Welle 1:** drei Kampfpanzer aus Nordost. **Welle 2:** zwei Panzer und ein Schützenpanzer aus Osten.
+
+**Waffen:** Die 30-mm-Kanone am rechten Arm folgt dem Helm (±70° seitlich), Feuer mit der linken Maustaste (halten = Dauerfeuer, 5 Schuss/s, Leuchtspur, Rückstoß, Mündungsfeuer erhellt die Kabine). Sie überhitzt bei Dauerfeuer. Lenkraketen aus dem Schulterwerfer: Ziel im gestrichelten Suchkreis halten, bis der Aufschaltton schnell wird (LOCK), dann **F**. Ohne Lock fliegen sie ungelenkt auf den Zielpunkt.
+
+**Gegner** fahren über das Gelände (Hindernissen ausweichend), halten auf Kampfentfernung an, drehen sich zum Mech und feuern. Leuchtspurgeschosse zeigen, woher es kommt; wer stehen bleibt, wird leichter getroffen, Fehlschüsse schlagen neben dir ein oder pfeifen vorbei. Treffer gehen auf Kopf, Torso, Arme oder Beine: das Licht setzt aus, Funken sprühen, die Scheibe kann reißen, ein roter Pfeil zeigt die Richtung. Zerstörter rechter Arm = Kanone tot, beschädigte Beine = langsamer. Mit etwas Pech **brennt es an Bord** (Rauch in der Kabine, Hitze steigt) – dann FIRE SUPPR an der Mittelkonsole umlegen (3 Löschflaschen). Kopf oder Torso auf 0 % = Mech zerstört. Am Ende gibt es eine Auswertung mit Abschüssen, Trefferquote und Einsatzzeit.
+
+**Helmdisplay (HMD):** Unabhängig von der Blickrichtung stehen Schub (−30…+100 %, Balken + Zahl), Geschwindigkeit und Fahrtrichtung immer links unten im Bild; rechts unten Munition, Rohrhitze, Raketen und Lock-Status, darüber der Schadenszustand. Feinde werden per Datenlink mit Rahmen und Entfernung markiert, außerhalb des Sichtfelds zeigen Pfeile am Rand in ihre Richtung.
+
+**Außenansicht (Taste 9):** Kamera hinter dem Mech, mit der Maus drehbar, Mausrad = Abstand. Der Mech ist dafür mit Meshy geriggt und läuft mit einer Gehanimation, die mit den simulierten Schritten synchronisiert ist. Steuern und schießen geht auch von außen.
+
 ## Starten
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # Logik-Tests (Mech-Bewegung, Kaltstart-Reihenfolge, Verriegelungen)
+npm test         # Logik-Tests (Mech-Bewegung, Kaltstart, Gang, Waffen, Schaden, Gegner-KI)
 npm run build    # statischer Build in dist/
 ```
 
@@ -44,9 +60,11 @@ Bei jedem Push auf `main` baut und veröffentlicht GitHub Actions das Spiel auf 
 
 ## Das Cockpit
 
+Modern und aufgeräumt wie im Einstiegsvideo: satiniertes Gunmetal, schlanke Streben, große dreigeteilte Panzerglaskanzel, schwarze Glas-Displays und bernsteinfarbene LED-Lichtlinien. (Die folgende Liste beschreibt die Ausstattung.)
+
 - **Panzerhülle** aus olivgrünen, rostigen Stahlplatten, genieteten Spanten, Diamant-Riffelblech am Boden, Hydraulikleitungen und Kabelbäumen.
 - **Sichtschlitz** aus drei verschmutzten Panzerglasscheiben (Kratzer, Staub, Schlieren), getrennt durch Stahlstreben, dazu zwei kleine seitliche Sichtblöcke. Der Kopf lässt sich nur begrenzt drehen (±105° seitlich, 38° hoch, 62° runter).
-- **Drei Röhren-Multifunktionsdisplays** (grüner Phosphor, Scanlines, Bildwölbung):
+- **Drei Glas-Multifunktionsdisplays** (scharf, doppelte Auflösung, große Schrift; Taste 6 zoomt auf die Displays):
   - *Mech Status*: Schadensbild der Baugruppen, Reaktor, Hitze, Kühlmittel, Hydraulik.
   - *Kamera*: Live-Bild der Bugkamera mit 4-fach-Zoom, Kompassband, Entfernungsmesser, Nachtsicht.
   - *Taktik*: Radar mit Sweep, Strukturen, Brände und feindliche Kontakte (500/1000 m).
@@ -63,7 +81,7 @@ Ein zerbombtes Stadtrandgebiet: Krater, ausgebrannte Panzerwracks, Gebäuderuine
 
 ## Panel-Ansichten und Zoom
 
-Wie in Flugsimulatoren kann man sich zu einzelnen Bedienfeldern hinbeugen: **1** Vorne (freier Blick), **2** Overhead-Panel, **3** linke Konsole (Elektrik: BATT, APU, Generatoren), **4** rechte Konsole, **5** Mittelkonsole (Reaktor, Gyro, Licht, Optik, HUD, Beinverriegelung). In einer Panel-Ansicht ist der Mauszeiger frei und Schalter werden direkt angeklickt; Esc, Rechtsklick oder dieselbe Taste führen zurück. Im freien Blick zoomt die **gedrückte rechte Maustaste** (z. B. um Displays zu lesen). Die Leiste unten am Bildschirm zeigt die Ansichten auch zum Anklicken.
+Wie in Flugsimulatoren kann man sich zu einzelnen Bedienfeldern hinbeugen: **1** Vorne (freier Blick), **2** Overhead-Panel (Waffen, Hydraulik, Kühlung), **3** linke Konsole (Elektrik: BATT, APU, Generatoren), **4** rechte Konsole, **5** Mittelkonsole (Reaktor, Gyro, Löschanlage, Licht, Optik, HUD, Beinverriegelung), **6** Displays, **9** Außenansicht. In einer Panel-Ansicht ist der Mauszeiger frei und Schalter werden direkt angeklickt; Esc, Rechtsklick oder dieselbe Taste führen zurück. Im freien Blick zoomt die **gedrückte rechte Maustaste** (z. B. um Displays zu lesen). Die Leiste unten am Bildschirm zeigt die Ansichten auch zum Anklicken.
 
 Die Instrumententafeln haben einen helleren Anstrich, größere hinterleuchtete Beschriftungen mit ON-Markierung und eigene kleine Panel-Leuchten.
 
@@ -72,12 +90,14 @@ Die Instrumententafeln haben einen helleren Anstrich, größere hinterleuchtete 
 | Eingabe | Aktion |
 |---|---|
 | Maus | umsehen (Klick fängt die Maus ein; alternativ mit gedrückter Taste ziehen) |
-| 1 – 5 | Panel-Ansicht: Vorne, Overhead, links, rechts, Mitte |
+| 1 – 6 | Panel-Ansicht: Vorne, Overhead, links, rechts, Mitte, Displays |
+| 9 | Außenansicht an/aus (Maus dreht, Mausrad zoomt) |
 | Rechte Maustaste | halten = Zoom · in Panel-Ansicht: zurück |
 | W / S | Schubhebel vor / zurück (bis −30 % rückwärts) |
 | X / Leertaste | Schub auf null |
 | A / D | Mech drehen |
-| Linksklick | Schalter unter dem Fadenkreuz betätigen |
+| Linksklick | Schalter unter dem Fadenkreuz betätigen · sonst Kanone feuern (Waffen scharf) |
+| F | Rakete starten |
 | Leertaste | Einstiegssequenz überspringen |
 | L / H / N / O | Kabinenlicht / HUD / Nachtsicht / Optik |
 | R | Radarreichweite |
@@ -104,6 +124,11 @@ Alle Grafiken, Modelle und Sounds wurden für dieses Projekt generiert:
 | Kabinenknarzen, Hydraulik pro Schritt, klappernde Ausrüstung | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
 | 22 Funksprüche des Ausbilders (Deutsch) | Higgsfield (Text-to-Speech, ElevenLabs-Engine, Stimme „Barrett“ – ausgewählt per deutscher Spracherkennung aus 8 Engine/Stimmen-Kandidaten) | `public/assets/voice/` |
 | Einstiegsvideo (Ego-Perspektive) | Higgsfield: Startbilder GPT Image 2.6 mit dem Mech als Referenz, Clips Kling 3.0 Pro, geschnitten mit ffmpeg | `public/assets/video/entry.{webm,mp4}` |
+| Feindlicher Kampfpanzer und Radschützenpanzer | **Meshy 7 Image-to-3D**, Vorlagen GPT Image 2.6 | `public/assets/models/enemy_{tank,apc}.glb` |
+| Geriggter, laufender BB-07 für die Außenansicht | **Meshy Rigging** mit Gehanimation | `public/assets/models/mech_rigged.glb` |
+| Feuerball, Mündungsfeuer, Glasbruch | Higgsfield (GPT Image 2.6) | `public/assets/fx/` |
+| Kanone, Raketenstart, Explosion, Panzertreffer, Funken, Panzerkanone, vorbeipfeifende Granate, Feuerlöscher | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
+| 12 Funksprüche für Mission 2 | Higgsfield (Text-to-Speech, ElevenLabs „Barrett“) | `public/assets/voice/m2_*.mp3` |
 
 `tools/process-assets.mjs` macht daraus spielfertige Dateien: Normal-Maps und gepackte ORM-Maps (Ambient Occlusion, Rauheit, Metallanteil) werden aus den Farbtexturen abgeleitet (Rost = rau und nicht-metallisch, blanker Stahl = metallisch), Texturen werden nahtlos gemacht, das Panorama wird horizontal nahtlos überblendet, die Decals ausgeschnitten und die GLBs mit WebP-Texturen und Meshopt komprimiert. Die Rohdateien liegen in `assets-src/` (nicht im Repo).
 
@@ -123,13 +148,18 @@ src/
   main.js              Spielablauf, Kamera-Rig, Verdrahtung der Systeme
   entry.js             Einstiegssequenz (Video mit Ton-Cues, Hinsetzen, Luke; Fallback-Kamerafahrt)
   cockpit/views.js     Panel-Ansichten (Position, Blickziel, Blickfeld)
-  tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken
+  tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken (auch Ablaufsteuerung für Mission 2)
+  mission2.js          Mission 2: Schritte, Angriffswellen, Funk-Callouts
+  combat/arsenal.js    Kanone, Leuchtspur, Lenkraketen, Einschläge
+  combat/enemies.js    Panzer/Schützenpanzer im Gelände, Granaten, Wracks
+  combat/hmd.js        Helmdisplay (Schub, Waffen, Zielmarken, Trefferrichtung)
+  logic/combat.js      Waffen-, Schadens- und Gegnerlogik (getestet)
   logic/mech.js        reine Bewegungslogik (getestet)
   logic/systems.js     Strom, APU, Hydraulik, Kühlung, Reaktor, Gyro, Beinverriegelung (getestet)
   logic/gait.js        Gang: Gewichtsverlagerung, Nachschwingen, Kopf-Feder, Pendel (getestet)
   cockpit/cockpit.js   Cockpit-Aufbau und Beleuchtung
   cockpit/instruments.js  Rundinstrumente, Kippschalter, Leuchttaster, Alarmleuchte
-  cockpit/displays.js  Röhrendisplays (Status, Kamera, Taktik)
+  cockpit/displays.js  Glas-Displays (Status, Kamera, Taktik)
   cockpit/hud.js       Head-up-Display
   world/world.js       Gelände, Panorama, Ruinen, Wracks
   world/effects.js     Feuer, Rauch, Asche, Leuchtspur, Artillerie

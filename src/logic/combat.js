@@ -32,8 +32,8 @@ export const MISSILE = {
 };
 
 export const ENEMY_TYPES = {
-  tank: { hp: 100, speed: 5.5, engage: 560, reload: [6, 9], shellSpeed: 900, damage: [10, 17], burst: 1, radius: 3.4, height: 2.6 },
-  apc: { hp: 60, speed: 8, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4 },
+  tank: { hp: 100, speed: 7, engage: 560, reload: [6, 9], shellSpeed: 900, damage: [10, 17], burst: 1, radius: 3.4, height: 2.6 },
+  apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4 },
 };
 
 export const PARTS = ['head', 'torso', 'larm', 'rarm', 'lleg', 'rleg'];

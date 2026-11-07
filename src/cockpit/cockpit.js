@@ -8,7 +8,7 @@ import { HUD } from './hud.js';
 // Cockpit coordinates: metres, pilot eye at the origin, looking down -Z.
 export const C = { floor: -1.25, ceil: 0.8, wallX: 1.08, back: 0.97 };
 const FRONT_TILT = 0.2; // the armoured visor leans back towards the pilot
-const WIN = { x0: -0.74, x1: 0.74, y0: -0.17, y1: 0.27 }; // window opening on the front plate
+const WIN = { x0: -0.84, x1: 0.84, y0: -0.17, y1: 0.36 }; // window opening on the front plate
 
 /**
  * The cockpit lives in its own scene that is rendered after the world with a
@@ -18,7 +18,10 @@ const WIN = { x0: -0.74, x1: 0.74, y0: -0.17, y1: 0.27 }; // window opening on t
 export class Cockpit {
   constructor(assets, feedTarget) {
     this.assets = assets;
-    this.m = assets.materials;
+    // the cockpit restyles the shared materials for itself (the world keeps the rugged ones):
+    // a modern cabin in satin gunmetal with thin trims and amber LED accents
+    this.m = Object.create(assets.materials);
+    this.modernize(assets);
     this.scene = new THREE.Scene();
     this.root = new THREE.Group();
     this.scene.add(this.root);
@@ -32,10 +35,6 @@ export class Cockpit {
     this.batt = false;
     this.main = false;
     this.batch = new StaticBatcher(this.root);
-    // instrument panels: dark grey crinkle paint, a few shades lighter than the consoles so
-    // switches and labels stand out
-    this.m.panel = this.m.console.clone();
-    this.m.panel.color = new THREE.Color(2.1, 2.15, 2.2);
     this.m.chrome = new THREE.MeshStandardMaterial({ color: 0xd8dadc, metalness: 1, roughness: 0.18 });
 
     RectAreaLightUniformsLib.init();
@@ -61,7 +60,30 @@ export class Cockpit {
     this.buildDust();
     this.buildMarker();
     this.buildTags();
+    this.buildDamage();
     this.batch.finalize();
+  }
+
+  /** clean, modern cabin materials instead of the rusty armour of the outside */
+  modernize(assets) {
+    const m = this.m;
+    const n = assets.tex.console.n;
+    const satin = (color, roughness, metalness, normal = 0.22) =>
+      new THREE.MeshStandardMaterial({ color, roughness, metalness, normalMap: n, normalScale: new THREE.Vector2(normal, normal), envMapIntensity: 0.75 });
+    m.armor = satin(0x4a5057, 0.48, 0.55); // walls, ceiling, hatch
+    m.console = satin(0x3a3f45, 0.85, 0.2, 0.3); // glare shield and console tops: matte, no hot spots
+    m.armorDark = satin(0x2a2e33, 0.42, 0.6); // pillars, console bodies, knee well
+    m.rivets = satin(0x30353a, 0.62, 0.55, 0.12); // ribs and frames
+    m.pipe = m.armorDark;
+    m.consoleMetal = satin(0x1b1e21, 0.32, 0.5, 0.08); // display and gauge bezels: black glossy
+    m.panel = satin(0x3c4249, 0.58, 0.35, 0.12); // switch panels (labels are back-lit)
+    m.trim = new THREE.MeshStandardMaterial({ color: 0xa9afb5, metalness: 1, roughness: 0.28 });
+    // thin amber LED strips where the old hazard tape was
+    m.led = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0) });
+    m.hazard = m.led;
+    const floor = assets.materials.floor.clone();
+    floor.color = new THREE.Color(0x5c6166);
+    m.floor = floor;
   }
 
   /* --------------------------------------------------------------- shell */
@@ -112,8 +134,8 @@ export class Cockpit {
     }
     // A-pillars between the visor and the side walls
     for (const sx of [-1, 1]) {
-      batch.add(rbox(0.2, 2.1, 0.24, 0.02, 0.8), m.armorDark, [sx * 0.99, -0.2, -0.92], [FRONT_TILT * 0.6, 0, 0]);
-      batch.add(rbox(0.05, 1.9, 0.05, 0.01, 0.5), m.hazard, [sx * 0.875, -0.26, -0.82], [FRONT_TILT * 0.6, 0, 0]);
+      batch.add(rbox(0.16, 2.1, 0.22, 0.03, 0.8), m.armorDark, [sx * 1.0, -0.2, -0.92], [FRONT_TILT * 0.6, 0, 0]);
+      batch.add(rbox(0.012, 1.9, 0.02, 0.004, 0.2), m.trim, [sx * 0.917, -0.26, -0.81], [FRONT_TILT * 0.6, 0, 0]);
     }
     // knee well / lower front
     batch.add(rbox(2.2, 0.9, 0.06, 0.01, 0.9), m.armorDark, [0, -0.85, -1.08]);
@@ -179,40 +201,27 @@ export class Cockpit {
     const plate = plateWithHoles([-1.12, -0.48, 1.12, 0.9, 0.01], [[WIN.x0, WIN.y0, WIN.x1, WIN.y1, 0.05]], 0.1, 0.9, 0.012);
     batch.add(plate, m.armor, [0, 0, -0.1], [0, 0, 0], front);
     // heavy inner frame around the opening
-    const fw = 0.075;
+    const fw = 0.04;
     const wy = (WIN.y0 + WIN.y1) / 2;
     const wh = WIN.y1 - WIN.y0;
     batch.add(rbox(WIN.x1 - WIN.x0 + 2 * fw, fw, 0.07, 0.014, 0.5), m.rivets, [0, WIN.y1 + fw / 2, 0.02], [0, 0, 0], front);
     batch.add(rbox(WIN.x1 - WIN.x0 + 2 * fw, fw, 0.07, 0.014, 0.5), m.rivets, [0, WIN.y0 - fw / 2, 0.02], [0, 0, 0], front);
     batch.add(rbox(fw, wh, 0.07, 0.014, 0.5), m.rivets, [WIN.x0 - fw / 2, wy, 0.02], [0, 0, 0], front);
     batch.add(rbox(fw, wh, 0.07, 0.014, 0.5), m.rivets, [WIN.x1 + fw / 2, wy, 0.02], [0, 0, 0], front);
-    // two struts split the visor into three panes
-    for (const x of [-0.25, 0.25]) {
-      batch.add(rbox(0.055, wh + 0.02, 0.11, 0.012, 0.5), m.armorDark, [x, wy, -0.03], [0, 0, 0], front);
-      for (const y of [WIN.y0 + 0.05, wy, WIN.y1 - 0.05]) {
-        batch.add(cyl(0.009, 0.009, 0.014, 6, 0.1), m.consoleMetal, [x, y, 0.027], [Math.PI / 2, 0, 0], front);
-      }
-    }
-    // bolts around the frame
-    const bolt = cyl(0.01, 0.01, 0.014, 6, 0.1);
-    for (let x = WIN.x0 - 0.02; x <= WIN.x1 + 0.03; x += 0.125) {
-      batch.add(bolt, m.consoleMetal, [x, WIN.y1 + fw / 2, 0.058], [Math.PI / 2, 0, 0], front);
-      batch.add(bolt, m.consoleMetal, [x, WIN.y0 - fw / 2, 0.058], [Math.PI / 2, 0, 0], front);
-    }
-    for (let y = WIN.y0 + 0.02; y <= WIN.y1; y += 0.11) {
-      batch.add(bolt, m.consoleMetal, [WIN.x0 - fw / 2, y, 0.058], [Math.PI / 2, 0, 0], front);
-      batch.add(bolt, m.consoleMetal, [WIN.x1 + fw / 2, y, 0.058], [Math.PI / 2, 0, 0], front);
-    }
-    // armoured glass panes (thick laminated, dirty)
+    // two slim struts split the canopy into three panes
+    const SX = 0.29;
+    for (const x of [-SX, SX]) batch.add(rbox(0.03, wh + 0.02, 0.08, 0.01, 0.4), m.armorDark, [x, wy, -0.03], [0, 0, 0], front);
+    // armoured glass panes (laminated, a little grimy)
     const panes = [
-      [WIN.x0 + 0.005, -0.25 - 0.028],
-      [-0.25 + 0.028, 0.25 - 0.028],
-      [0.25 + 0.028, WIN.x1 - 0.005],
+      [WIN.x0 + 0.005, -SX - 0.015],
+      [-SX + 0.015, SX - 0.015],
+      [SX + 0.015, WIN.x1 - 0.005],
     ];
+    this.paneRects = panes.map(([a, b]) => ({ x: (a + b) / 2, w: b - a, y: wy, h: wh - 0.01 }));
     for (const [a, b] of panes) this.addGlass(b - a, wh - 0.01, [(a + b) / 2, wy, -0.055], [0, 0, 0], 1, front);
-    // wiper park bracket + sun visor rail above the window
-    batch.add(rbox(1.5, 0.05, 0.12, 0.01, 0.5), m.console, [0, WIN.y1 + 0.13, 0.06], [-0.3, 0, 0], front);
-    batch.add(rbox(1.46, 0.012, 0.02, 0.004, 0.25), m.hazard, [0, WIN.y1 + 0.105, 0.125], [-0.3, 0, 0], front);
+    // brow above the canopy with an LED light line
+    batch.add(rbox(1.8, 0.05, 0.12, 0.015, 0.5), m.armorDark, [0, WIN.y1 + 0.1, 0.06], [-0.3, 0, 0], front);
+    batch.add(rbox(1.7, 0.006, 0.01, 0.002, 0.25), m.led, [0, WIN.y1 + 0.072, 0.118], [-0.3, 0, 0], front);
   }
 
   addGlass(w, h, p, r, grimeScale = 1, frame = null) {
@@ -221,7 +230,7 @@ export class Cockpit {
       color: 0x9aa39a,
       alphaMap: tex,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.6,
       roughness: 0.2,
       metalness: 0,
       depthWrite: false,
@@ -247,27 +256,29 @@ export class Cockpit {
     const { m, batch } = this;
     // sill / glare shield under the window
     batch.add(rbox(1.76, 0.06, 0.22, 0.015, 0.6), m.console, [0, -0.215, -0.93]);
-    batch.add(rbox(1.7, 0.014, 0.025, 0.004, 0.22), m.hazard, [0, -0.236, -0.825]);
+    batch.add(rbox(1.66, 0.005, 0.008, 0.002, 0.2), m.led, [0, -0.243, -0.82]);
 
     const dash = this.frame([0, -0.46, -0.78], [-0.5, 0, 0]);
     this.dash = dash;
     batch.add(rbox(1.7, 0.58, 0.07, 0.02, 0.7), m.panel, [0, 0, -0.035], [0, 0, 0], dash);
     // side cheeks of the dash
-    for (const sx of [-1, 1]) batch.add(rbox(0.06, 0.62, 0.14, 0.015, 0.6), m.consoleMetal, [sx * 0.86, 0, 0.0], [0, 0, 0], dash);
+    for (const sx of [-1, 1]) batch.add(rbox(0.06, 0.62, 0.14, 0.03, 0.6), m.armorDark, [sx * 0.86, 0, 0.0], [0, 0, 0], dash);
+    // light line along the top edge of the dash
+    batch.add(rbox(1.6, 0.006, 0.008, 0.002, 0.2), m.led, [0, 0.288, 0.0], [0, 0, 0], dash);
 
     // three MFDs
     const screens = [-0.52, 0, 0.52];
     this.mfd = {};
     const kinds = ['status', 'camera', 'tactical'];
     screens.forEach((x, i) => {
-      batch.add(rbox(0.42, 0.33, 0.04, 0.012, 0.4), m.consoleMetal, [x, 0.1, 0.012], [0, 0, 0], dash);
-      batch.add(rbox(0.33, 0.255, 0.01, 0.004, 0.4), m.blackPaint, [x, 0.1, 0.03], [0, 0, 0], dash);
+      batch.add(rbox(0.42, 0.33, 0.04, 0.02, 0.4), m.consoleMetal, [x, 0.1, 0.012], [0, 0, 0], dash);
+      batch.add(rbox(0.35, 0.265, 0.01, 0.004, 0.4), m.blackPaint, [x, 0.1, 0.03], [0, 0, 0], dash);
       // bezel push buttons
       for (let k = -2; k <= 2; k++) {
         for (const sx of [-1, 1]) batch.add(rbox(0.026, 0.022, 0.014, 0.003, 0.1), m.rubber, [x + sx * 0.185, 0.1 + k * 0.05, 0.036], [0, 0, 0], dash);
       }
       for (let k = -1.5; k <= 1.5; k++) batch.add(rbox(0.03, 0.018, 0.014, 0.003, 0.1), m.rubber, [x + k * 0.07, -0.045, 0.036], [0, 0, 0], dash);
-      const mfd = new MFD(0.3, 0.225, { feed: kinds[i] === 'camera' ? feedTarget : null });
+      const mfd = new MFD(0.34, 0.255, { feed: kinds[i] === 'camera' ? feedTarget : null });
       mfd.mesh.position.set(x, 0.1, 0.0365);
       dash.add(mfd.mesh);
       this.mfd[kinds[i]] = mfd;
@@ -367,9 +378,10 @@ export class Cockpit {
       // mounting arms forward onto the sill
       batch.add(rbox(0.014, 0.014, 0.26, 0.004, 0.1), m.consoleMetal, [sx * 0.19, -0.13, -0.12], [0.18, 0, 0], hudFrame);
     }
+    // the combiner tint only: a glossy material caught the cabin lamps as a white blob
     const comb = new THREE.Mesh(
       new THREE.PlaneGeometry(0.37, 0.22),
-      new THREE.MeshStandardMaterial({ color: 0x334433, transparent: true, opacity: 0.08, roughness: 0.05, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: 0x334433, transparent: true, opacity: 0.06, depthWrite: false }),
     );
     comb.position.z = -0.002;
     hudFrame.add(comb);
@@ -429,8 +441,9 @@ export class Cockpit {
       const x = sx * 0.8;
       batch.add(rbox(0.56, 0.66, 1.0, 0.02, 0.8), m.armorDark, [x, -0.92, -0.1]);
       batch.add(rbox(0.58, 0.03, 1.02, 0.01, 0.6), m.console, [x, -0.585, -0.1]);
-      // edge trim
-      batch.add(rbox(0.03, 0.04, 1.02, 0.006, 0.3), m.consoleMetal, [sx * 0.52, -0.585, -0.1]);
+      // edge trim with an LED line
+      batch.add(rbox(0.03, 0.04, 1.02, 0.008, 0.3), m.trim, [sx * 0.52, -0.585, -0.1]);
+      batch.add(rbox(0.006, 0.006, 0.96, 0.002, 0.2), m.led, [sx * 0.505, -0.6, -0.1]);
       // vent slots on the inner face
       for (let k = 0; k < 6; k++) batch.add(rbox(0.004, 0.014, 0.22, 0.002, 0.1), m.blackPaint, [sx * 0.519, -0.72 - k * 0.03, 0.12]);
     }
@@ -488,63 +501,18 @@ export class Cockpit {
 
   buildPlumbing() {
     const { m, batch } = this;
-    // hydraulic lines along both walls
-    for (const sx of [-1, 1]) {
-      const x = sx * (C.wallX - 0.07);
-      batch.add(tube([[x, -0.42, -0.95], [x, -0.42, -0.4], [x, -0.42, 0.2], [x, -0.44, 0.92]], 0.022, 0.4), m.pipe);
-      batch.add(tube([[x + sx * 0.005, -0.5, -0.95], [x, -0.5, 0.0], [x, -0.48, 0.92]], 0.016, 0.4), m.pipe);
-      for (const z of [-0.7, -0.1, 0.5]) {
-        batch.add(cyl(0.034, 0.034, 0.03, 12, 0.1), m.steel, [x, -0.42, z], [Math.PI / 2, 0, 0]);
-        batch.add(rbox(0.05, 0.12, 0.03, 0.005, 0.1), m.consoleMetal, [x + sx * 0.02, -0.46, z]);
-      }
-      // cable looms in the upper corners
-      for (let k = 0; k < 4; k++) {
-        const o = k * 0.028;
-        batch.add(
-          tube(
-            [
-              [sx * (C.wallX - 0.08 - o * 0.4), C.ceil - 0.08 - o * 0.5, -0.85],
-              [sx * (C.wallX - 0.14 - o * 0.3), C.ceil - 0.12 - o * 0.3, -0.2],
-              [sx * (C.wallX - 0.1 - o * 0.4), C.ceil - 0.09 - o * 0.5, 0.4],
-              [sx * (C.wallX - 0.08), C.ceil - 0.1 - o, 0.92],
-            ],
-            0.011 + (k % 2) * 0.004,
-            0.3,
-            6,
-          ),
-          m.hose,
-        );
-      }
-      // a sagging loom down the A-pillar
-      batch.add(
-        tube(
-          [
-            [sx * 0.86, C.ceil - 0.1, -0.78],
-            [sx * 0.9, 0.3, -0.88],
-            [sx * 0.88, -0.05, -0.86],
-            [sx * 0.84, -0.4, -0.8],
-          ],
-          0.018,
-          0.3,
-          8,
-        ),
-        m.hose,
-      );
-      // cable clamps
-      for (const z of [-0.6, 0.0, 0.6]) batch.add(rbox(0.05, 0.09, 0.03, 0.006, 0.1), m.consoleMetal, [sx * (C.wallX - 0.1), C.ceil - 0.11, z]);
-    }
-    // overhead conduit across the ceiling
-    batch.add(tube([[-1.0, C.ceil - 0.05, 0.6], [0, C.ceil - 0.07, 0.62], [1.0, C.ceil - 0.05, 0.6]], 0.03, 0.4), m.pipe);
-    // junction box on the right wall with breakers
-    batch.add(rbox(0.06, 0.3, 0.36, 0.008, 0.4), m.armorDark, [C.wallX - 0.06, 0.25, 0.2]);
-    for (let i = 0; i < 6; i++) batch.add(rbox(0.016, 0.03, 0.03, 0.003, 0.1), m.blackPaint, [C.wallX - 0.1, 0.3 - (i % 2) * 0.08, 0.08 + Math.floor(i / 2) * 0.1]);
+    // ceiling light lines over the pilot
+    for (const x of [-0.62, 0.62]) batch.add(rbox(0.01, 0.006, 1.5, 0.002, 0.2), m.led, [x, C.ceil - 0.098, 0.06]);
     // grab handles
     for (const sx of [-1, 1]) {
       batch.add(
         tube([[sx * (C.wallX - 0.06), 0.42, -0.4], [sx * (C.wallX - 0.13), 0.44, -0.3], [sx * (C.wallX - 0.13), 0.44, -0.05], [sx * (C.wallX - 0.06), 0.42, 0.05]], 0.012, 0.2),
-        m.hazard,
+        m.trim,
       );
     }
+    // junction box on the right wall with breakers
+    batch.add(rbox(0.06, 0.3, 0.36, 0.012, 0.4), m.armorDark, [C.wallX - 0.06, 0.25, 0.2]);
+    for (let i = 0; i < 6; i++) batch.add(rbox(0.016, 0.03, 0.03, 0.003, 0.1), m.blackPaint, [C.wallX - 0.1, 0.3 - (i % 2) * 0.08, 0.08 + Math.floor(i / 2) * 0.1]);
   }
 
   /* --------------------------------------------------------------- props */
@@ -637,13 +605,15 @@ export class Cockpit {
     this.scene.add(this.hatchLight, this.hatchLight.target);
 
     // small flood lamps over the overhead panel and both side panels (main power + cabin light)
+    // (placed so their hot spots do not mirror into the pilot's eye on the glossy parts)
     this.panelLights = [
-      [0, 0.38, -0.5],
-      [-0.66, -0.25, 0.12],
-      [0.66, -0.25, 0.0],
-      [0, -0.5, -0.5],
-    ].map((p) => {
-      const l = new THREE.PointLight(0xfff1dc, 0, 0.75, 1.6);
+      [0, 0.47, -0.36, 0.6],
+      [-0.66, -0.25, 0.12, 0.75],
+      [0.66, -0.25, 0.0, 0.75],
+      [0, -0.27, -0.64, 0.75],
+    ].map(([x, y, z, range]) => {
+      const p = [x, y, z];
+      const l = new THREE.PointLight(0xf6f3ec, 0, range, 1.6);
       l.position.set(...p);
       this.scene.add(l);
       return l;
@@ -668,13 +638,13 @@ export class Cockpit {
     this.scene.add(this.windowLight, this.windowLight.target);
 
     // soft fill from the whole window area
-    this.windowFill = new THREE.RectAreaLight(0xc8ccd4, 1.6, 1.5, 0.45);
+    this.windowFill = new THREE.RectAreaLight(0xc8ccd4, 1.6, 1.7, 0.55);
     this.windowFill.position.set(0, 0.06, -0.98);
     this.windowFill.lookAt(0, -0.3, 0);
     this.scene.add(this.windowFill);
 
     // warm dome light behind the pilot
-    this.dome = new THREE.SpotLight(0xffc98a, 6, 3.2, 1.25, 0.85, 1.4);
+    this.dome = new THREE.SpotLight(0xf2ecdf, 6, 3.2, 1.25, 0.85, 1.4);
     this.dome.position.set(0, C.ceil - 0.05, 0.45);
     this.dome.target.position.set(0, -0.8, -0.6);
     this.dome.castShadow = true;
@@ -847,6 +817,128 @@ export class Cockpit {
     this.tagPair.rotation.y = Math.sin(this.tagSpin) * 0.9;
   }
 
+  /* -------------------------------------------------------------- damage */
+
+  /** visor cracks, sparks and the glow of a cabin fire */
+  buildDamage() {
+    this.cracks = (this.paneRects || []).map((r) => {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xe6edf0, alphaMap: this.assets.fx.crack, transparent: true, opacity: 0, depthWrite: false });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.h), mat);
+      mesh.position.set(r.x, r.y, -0.05);
+      mesh.renderOrder = 6;
+      mesh.visible = false;
+      this.front.add(mesh);
+      return mesh;
+    });
+    const n = 120;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    this.sparkMat = new THREE.PointsMaterial({
+      size: 0.012,
+      map: this.dustMat.map,
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.sparkPts = new THREE.Points(geo, this.sparkMat);
+    this.sparkPts.frustumCulled = false;
+    this.root.add(this.sparkPts);
+    this.sparkList = [];
+    this.fireLight = new THREE.PointLight(0xff6a20, 0, 2.2, 1.6);
+    this.fireLight.position.set(0.3, -0.95, -0.35);
+    this.scene.add(this.fireLight);
+    this.muzzleLight = new THREE.PointLight(0xffb070, 0, 4, 1.4);
+    this.muzzleLight.position.set(0.9, -0.3, -1.3);
+    this.scene.add(this.muzzleLight);
+    this.fireLevel = 0;
+    this.flash = 0;
+  }
+
+  sparks(p, count = 30) {
+    for (let i = 0; i < count; i++) {
+      if (this.sparkList.length >= 120) this.sparkList.shift();
+      this.sparkList.push({
+        p: new THREE.Vector3(...p),
+        v: new THREE.Vector3((Math.random() - 0.5) * 2.4, Math.random() * 1.6, (Math.random() - 0.5) * 2.4),
+        age: 0,
+        life: 0.4 + Math.random() * 0.7,
+      });
+    }
+  }
+
+  /** a shell hits the mech: lights dip, sparks fly, the visor may crack */
+  hit(strength, part) {
+    this.jolt(1 + strength);
+    if (this.main) this.power *= 0.3;
+    const spots = [
+      [-0.62, -0.28, -0.72],
+      [0.62, -0.28, -0.72],
+      [0, 0.52, -0.5],
+      [-0.95, 0.15, -0.25],
+      [0.95, 0.15, -0.25],
+      [0.4, -0.75, -0.6],
+    ];
+    this.sparks(spots[Math.floor(Math.random() * spots.length)], 24 + Math.round(strength * 30));
+    if (part === 'head' || Math.random() < 0.18) this.crack();
+  }
+
+  crack() {
+    const c = this.cracks[Math.floor(Math.random() * this.cracks.length)];
+    if (!c) return;
+    if (!c.visible) {
+      c.visible = true;
+      c.rotation.z = Math.random() * Math.PI * 2;
+      c.scale.setScalar(1 + Math.random() * 0.3);
+    }
+    c.material.opacity = Math.min(0.9, c.material.opacity + 0.45);
+  }
+
+  clearDamage() {
+    for (const c of this.cracks) {
+      c.visible = false;
+      c.material.opacity = 0;
+    }
+    this.sparkList.length = 0;
+    this.fireLevel = 0;
+  }
+
+  /** the own gun lights up the right side of the cabin */
+  gunFlash() {
+    this.flash = 1;
+  }
+
+  updateDamage(dt, time) {
+    const pos = this.sparkPts.geometry.attributes.position;
+    const col = this.sparkPts.geometry.attributes.color;
+    let n = 0;
+    for (let i = this.sparkList.length - 1; i >= 0; i--) {
+      const s = this.sparkList[i];
+      s.age += dt;
+      if (s.age > s.life) {
+        this.sparkList.splice(i, 1);
+        continue;
+      }
+      s.v.y -= 6 * dt;
+      s.p.addScaledVector(s.v, dt);
+      if (s.p.y < C.floor + 0.02) {
+        s.p.y = C.floor + 0.02;
+        s.v.y *= -0.3;
+      }
+      const k = 1 - s.age / s.life;
+      pos.setXYZ(n, s.p.x, s.p.y, s.p.z);
+      col.setXYZ(n, 3 * k, 1.5 * k, 0.5 * k);
+      n++;
+    }
+    this.sparkPts.geometry.setDrawRange(0, n);
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+    this.fireLight.intensity = this.fireLevel * (2.5 + 1.2 * Math.sin(time * 17) * Math.sin(time * 7.3));
+    this.flash = Math.max(0, this.flash - dt * 22);
+    this.muzzleLight.intensity = this.flash * 8;
+  }
+
   /** a footstep shakes dust loose */
   jolt(strength) {
     for (const k in this.mfd) this.mfd[k].uniforms.jolt.value = Math.max(this.mfd[k].uniforms.jolt.value, strength);
@@ -904,6 +996,7 @@ export class Cockpit {
     for (const c of this.controls) c.update(dt, hovered === c, time, lampPower);
     for (const k in this.mfd) this.mfd[k].update(dt, time);
     this.updateDust(dt, time);
+    this.updateDamage(dt, time);
 
     // lights follow the buses and switches
     this.flickerJolt = Math.max(0, (this.flickerJolt ?? 0) - dt * 5);
@@ -924,6 +1017,8 @@ export class Cockpit {
     const back = Math.max(p * 0.75, this.batt ? 0.22 : 0);
     for (const mat of LABEL_MATERIALS) mat.emissiveIntensity = back * mat.userData.glow;
     for (const l of this.panelLights) l.intensity = (this.lightsOn ? 0.55 : 0.25) * p;
+    const led = this.batt ? 0.35 + 0.65 * p : 0;
+    this.m.led.color.setRGB(1.05 * led, 0.5 * led, 0.17 * led);
 
     // stick and throttle follow the controls
     if (this.throttle) this.throttle.rotation.x = -s.throttle * 0.45;

@@ -5,6 +5,7 @@
 export const WAYPOINTS = [
   { x: 6, z: -115, label: 'WP 1' },
   { x: 92, z: -168, label: 'WP 2' },
+  { x: 114, z: -246, label: 'WP 3' }, // behind the hedgehog line (mission 2)
 ];
 
 export const VOICE_TEXT = {
@@ -52,9 +53,12 @@ export const STEPS = [
 ];
 
 export class Tutorial {
-  constructor(game, ui) {
+  constructor(game, ui, steps = STEPS, text = VOICE_TEXT, title = 'CHECKLISTE · KALTSTART') {
     this.g = game;
     this.ui = ui;
+    this.steps = steps;
+    this.text = text;
+    this.title = title;
     this.index = -1;
     this.t = 0;
     this.active = false;
@@ -63,18 +67,19 @@ export class Tutorial {
 
   start() {
     this.active = true;
-    this.ui.checklist(STEPS, 0);
+    this.finished = false;
+    this.ui.checklist(this.steps, 0, this.title);
     this.go(0);
   }
 
   get step() {
-    return STEPS[this.index];
+    return this.steps[this.index];
   }
 
   go(i) {
     this.index = i;
     this.t = 0;
-    const s = STEPS[i];
+    const s = this.steps[i];
     if (!s) {
       this.active = false;
       this.finished = true;
@@ -82,9 +87,10 @@ export class Tutorial {
       this.g.onTutorialDone?.();
       return;
     }
-    this.ui.checklist(STEPS, i);
-    if (s.voice) this.g.radio.say(s.voice, VOICE_TEXT[s.voice]);
+    this.ui.checklist(this.steps, i, this.title);
+    if (s.voice) this.g.say(s.voice, this.text[s.voice]);
     this.g.setWaypoint(s.waypoint ?? null);
+    s.start?.(this.g);
   }
 
   targetKey() {

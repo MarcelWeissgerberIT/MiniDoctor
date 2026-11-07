@@ -682,6 +682,7 @@ export class World {
       new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1, side: THREE.BackSide }),
     );
     opening.position.set(0, b.hatchY, b.backZ - 0.2);
+    this.mechOpening = opening;
     this.playerMech.add(this.mechHatch, opening);
   }
 

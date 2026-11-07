@@ -51,6 +51,20 @@ void main(){
   gl_FragColor = vec4(c, a);
 }`;
 
+// fireball / muzzle flash sprite: additive texture, rotated, fading with alpha
+const spriteFrag = /* glsl */ `
+uniform sampler2D map;
+varying vec2 vUv; varying float vAlpha; varying float vSeed; varying float vDepth;
+${FOG}
+void main(){
+  vec3 c = texture2D(map, vUv).rgb;
+  // burn out from yellow-white to deep orange as it ages (seed carries the age)
+  c *= mix(vec3(1.25, 1.1, 0.9), vec3(1.0, 0.45, 0.18), clamp(vSeed, 0.0, 1.0));
+  c *= vAlpha * 3.0;
+  c *= 1.0 - fogF(vDepth) * 0.8;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
 const flashFrag = /* glsl */ `
 varying vec2 vUv; varying float vAlpha; varying float vSeed; varying float vDepth;
 void main(){
@@ -154,6 +168,44 @@ export class Effects {
     this.flashes.mesh.renderOrder = 4;
     scene.add(this.flashes.mesh);
 
+    // light-brown dust kicked up by impacts and tracks
+    this.dustMat = this.smokeMat.clone();
+    this.dustMat.uniforms.map = { value: assets.fx.smoke };
+    this.dustMat.uniforms.color = { value: new THREE.Color(0.24, 0.2, 0.16) };
+    this.dustMat.uniforms.glow = { value: new THREE.Color(0.6, 0.32, 0.12) };
+    this.dustMat.uniforms.fogColor = fog.fogColor;
+    this.dustMat.uniforms.fogDensity = fog.fogDensity;
+    this.dust = new BillboardSet(500, this.dustMat);
+    this.dust.mesh.renderOrder = 2;
+    scene.add(this.dust.mesh);
+
+    // fireballs and muzzle flashes
+    const sprite = (map) =>
+      new THREE.ShaderMaterial({
+        uniforms: { map: { value: map }, ...fog },
+        vertexShader: billboardVert,
+        fragmentShader: spriteFrag,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      });
+    this.fireballs = new BillboardSet(48, sprite(assets.fx.fireball));
+    this.fireballs.mesh.renderOrder = 4;
+    scene.add(this.fireballs.mesh);
+    this.muzzles = new BillboardSet(24, sprite(assets.fx.muzzle));
+    this.muzzles.mesh.renderOrder = 4;
+    scene.add(this.muzzles.mesh);
+    this.balls = [];
+    this.muzzleList = [];
+    this.dustParticles = [];
+    // short-lived lights for explosions and muzzle flashes near the camera
+    this.blastLights = [];
+    for (let i = 0; i < 3; i++) {
+      const l = new THREE.PointLight(0xffa050, 0, 90, 2);
+      scene.add(l);
+      this.blastLights.push({ light: l, t: 0, life: 1, power: 0 });
+    }
+
     this.fires = [];
     this.particles = [];
     this.flashList = [];
@@ -184,7 +236,14 @@ export class Effects {
         seed: Math.random(),
       });
     }
-    this.fires.push({ ...f, y, flames, emit: 0 });
+    const fire = { ...f, y, flames, emit: 0 };
+    this.fires.push(fire);
+    return fire;
+  }
+
+  removeFire(fire) {
+    const i = this.fires.indexOf(fire);
+    if (i >= 0) this.fires.splice(i, 1);
   }
 
   spawnSmoke(x, y, z, size, life, rise, glow = 0.6, alpha = 0.55) {
@@ -205,6 +264,76 @@ export class Effects {
       glow,
       alpha,
     });
+  }
+
+  spawnDust(x, y, z, size, life, rise, alpha = 0.6) {
+    if (this.dustParticles.length >= this.dust.max) this.dustParticles.shift();
+    this.dustParticles.push({
+      x,
+      y,
+      z,
+      vx: (Math.random() - 0.5) * 2,
+      vy: rise * (0.6 + Math.random() * 0.8),
+      vz: (Math.random() - 0.5) * 2,
+      size,
+      grow: size * (0.6 + Math.random() * 0.5),
+      rot: Math.random() * 6.28,
+      vr: (Math.random() - 0.5) * 0.4,
+      age: 0,
+      life,
+      glow: 0,
+      alpha,
+    });
+  }
+
+  blastLight(x, y, z, power, life) {
+    const b = this.blastLights.reduce((a, c) => (c.t / c.life > a.t / a.life || c.power === 0 ? c : a));
+    b.light.position.set(x, y, z);
+    b.t = 0;
+    b.life = life;
+    b.power = power;
+  }
+
+  /** a vehicle or a missile goes up: fireball, flash, black smoke, debris dust */
+  explosion(x, y, z, size = 8, { smoke = 1, light = 1 } = {}) {
+    const n = 3 + Math.round(size / 4);
+    for (let i = 0; i < n; i++) {
+      if (this.balls.length >= this.fireballs.max) this.balls.shift();
+      this.balls.push({
+        x: x + (Math.random() - 0.5) * size * 0.35,
+        y: y + Math.random() * size * 0.3,
+        z: z + (Math.random() - 0.5) * size * 0.35,
+        size: size * (0.55 + Math.random() * 0.5),
+        rot: Math.random() * 6.28,
+        vr: (Math.random() - 0.5) * 1.2,
+        vy: 1 + Math.random() * size * 0.25,
+        age: -i * 0.05,
+        life: 0.55 + Math.random() * 0.45 + size * 0.02,
+      });
+    }
+    this.flashList.push({ x, y: y + 1, z, size: size * 4, age: 0, life: 0.25 });
+    for (let i = 0; i < Math.round(6 * smoke + size * 0.6); i++) {
+      this.spawnSmoke(x + (Math.random() - 0.5) * size * 0.5, y + Math.random() * size * 0.4, z + (Math.random() - 0.5) * size * 0.5, size * 0.6, 7 + Math.random() * 8, 2 + Math.random() * 3, 0.9, 0.8);
+    }
+    for (let i = 0; i < 5; i++) this.spawnDust(x + (Math.random() - 0.5) * size, y, z + (Math.random() - 0.5) * size, size * 0.5, 3 + Math.random() * 3, 3, 0.5);
+    if (light) this.blastLight(x, y + 2, z, 900 * light * (size / 8), 0.6);
+  }
+
+  /** a round hits the ground (dust) or armour (sparks + small flash) */
+  impact(x, y, z, kind = 'ground', scale = 1) {
+    if (kind === 'ground') {
+      for (let i = 0; i < 3; i++) this.spawnDust(x + (Math.random() - 0.5), y + 0.3, z + (Math.random() - 0.5), 1.4 * scale, 1.8 + Math.random() * 1.5, 2.5 + Math.random() * 2, 0.7);
+      if (this.balls.length < this.fireballs.max) this.balls.push({ x, y: y + 0.4, z, size: 1.2 * scale, rot: Math.random() * 6, vr: 0, vy: 0, age: 0, life: 0.12 });
+    } else {
+      if (this.balls.length >= this.fireballs.max) this.balls.shift();
+      this.balls.push({ x, y, z, size: 2.2 * scale, rot: Math.random() * 6, vr: 0, vy: 0, age: 0, life: 0.14 });
+      this.spawnSmoke(x, y, z, 1.2 * scale, 1.5, 1.5, 0.5, 0.5);
+    }
+  }
+
+  muzzle(x, y, z, size = 2) {
+    if (this.muzzleList.length >= this.muzzles.max) this.muzzleList.shift();
+    this.muzzleList.push({ x, y, z, size, rot: Math.random() * 6.28, age: 0, life: 0.07 });
   }
 
   flareEmit(dt, x, y, z) {
@@ -362,6 +491,58 @@ export class Effects {
       this.smoke.set(si++, p.x, p.y, p.z, size, p.rot, a, p.glow * Math.max(0, 1 - t * 4));
     }
     this.smoke.commit(si);
+
+    let di = 0;
+    for (let i = this.dustParticles.length - 1; i >= 0; i--) {
+      const p = this.dustParticles[i];
+      p.age += dt;
+      if (p.age > p.life) {
+        this.dustParticles.splice(i, 1);
+        continue;
+      }
+      const t = p.age / p.life;
+      p.x += (p.vx + wind * t) * dt;
+      p.y += p.vy * dt * (1 - t);
+      p.z += p.vz * dt;
+      p.rot += p.vr * dt;
+      const a = p.alpha * Math.min(1, p.age * 6) * (1 - t) ** 1.5;
+      this.dust.set(di++, p.x, p.y, p.z, p.size + p.grow * p.age, p.rot, a, 0);
+    }
+    this.dust.commit(di);
+
+    let bi = 0;
+    for (let i = this.balls.length - 1; i >= 0; i--) {
+      const b = this.balls[i];
+      b.age += dt;
+      if (b.age > b.life) {
+        this.balls.splice(i, 1);
+        continue;
+      }
+      if (b.age < 0) continue;
+      const t = b.age / b.life;
+      b.y += b.vy * dt;
+      b.rot += b.vr * dt;
+      const a = Math.min(1, (1 - t) * 1.6) * (t < 0.1 ? t * 10 : 1);
+      this.fireballs.set(bi++, b.x, b.y, b.z, b.size * (0.45 + 0.75 * Math.sqrt(t)), b.rot, a, t);
+    }
+    this.fireballs.commit(bi);
+    let mi = 0;
+    for (let i = this.muzzleList.length - 1; i >= 0; i--) {
+      const m = this.muzzleList[i];
+      m.age += dt;
+      if (m.age > m.life) {
+        this.muzzleList.splice(i, 1);
+        continue;
+      }
+      this.muzzles.set(mi++, m.x, m.y, m.z, m.size, m.rot, 1 - m.age / m.life, 0);
+    }
+    this.muzzles.commit(mi);
+    for (const b of this.blastLights) {
+      b.t += dt;
+      const k = Math.max(0, 1 - b.t / b.life);
+      b.light.intensity = b.power * k * k;
+      if (k === 0) b.power = 0;
+    }
 
     let fi2 = 0;
     for (let i = this.flareParticles.length - 1; i >= 0; i--) {
