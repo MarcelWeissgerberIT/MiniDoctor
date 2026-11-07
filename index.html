@@ -15,11 +15,25 @@
     <div id="lockhint">Klicken = Maus einfangen · oder mit gedrückter Maustaste ziehen zum Umsehen</div>
     <div id="subtitle"></div>
     <div id="arrow"></div>
+    <div id="arrowlabel"></div>
+    <nav id="views">
+      <button data-view="front" class="on"><b>1</b> Vorne</button>
+      <button data-view="overhead"><b>2</b> Overhead</button>
+      <button data-view="left"><b>3</b> Links</button>
+      <button data-view="right"><b>4</b> Rechts</button>
+      <button data-view="center"><b>5</b> Mitte</button>
+    </nav>
     <div id="skiphint">Leertaste: Einstieg überspringen</div>
     <aside id="checklist">
       <header><span>CHECKLISTE · KALTSTART</span><span class="state"></span></header>
       <ol></ol>
     </aside>
+    <div id="videolayer">
+      <video id="introvideo" playsinline muted preload="auto">
+        <source src="assets/video/entry.webm" type="video/webm" />
+        <source src="assets/video/entry.mp4" type="video/mp4" />
+      </video>
+    </div>
     <div id="fade"></div>
 
     <section id="title">
@@ -62,6 +76,9 @@
         <tr><td>R</td><td>Radarreichweite 500 / 1000 m</td></tr>
         <tr><td>G</td><td>Gyro-Stabilisator</td></tr>
         <tr><td>Q</td><td>Master Caution quittieren</td></tr>
+        <tr><td>1 – 5</td><td>Ansicht: Vorne, Overhead, linke / rechte Konsole, Mittelkonsole (Schalter dann direkt mit dem Mauszeiger anklicken)</td></tr>
+        <tr><td>Rechte Maustaste</td><td>halten = Zoom · in einer Panel-Ansicht: zurück nach vorne</td></tr>
+        <tr><td>Esc</td><td>aus der Panel-Ansicht zurück</td></tr>
         <tr><td>C</td><td>Blick zentrieren</td></tr>
         <tr><td>M</td><td>Ton an / aus</td></tr>
         <tr><td>F1 / Tab</td><td>diese Hilfe</td></tr>

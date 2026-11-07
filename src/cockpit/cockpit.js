@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 import { rbox, cyl, plateWithHoles, tube, StaticBatcher, fitModel } from '../geom.js';
-import { Gauge, ToggleSwitch, LampButton, AlarmLamp, makeLabel } from './instruments.js';
+import { Gauge, ToggleSwitch, LampButton, AlarmLamp, makeLabel, LABEL_MATERIALS } from './instruments.js';
 import { MFD } from './displays.js';
 import { HUD } from './hud.js';
 
@@ -32,6 +32,11 @@ export class Cockpit {
     this.batt = false;
     this.main = false;
     this.batch = new StaticBatcher(this.root);
+    // instrument panels: dark grey crinkle paint, a few shades lighter than the consoles so
+    // switches and labels stand out
+    this.m.panel = this.m.console.clone();
+    this.m.panel.color = new THREE.Color(2.1, 2.15, 2.2);
+    this.m.chrome = new THREE.MeshStandardMaterial({ color: 0xd8dadc, metalness: 1, roughness: 0.18 });
 
     RectAreaLightUniformsLib.init();
     this.frame = (p, r) => {
@@ -246,7 +251,7 @@ export class Cockpit {
 
     const dash = this.frame([0, -0.46, -0.78], [-0.5, 0, 0]);
     this.dash = dash;
-    batch.add(rbox(1.7, 0.58, 0.07, 0.02, 0.7), m.console, [0, 0, -0.035], [0, 0, 0], dash);
+    batch.add(rbox(1.7, 0.58, 0.07, 0.02, 0.7), m.panel, [0, 0, -0.035], [0, 0, 0], dash);
     // side cheeks of the dash
     for (const sx of [-1, 1]) batch.add(rbox(0.06, 0.62, 0.14, 0.015, 0.6), m.consoleMetal, [sx * 0.86, 0, 0.0], [0, 0, 0], dash);
 
@@ -318,7 +323,7 @@ export class Cockpit {
 
     // lower dash panel with a toggle row (optics, NV, ...)
     const low = this.frame([0, -0.84, -0.7], [-0.18, 0, 0]);
-    batch.add(rbox(1.5, 0.27, 0.06, 0.015, 0.7), m.console, [0, 0, -0.03], [0, 0, 0], low);
+    batch.add(rbox(1.5, 0.27, 0.06, 0.015, 0.7), m.panel, [0, 0, -0.03], [0, 0, 0], low);
     batch.add(rbox(1.52, 0.016, 0.02, 0.004, 0.22), m.hazard, [0, 0.14, 0.0], [0, 0, 0], low);
     const toggles = [
       ['optics', 'OPTICS', -0.45, false],
@@ -375,7 +380,7 @@ export class Cockpit {
   buildOverhead() {
     const { m, batch } = this;
     const oh = this.frame([0, 0.6, -0.62], [0.78, 0, 0]);
-    batch.add(rbox(1.22, 0.34, 0.07, 0.015, 0.6), m.console, [0, 0, -0.035], [0, 0, 0], oh);
+    batch.add(rbox(1.22, 0.34, 0.07, 0.015, 0.6), m.panel, [0, 0, -0.035], [0, 0, 0], oh);
     batch.add(rbox(1.22, 0.014, 0.03, 0.004, 0.22), m.hazard, [0, -0.17, 0.0], [0, 0, 0], oh);
     const defs = [
       ['wpnArm', 'WEAPONS\nARM', -0.48, true],
@@ -430,8 +435,21 @@ export class Cockpit {
       for (let k = 0; k < 6; k++) batch.add(rbox(0.004, 0.014, 0.22, 0.002, 0.1), m.blackPaint, [sx * 0.519, -0.72 - k * 0.03, 0.12]);
     }
     // small switch panel on the left console
-    const lp = this.frame([-0.82, -0.565, 0.1], [-Math.PI / 2 + 0.3, 0, 0]);
-    batch.add(rbox(0.38, 0.26, 0.03, 0.008, 0.3), m.consoleMetal, [0, 0, -0.012], [0, 0, 0], lp);
+    // side panels lie on the consoles, tilted up towards the pilot
+    const sidePanel = (pos, normal) => {
+      const o = new THREE.Object3D();
+      o.position.set(...pos);
+      o.lookAt(pos[0] + normal[0], pos[1] + normal[1], pos[2] + normal[2]);
+      this.root.add(o);
+      o.updateMatrixWorld(true);
+      return o;
+    };
+    // pedestals so the tilted panels sit above the console tops
+    batch.add(rbox(0.07, 0.15, 0.3, 0.01, 0.3), m.consoleMetal, [-0.94, -0.5, 0.06]);
+    batch.add(rbox(0.07, 0.14, 0.22, 0.01, 0.3), m.consoleMetal, [0.99, -0.505, 0.1]);
+    const lp = sidePanel([-0.8, -0.47, 0.06], [0.5, 0.85, -0.12]);
+    batch.add(rbox(0.44, 0.29, 0.03, 0.008, 0.3), m.panel, [0, 0, -0.016], [0, 0, 0], lp);
+    batch.add(rbox(0.45, 0.012, 0.02, 0.004, 0.2), m.hazard, [0, 0.15, -0.004], [0, 0, 0], lp);
     const elec = [
       ['batt', 'BATT', true],
       ['apu', 'APU'],
@@ -457,11 +475,11 @@ export class Cockpit {
     this.lamps.batt = battLamp;
     this.controls.push(battLamp);
     const elecLabel = makeLabel('ELECTRICAL', 0.16, 0.025, { size: 34, h: 64, w: 512 });
-    elecLabel.position.set(0.11, 0.09, 0.001);
+    elecLabel.position.set(0.125, 0.095, 0.001);
     lp.add(elecLabel);
     // keypad on the right console
-    const rp = this.frame([0.88, -0.565, 0.12], [-Math.PI / 2 + 0.25, 0, 0]);
-    batch.add(rbox(0.24, 0.2, 0.03, 0.008, 0.3), m.consoleMetal, [0, 0, -0.012], [0, 0, 0], rp);
+    const rp = sidePanel([0.86, -0.48, 0.1], [-0.5, 0.85, -0.12]);
+    batch.add(rbox(0.26, 0.22, 0.03, 0.008, 0.3), m.panel, [0, 0, -0.016], [0, 0, 0], rp);
     for (let r = 0; r < 4; r++)
       for (let c = 0; c < 3; c++) batch.add(rbox(0.045, 0.034, 0.014, 0.004, 0.1), m.rubber, [-0.055 + c * 0.055, 0.06 - r * 0.042, 0.006], [0, 0, 0], rp);
   }
@@ -604,7 +622,7 @@ export class Cockpit {
 
   buildLights() {
     // very low ambient so nothing is pitch black
-    this.ambient = new THREE.HemisphereLight(0x8a8f96, 0x2a221a, 0.12);
+    this.ambient = new THREE.HemisphereLight(0x8a8f96, 0x2a221a, 0.2);
     this.scene.add(this.ambient);
 
     // daylight through the open crew hatch (boarding)
@@ -617,6 +635,19 @@ export class Cockpit {
     this.hatchLight.shadow.normalBias = 0.02;
     this.hatchLight.visible = false;
     this.scene.add(this.hatchLight, this.hatchLight.target);
+
+    // small flood lamps over the overhead panel and both side panels (main power + cabin light)
+    this.panelLights = [
+      [0, 0.38, -0.5],
+      [-0.66, -0.25, 0.12],
+      [0.66, -0.25, 0.0],
+      [0, -0.5, -0.5],
+    ].map((p) => {
+      const l = new THREE.PointLight(0xfff1dc, 0, 0.75, 1.6);
+      l.position.set(...p);
+      this.scene.add(l);
+      return l;
+    });
 
     // red emergency light (battery bus only)
     this.emergency = new THREE.PointLight(0xff2a14, 0, 2.6, 1.6);
@@ -715,8 +746,8 @@ export class Cockpit {
       blending: THREE.AdditiveBlending,
     });
     this.marker = new THREE.Group();
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.034, 0.04, 40), mat);
-    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.052, 0.055, 40), mat);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.026, 0.031, 40), mat);
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.04, 0.043, 40), mat);
     this.marker.add(ring, ring2);
     this.marker.renderOrder = 20;
     ring.renderOrder = ring2.renderOrder = 20;
@@ -852,7 +883,11 @@ export class Cockpit {
     const emergency = this.batt && p < 0.5 ? 1 : 0;
     this.emergencyLevel = (this.emergencyLevel ?? 0) + (emergency - (this.emergencyLevel ?? 0)) * Math.min(1, dt * 6);
     this.emergency.intensity = this.emergencyLevel * (1.3 + 0.1 * Math.sin(time * 3));
-    for (const g of Object.values(this.gauges)) g.setLight((this.lightsOn ? 0.06 : 0.25) * p + this.emergencyLevel * 0.05);
+    for (const g of Object.values(this.gauges)) g.setLight((this.lightsOn ? 0.08 : 0.25) * p + this.emergencyLevel * 0.05);
+    // back-lit labels: bright on main power, dim on battery
+    const back = Math.max(p * 0.75, this.batt ? 0.22 : 0);
+    for (const mat of LABEL_MATERIALS) mat.emissiveIntensity = back * mat.userData.glow;
+    for (const l of this.panelLights) l.intensity = (this.lightsOn ? 0.55 : 0.25) * p;
 
     // stick and throttle follow the controls
     if (this.throttle) this.throttle.rotation.x = -s.throttle * 0.45;

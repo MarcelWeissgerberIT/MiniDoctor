@@ -6,7 +6,7 @@ const RADIO_CURVE = (() => {
   const c = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const x = (i / (n - 1)) * 2 - 1;
-    c[i] = Math.tanh(x * 2.2) / Math.tanh(2.2);
+    c[i] = Math.tanh(x * 1.3) / Math.tanh(1.3);
   }
   return c;
 })();
@@ -36,10 +36,10 @@ export class Radio {
     src.buffer = buf;
     const hp = c.createBiquadFilter();
     hp.type = 'highpass';
-    hp.frequency.value = 380;
+    hp.frequency.value = 260;
     const lp = c.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 3100;
+    lp.frequency.value = 4200;
     const shaper = c.createWaveShaper();
     shaper.curve = RADIO_CURVE;
     const g = c.createGain();
@@ -56,7 +56,7 @@ export class Radio {
     hf.type = 'bandpass';
     hf.frequency.value = 2400;
     const hg = c.createGain();
-    hg.gain.value = 0.018;
+    hg.gain.value = 0.01;
     hiss.connect(hf).connect(hg).connect(s.master);
     hiss.start(t, Math.random());
     hiss.stop(t + dur);

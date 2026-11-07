@@ -2,8 +2,21 @@ import * as THREE from 'three';
 
 // Boarding sequence: walk across the forward base to the parked BB-07, climb the
 // ladder on its left leg, open the crew hatch on its back, climb in, sit down and
-// shut the hatch. Outside the camera is a free world camera, inside it is the
-// cockpit camera (cockpit coordinates, pilot eye at the origin).
+// shut the hatch.
+//
+// The outside part is a filmed first-person video (generated with Higgsfield/Kling)
+// with our own sound effects and radio mixed on top. If the video cannot play, an
+// in-engine camera flight around the 3D model is used instead. The inside part
+// (sitting down, hatch closing) always runs in the engine.
+
+const VIDEO_CUES = [
+  [0.1, (g) => g.sound.setMix({ base: 0.9, battle: 0.55, walk: 0.6 })],
+  [1.2, (g) => g.radio.say('v00', g.voiceText.v00)],
+  [7.4, (g) => g.sound.setMix({ base: 0.9, battle: 0.55, walk: 0 })],
+  [7.9, (g) => g.sound.one('stairs_metal', 0.75, 0.82)],
+  [11.6, (g) => g.sound.one('stairs_metal', 0.65, 0.78)],
+  [17.3, (g) => g.sound.one('hatch_open', 1.0)],
+];
 
 const smooth = (t) => t * t * (3 - 2 * t);
 
@@ -38,6 +51,19 @@ export class EntrySequence {
     this.end = 37.5;
     this.t = 0;
     this.phase = 'outside';
+    this.video = document.getElementById('introvideo');
+    this.vt = 0;
+    this.vCue = 0;
+    if (this.video && !game.noVideo) {
+      this.phase = 'video';
+      this.t = 0;
+      this.cueIndex = 0;
+      game.ui.showVideo(true);
+      this.video.currentTime = 0;
+      const p = this.video.play();
+      p?.catch?.(() => (this.videoBroken = true));
+      this.video.onerror = () => (this.videoBroken = true);
+    }
     this.cues = [
       [0.2, () => game.sound.setMix({ base: 0.9, battle: 0.55, walk: 0.55 })],
       [2.0, () => game.radio.say('v00', game.voiceText.v00)],
@@ -70,7 +96,20 @@ export class EntrySequence {
     this.g.post.cockpitPass.enabled = true;
   }
 
+  /** video finished: black, then continue inside the cockpit */
+  endVideo() {
+    this.video?.pause();
+    this.g.ui.showVideo(false);
+    this.fade(1, 0);
+    this.t = 28.4;
+    this.cueIndex = this.cues.findIndex((c) => c[0] > 28.4);
+    this.enterCockpit();
+    this.fade(0, 0.9);
+  }
+
   skip() {
+    this.video?.pause();
+    this.g.ui.showVideo(false);
     this.t = this.end;
     this.cueIndex = this.cues.length;
     this.g.world.setMechHatch(0);
@@ -101,6 +140,25 @@ export class EntrySequence {
 
   update(dt, inp) {
     const g = this.g;
+    if (this.phase === 'video') {
+      const v = this.video;
+      // follow the real playback; without playback (headless tests) advance by dt
+      const playing = v && !v.paused && v.readyState >= 2 && !this.videoBroken;
+      if (playing) this.everPlayed = true;
+      if (v && v.networkState === 3) this.videoBroken = true; // no playable source
+      this.vt = playing ? v.currentTime : this.vt + dt;
+      while (this.vCue < VIDEO_CUES.length && this.vt >= VIDEO_CUES[this.vCue][0]) VIDEO_CUES[this.vCue++][1](g);
+      const dur = v && isFinite(v.duration) ? v.duration : 22.5;
+      if (this.vt >= dur - 0.05 || (v && v.ended)) this.endVideo();
+      if (this.videoBroken && !this.everPlayed) {
+        // no playable video: fall back to the in-engine flight
+        g.ui.showVideo(false);
+        this.phase = 'outside';
+        this.t = 0;
+        this.cueIndex = 0;
+      }
+      return null;
+    }
     this.t += dt;
     while (this.cueIndex < this.cues.length && this.t >= this.cues[this.cueIndex][0]) this.cues[this.cueIndex++][1]();
 

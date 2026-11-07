@@ -186,6 +186,7 @@ body {
   left: 50%;
   top: calc(50% + 24px);
   transform: translateX(-50%);
+  transition: opacity 0.15s;
   font-size: 15px;
   letter-spacing: 0.12em;
   padding: 3px 10px;
@@ -294,7 +295,7 @@ body {
 #subtitle {
   position: fixed;
   left: 50%;
-  bottom: 3.5vh;
+  bottom: 52px;
   transform: translateX(-50%);
   max-width: min(700px, calc(100vw - 32px));
   padding: 6px 14px;
@@ -306,7 +307,7 @@ body {
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none;
-  z-index: 7;
+  z-index: 10;
 }
 #subtitle.show {
   opacity: 1;
@@ -457,4 +458,90 @@ body {
   .keys {
     margin-top: 14px;
   }
+}
+
+/* ---------------------------------------------------------- panel views */
+#views {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: none;
+  gap: 4px;
+  z-index: 7;
+}
+#views.show {
+  display: flex;
+}
+#views button {
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: #d9d4c4;
+  background: rgba(10, 10, 8, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+#views button b {
+  color: #d9a441;
+  margin-right: 4px;
+}
+#views button.on {
+  background: rgba(217, 164, 65, 0.3);
+  border-color: #d9a441;
+  color: #fff;
+}
+#views button.hint {
+  animation: viewhint 0.9s ease-in-out infinite;
+  border-color: #ffc450;
+}
+@keyframes viewhint {
+  50% {
+    background: rgba(255, 196, 80, 0.45);
+  }
+}
+body.playing.focusview #crosshair {
+  display: none;
+}
+body.focusview #scene {
+  cursor: default;
+}
+body.hovering #scene {
+  cursor: pointer;
+}
+#arrowlabel {
+  position: fixed;
+  left: 50%;
+  top: calc(50% + 70px);
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  background: rgba(30, 20, 0, 0.75);
+  border: 1px solid #ffc450;
+  color: #ffd98a;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+#arrowlabel.show {
+  opacity: 1;
+}
+
+/* -------------------------------------------------------- boarding video */
+#videolayer {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: none;
+  z-index: 8;
+}
+#videolayer.show {
+  display: block;
+}
+#videolayer video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
