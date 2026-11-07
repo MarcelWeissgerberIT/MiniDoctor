@@ -69,6 +69,27 @@ export class HUD {
     g.closePath();
     g.fill();
 
+    // waypoint cue on the heading tape and its distance
+    if (s.waypoint) {
+      const rel = THREE.MathUtils.radToDeg(Math.atan2(Math.sin(s.waypoint.bearing - s.heading), Math.cos(s.waypoint.bearing - s.heading)));
+      const x = THREE.MathUtils.clamp(W / 2 - rel * 9, 300, 724);
+      g.save();
+      g.strokeStyle = '#d8ffe0';
+      g.fillStyle = '#d8ffe0';
+      g.lineWidth = 3;
+      g.beginPath();
+      g.moveTo(x, 96);
+      g.lineTo(x + 11, 108);
+      g.lineTo(x, 120);
+      g.lineTo(x - 11, 108);
+      g.closePath();
+      g.stroke();
+      g.font = `bold 22px ${FONT}`;
+      g.textAlign = 'center';
+      g.fillText(`${s.waypoint.label}  ${Math.round(s.waypoint.dist)} m`, x, 140);
+      g.restore();
+    }
+
     // boresight reticle
     const cx = W / 2;
     const cy = H / 2 + 10;

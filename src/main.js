@@ -6,13 +6,23 @@ import { drawBoot, drawStatus, drawCamera, drawTactical } from './cockpit/displa
 import { World, WORLD } from './world/world.js';
 import { Post } from './post.js';
 import { Input } from './input.js';
-import { Sound } from './audio.js';
+import { Sound, Radio } from './audio.js';
 import { createMechState, stepMech, walkBob, MECH, clamp } from './logic/mech.js';
+import { createSystems, stepSystems, hotSwitches } from './logic/systems.js';
+import { Tutorial, VOICE_TEXT } from './tutorial.js';
+import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
 
 const params = new URLSearchParams(location.search);
 const DEG = Math.PI / 180;
 const LOOK = { yaw: 105 * DEG, up: 38 * DEG, down: 62 * DEG, sens: 0.0022 };
+const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv'];
+const EXTRA_VOICE = {
+  v18: 'Negativ. Ohne Kühlmittelpumpe und Hydraulikdruck zündet der Reaktor nicht. Prüfen Sie Ihre Checkliste.',
+  v19: 'Achtung, Master Caution. Prüfen Sie die Warnung und quittieren Sie mit Q.',
+  v20: 'Die Beine sind noch verriegelt, Pilot. Erst die Checkliste abarbeiten.',
+  v21: 'Ohne Strom passiert da gar nichts. Erst Batterie, APU und Generatoren.',
+};
 
 /* ------------------------------------------------------------- renderer */
 
@@ -33,6 +43,7 @@ assets.onProgress = (p) => ui.progress(p);
 
 class Game {
   constructor() {
+    this.ui = ui;
     this.world = new World(assets);
     this.feedRT = new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType });
     this.cockpit = new Cockpit(assets, this.feedRT);
@@ -45,7 +56,7 @@ class Game {
     this.cockpitCam = new THREE.PerspectiveCamera(70, aspect, 0.02, 40);
     this.cockpitCam.rotation.order = 'YXZ';
     this.cockpit.scene.add(this.cockpitCam);
-    this.worldCam = new THREE.PerspectiveCamera(70, aspect, 0.4, 7000);
+    this.worldCam = new THREE.PerspectiveCamera(70, aspect, 0.1, 7000);
     this.feedCam = new THREE.PerspectiveCamera(13, 4 / 3, 1, 4000);
     this.mechObj = new THREE.Object3D();
     this.mechObj.rotation.order = 'YXZ';
@@ -53,10 +64,15 @@ class Game {
     this.post = new Post(renderer, this.world.scene, this.worldCam, this.cockpit.scene, this.cockpitCam);
     this.input = new Input(canvas);
     this.sound = new Sound(assets.audio);
+    this.radio = new Radio(this.sound, ui);
+    this.voiceText = { ...VOICE_TEXT, ...EXTRA_VOICE };
+    this.tutorial = new Tutorial(this, ui);
     this.ray = new THREE.Raycaster();
 
     this.mech = createMechState(0, 0, 0);
     this.groundY = this.world.heightAt(0, 0);
+    this.sys = createSystems(false);
+    this.sw = this.switchSnapshot();
     this.yaw = 0;
     this.pitch = -9 * DEG;
     this.lookRate = 0;
@@ -65,75 +81,92 @@ class Game {
     this.shake = 0;
     this.shock = 0;
     this.time = 0;
-    this.state = 'title';
-    this.bootT = 0;
-    this.sys = {
-      reactor: 0,
-      heat: 0.3,
-      hyd: 0,
-      coolant: 0.82,
-      parts: { head: 0.94, torso: 0.81, larm: 0.62, rarm: 0.9, lleg: 0.77, rleg: 0.88 },
-      caution: false,
-      acked: false,
-      warning: '',
-      message: 'ALL SYSTEMS NOMINAL',
-    };
+    this.state = 'title'; // title | entry | cockpit
+    this.mode = null; // mission | free
+    this.caution = { active: false, acked: false };
+    this.message = 'COLD AND DARK';
+    this.mainUpAt = -10;
     this.radarRange = 500;
     this.range = 0;
     this.hovered = null;
     this.frame = 0;
+    this.waypoint = null;
+    this.nag = -100;
     this.wireActions();
     this.world.effects.onBoom = (d, s) => {
       this.sound.boom(d, s);
       if (d < 600) setTimeout(() => (this.shake += 0.6 * s), (d / 343) * 1000);
     };
     addEventListener('resize', () => this.resize());
-    this.input.onLockChange = (locked) => ui.lockHint(!locked && this.state === 'play');
+    this.input.onLockChange = (locked) => ui.lockHint(!locked && this.state !== 'title');
+    this.post.cockpitPass.enabled = false;
+    this.placeMech(0);
+    // title backdrop: a slow look at the parked mech
+    this.worldCam.position.set(-9, 2.2, 15);
+    this.worldCam.lookAt(0, 3, 0);
+  }
+
+  /* ------------------------------------------------------------ switches */
+
+  switchSnapshot() {
+    const sw = this.cockpit.switches;
+    const o = {};
+    for (const k of SWITCH_KEYS) o[k] = !!sw[k]?.on;
+    return o;
+  }
+
+  setSwitches(values) {
+    for (const [k, v] of Object.entries(values)) this.cockpit.switches[k]?.set(v);
   }
 
   wireActions() {
     const c = this.cockpit;
     const sw = c.switches;
     const say = (t, color) => {
-      this.sys.message = t;
-      this.sys.messageColor = color;
-      ui.comms(t);
+      this.message = t;
+      this.messageColor = color;
     };
     c.onAction = (a) => {
       if (a === 'caution') {
-        this.sys.acked = true;
+        this.caution.acked = true;
         this.sound.click('button');
       }
     };
-    const bind = (key, fn) => {
+    const bind = (key, fn = () => {}) => {
       sw[key].action = (on, silent) => {
         if (!silent) this.sound.click('toggle');
         fn(on);
       };
     };
-    bind('lights', (on) => (c.lightsOn = on));
-    bind('hud', (on) => (c.hud.on = on));
-    bind('nv', (on) => (c.mfd.camera.uniforms.nv.value = on ? 1 : 0));
+    bind('batt', (on) => on && this.sound.one('battery_on', 0.8));
+    bind('apu', (on) => on && !this.sw.batt && this.complainNoPower());
+    bind('gen1');
+    bind('gen2');
+    bind('lights', (on) => on && !this.sys.mainBus && this.complainNoPower());
+    bind('hud');
+    bind('nv');
     bind('radar', (on) => (this.radarRange = on ? 1000 : 500));
-    bind('optics', (on) => (c.mfd.camera.uniforms.useFeed.value = on ? 1 : 0));
+    bind('optics');
     bind('ir', (on) => say(on ? 'IR SENSOR: THERMAL OVERLAY N/A' : 'IR SENSOR STANDBY', on ? '#ffb347' : null));
-    bind('stab', (on) => say(on ? 'GYRO STABILISER ON' : 'GYRO STABILISER OFF'));
+    bind('stab', (on) => on && this.sys.mainBus && this.sound.one('gyro_spin', 0.6));
     bind('wpnArm', (on) => say(on ? 'WEAPONS: NO HARDPOINTS FITTED' : 'WEAPONS SAFE', on ? '#ffb347' : null));
     for (const k of ['gun', 'missile', 'mg', 'aux']) bind(k, (on) => on && say(`${k.toUpperCase()}: OFFLINE`, '#ffb347'));
     bind('pump', (on) => say(on ? 'COOLANT PUMP ON' : 'COOLANT PUMP OFF', on ? null : '#ffb347'));
-    bind('hydp', (on) => say(on ? 'HYDRAULICS PRESSURISED' : 'HYDRAULICS DEPRESSURISING', on ? null : '#ffb347'));
+    bind('hydp', (on) => {
+      if (on && this.sys.mainBus) this.sound.one('hyd_pump', 0.7);
+      say(on ? 'HYDRAULIC PUMP ON' : 'HYDRAULIC PUMP OFF');
+    });
     bind('ecm', (on) => say(on ? 'ECM JAMMING' : 'ECM OFF'));
-    bind('beacon', (on) => say(on ? 'IFF BEACON ON' : 'IFF BEACON OFF'));
     bind('firesup', (on) => on && say('FIRE SUPPRESSION ARMED', '#ffb347'));
     bind('coolant', (on) => say(on ? 'COOLANT BYPASS OPEN' : 'COOLANT BYPASS CLOSED'));
-    bind('reset', (on) => {
-      if (on) {
-        this.sys.heat = Math.min(this.sys.heat, 0.5);
-        say('REACTOR SCRAM RESET');
-        setTimeout(() => sw.reset.set(false), 600);
-      }
-    });
-    for (const k of ['gen0', 'gen1', 'gen2']) bind(k, () => {});
+    bind('reactor');
+    bind('legLock');
+  }
+
+  complainNoPower() {
+    if (this.time - this.nag < 12) return;
+    this.nag = this.time;
+    this.radio.say('v21', this.voiceText.v21);
   }
 
   resize() {
@@ -147,96 +180,155 @@ class Game {
     this.post.setSize(w, h);
   }
 
-  async enter() {
+  /* ---------------------------------------------------------------- flow */
+
+  async startMission() {
     await this.sound.init();
-    this.state = 'boot';
-    this.bootT = 0;
+    this.sound.startAmbience();
     this.input.enabled = true;
     this.input.lock();
-    this.sound.startup();
     ui.hideTitle();
+    ui.fade(1, 0);
+    ui.fade(0, 1.5);
+    this.mode = 'mission';
+    this.state = 'entry';
+    this.entry = new EntrySequence(this);
+    ui.skipHint(true);
   }
 
-  skipBoot() {
-    this.state = 'play';
-    this.bootT = 10;
-    this.cockpit.power = 1;
+  async startFree() {
+    await this.sound.init();
+    this.sound.startAmbience();
     this.input.enabled = true;
-    for (const k in this.cockpit.mfd) this.cockpit.mfd[k].on = true;
-    this.cockpit.hud.on = true;
-    this.sys.reactor = 0.35;
-    this.sys.hyd = 0.85;
+    this.input.lock();
     ui.hideTitle();
+    this.goHot();
+    this.mode = 'free';
+    this.enterCockpitState();
+    ui.comms('HQ: BB-07, Sektor Kilo ist feindlich. Freies Manöver.');
+  }
+
+  /** everything running, as after a completed start-up */
+  goHot() {
+    this.setSwitches(hotSwitches());
+    this.sys = createSystems(true);
+    this.sys.prev = { ...this.switchSnapshot() };
+    this.cockpit.power = 1;
+    this.mainUpAt = -10;
+  }
+
+  enterCockpitState() {
+    this.state = 'cockpit';
+    this.post.cockpitPass.enabled = true;
+    this.cockpit.setHatch(0);
+    this.world.setMechHatch(0);
+    ui.skipHint(false);
+    ui.fade(0, 0.4);
+    this.updateMix();
+    if (this.mode === 'mission') this.tutorial.start();
+  }
+
+  setWaypoint(i) {
+    this.waypoint = i;
+    this.world.setWaypoint(i);
+  }
+
+  updateMix() {
+    const running = this.sys.reactorState !== 'off';
+    this.sound.setMix({ hum: running ? 0.55 * Math.min(1, this.sys.reactor / 0.3 + 0.2) : 0, battle: 0.85, base: 0, walk: 0 });
   }
 
   /* -------------------------------------------------------------- update */
 
-  updateBoot(dt) {
-    this.bootT += dt;
-    const t = this.bootT;
-    const c = this.cockpit;
-    // power comes up with a couple of flickers
-    const flick = t > 0.5 && t < 1.2 ? (Math.random() < 0.5 ? 1 : 0.15) : 1;
-    c.power = t < 0.5 ? 0 : Math.min(1, (t - 0.5) * 2) * flick;
-    if (t > 1.3) for (const k in c.mfd) c.mfd[k].on = true;
-    if (t > 1.3 && t < 1.4) this.sound.beep(1400, 0.08, 0.1);
-    this.sys.reactor = Math.min(0.35, Math.max(0, (t - 0.6) * 0.2));
-    this.sys.hyd = Math.min(0.85, Math.max(0, (t - 1) * 0.5));
-    // needle self test
-    for (const g of Object.values(c.gauges)) {
-      if (t > 1.5 && t < 2.4) g.set(g.opts.max);
-    }
-    if (t > 4.3) {
-      this.state = 'play';
-      c.hud.on = true;
-      this.sound.startAmbience();
-      this.sound.beep(1200, 0.07, 0.1);
-      this.sound.beep(1600, 0.07, 0.1, 0.1);
-      ui.comms('HQ: BB-07, Sektor Kilo ist feindlich. Machen Sie sich mit dem Cockpit vertraut und rücken Sie dann vor.');
-    }
-  }
-
   updateSystems(dt) {
+    this.sw = this.switchSnapshot();
+    const ev = stepSystems(this.sys, this.sw, dt, this.mech.throttle);
     const s = this.sys;
-    const sw = this.cockpit.switches;
-    const powered = sw.gen1.on || sw.gen2.on || sw.gen0.on;
-    this.cockpit.lamps.pwrA.on = sw.gen1.on;
-    this.cockpit.lamps.pwrB.on = sw.gen2.on;
-    if (this.state === 'play') this.cockpit.power += ((powered ? 1 : 0.0) - this.cockpit.power) * Math.min(1, dt * 6);
-    for (const k in this.cockpit.mfd) this.cockpit.mfd[k].on = this.state !== 'title' && powered && this.bootT > 1.3;
-    const thr = Math.abs(this.mech.throttle);
-    s.reactor += (0.35 + thr * 0.6 - s.reactor) * dt * 0.4;
-    const cooling = (sw.pump.on ? 0.3 : -0.25) + (sw.coolant.on ? 0.12 : 0);
-    s.heat += (s.reactor * 0.8 - cooling + 0.05 - s.heat) * dt * 0.08;
-    s.heat = clamp(s.heat, 0.05, 1);
-    s.hyd += ((sw.hydp.on ? 0.85 : 0.08) - s.hyd) * dt * (sw.hydp.on ? 0.6 : 0.25);
-    const warnings = [];
-    if (s.heat > 0.78) warnings.push('HEAT CRITICAL');
-    if (s.hyd < 0.4 && this.state === 'play') warnings.push('HYD PRESS LOW');
-    if (!sw.pump.on) warnings.push('COOLANT PUMP OFF');
-    s.warning = warnings[0] || '';
-    const caution = warnings.length > 0;
-    if (caution && !s.caution) {
-      s.acked = false;
+    const c = this.cockpit;
+    for (const e of ev) {
+      if (e === 'apuReady') this.sound.beep(1300, 0.08, 0.08);
+      if (e === 'mainPower') {
+        this.mainUpAt = this.time;
+        this.sound.one('battery_on', 0.5, 0.8);
+        this.message = 'MAIN BUS ONLINE';
+      }
+      if (e === 'reactorIgnite') {
+        this.sound.one('reactor_start', 1.0);
+        this.message = 'REACTOR IGNITION';
+      }
+      if (e === 'reactorRunning') this.message = 'REACTOR ONLINE';
+      if (e === 'reactorFail') {
+        c.switches.reactor.set(false);
+        s.prev.reactor = false;
+        this.sound.beep(400, 0.25, 0.1);
+        this.radio.say('v18', this.voiceText.v18);
+      }
+      if (e === 'scram') {
+        c.switches.reactor.set(false);
+        s.prev.reactor = false;
+        this.message = 'REACTOR SCRAM - OVERHEAT';
+        this.messageColor = '#ff4a3a';
+        this.sound.alarm();
+      }
+      if (e === 'gyroAligned') this.sound.beep(1700, 0.06, 0.07);
+      if (e === 'legDenied') {
+        c.switches.legLock.set(true);
+        s.prev.legLock = true;
+        this.sound.beep(400, 0.25, 0.1);
+        this.message = 'LEG LOCK: REACTOR/HYD/GYRO NOT READY';
+        this.messageColor = '#ffb347';
+      }
+      if (e === 'legsReleased') {
+        this.sound.one('leg_release', 1.0);
+        this.headVel.y -= 0.35;
+        this.shake += 0.8;
+        this.message = 'LEGS FREE';
+        this.messageColor = null;
+      }
+    }
+    this.sound.apuRun(s.apuRpm > 0.02 && this.sw.apu && s.battBus);
+    if (this.state === 'cockpit') this.updateMix();
+    // the reactor shakes the cabin while it lights
+    if (s.reactorState === 'igniting') this.shake = Math.max(this.shake, 0.3 + s.ignT * 0.1);
+
+    // electrics drive the cockpit
+    c.setElectrics(s.battBus, s.mainBus, this.sw.lights);
+    for (const k in c.mfd) c.mfd[k].on = s.mainBus;
+    c.hud.on = s.mainBus && this.sw.hud;
+    c.mfd.camera.uniforms.useFeed.value = s.mainBus && this.sw.optics ? 1 : 0;
+    c.mfd.camera.uniforms.nv.value = this.sw.nv ? 1 : 0;
+
+    // warnings and master caution
+    const caution = s.warnings.length > 0;
+    if (caution && !this.caution.active) {
+      this.caution.acked = false;
       this.sound.alarm();
+      if (this.state === 'cockpit' && this.time - this.nag > 10) {
+        this.nag = this.time;
+        this.radio.say('v19', this.voiceText.v19);
+      }
     }
-    s.caution = caution;
-    const lamps = this.cockpit.lamps;
-    lamps.heat.on = s.heat > 0.7;
-    lamps.armor.on = true;
-    lamps.lock.on = caution && !s.acked;
-    this.cockpit.alarm.active = caution && !s.acked;
-    const g = this.cockpit.gauges;
-    if (this.state === 'play' || this.bootT > 2.4) {
-      g.reactor.set(s.reactor * 100);
-      g.hyd.set(s.hyd * 30 * 0.92);
-      g.temp.set(40 + s.heat * 330);
-      g.speed.set(Math.abs(this.mech.speed) * 3.6);
-    }
+    this.caution.active = caution;
+    const L = c.lamps;
+    L.batt.on = s.battBus;
+    L.apu.on = s.apuReady;
+    L.pwrA.on = s.mainBus && this.sw.gen1;
+    L.pwrB.on = s.mainBus && this.sw.gen2;
+    L.heat.on = s.heat > 0.7;
+    L.armor.on = s.mainBus;
+    L.lock.on = caution && !this.caution.acked;
+    c.alarm.active = caution && !this.caution.acked;
+
+    // needles only move with power on the instruments
+    const g = c.gauges;
+    const live = s.battBus ? 1 : 0;
+    g.reactor.set(s.reactor * 100 * live);
+    g.hyd.set(s.hyd * 30 * 0.92 * live);
+    g.temp.set((15 + ((s.heat - 0.1) / 0.9) * 360) * live);
+    g.speed.set(Math.abs(this.mech.speed) * 3.6 * live);
   }
 
   updateLook(dt, inp) {
-    const stab = this.cockpit.switches.stab.on;
     const dyaw = -inp.dx * LOOK.sens;
     const dpitch = -inp.dy * LOOK.sens;
     this.yaw = clamp(this.yaw + dyaw, -LOOK.yaw, LOOK.yaw);
@@ -247,42 +339,62 @@ class Game {
     }
     const rate = Math.hypot(dyaw, dpitch) / Math.max(dt, 1e-3);
     this.lookRate += (rate - this.lookRate) * Math.min(1, dt * 8);
-    this.lookPitchRate = dpitch / Math.max(dt, 1e-3);
-    return stab;
   }
 
   updateMech(dt) {
     const I = this.input;
-    const playing = this.state === 'play';
-    const hydOk = this.sys.hyd > 0.4;
-    const mechIn = playing
-      ? {
-          throttle: I.down('KeyW', 'ArrowUp') ? 1 : I.down('KeyS', 'ArrowDown') ? -1 : 0,
-          turn: I.down('KeyA', 'ArrowLeft') ? 1 : I.down('KeyD', 'ArrowRight') ? -1 : 0,
-          stop: I.down('KeyX', 'Space'),
-        }
-      : { throttle: 0, turn: 0, stop: true };
-    if (!hydOk) {
-      mechIn.turn *= 0.3;
-      this.mech.throttle = clamp(this.mech.throttle, -0.1, 0.2);
-    }
-    this.turnInput = mechIn.turn;
-    const events = stepMech(this.mech, mechIn, dt, this.world.colliders, WORLD.bounds);
-    for (const e of events) {
-      this.sound.footstep(e.strength);
-      this.headVel.y -= 0.22 * e.strength;
-      this.headVel.x += e.foot * 0.05 * e.strength;
-      this.shake += 0.5 * e.strength;
-      this.cockpit.jolt(e.strength);
-      for (const g of Object.values(this.cockpit.gauges)) g.kick(0.25 * e.strength);
+    const playing = this.state === 'cockpit';
+    const thr = playing ? (I.down('KeyW', 'ArrowUp') ? 1 : I.down('KeyS', 'ArrowDown') ? -1 : 0) : 0;
+    const turn = playing ? (I.down('KeyA', 'ArrowLeft') ? 1 : I.down('KeyD', 'ArrowRight') ? -1 : 0) : 0;
+    const stop = playing && (I.down('KeyX', 'Space') || I.hit('KeyX') || I.hit('Space'));
+    this.turnInput = turn;
+    if (!this.sys.canWalk) {
+      // the lever moves, the legs do not
+      const m = this.mech;
+      if (stop) m.throttle = 0;
+      m.throttle = clamp(m.throttle + thr * MECH.throttleRate * dt, MECH.minThrottle, 1);
+      m.speed = Math.max(0, Math.abs(m.speed) - 6 * dt) * Math.sign(m.speed);
+      m.turn = 0;
+      if (playing && (thr !== 0 || turn !== 0) && this.sys.legsLocked && this.time - this.nag > 15) {
+        this.nag = this.time;
+        if (this.sys.battBus) this.radio.say('v20', this.voiceText.v20);
+        else this.complainNoPower();
+      }
+    } else {
+      const events = stepMech(this.mech, { throttle: thr, turn, stop }, dt, this.world.colliders, WORLD.bounds);
+      for (const e of events) {
+        this.sound.footstep(e.strength);
+        this.headVel.y -= 0.16 * e.strength;
+        this.headVel.x += e.foot * 0.04 * e.strength;
+        this.shake += 0.4 * e.strength;
+        this.cockpit.jolt(e.strength);
+        for (const gg of Object.values(this.cockpit.gauges)) gg.kick(0.2 * e.strength);
+      }
     }
     const target = this.world.heightAt(this.mech.x, this.mech.z);
     this.groundY += (target - this.groundY) * Math.min(1, dt * 3);
   }
 
-  updateCameras(dt, stab) {
+  placeMech(bobY = 0, bob = null) {
+    const m = this.mech;
+    this.mechObj.position.set(m.x, this.groundY + MECH.eyeHeight + bobY, m.z);
+    this.mechObj.rotation.set(bob ? bob.pitch : 0, m.heading, bob ? bob.roll : 0);
+    this.mechObj.updateMatrix();
+    if (bob) this.mechObj.translateX(bob.x);
+    this.mechObj.updateMatrixWorld(true);
+    // the exterior model rides along (its origin is at the feet)
+    const pm = this.world.playerMech;
+    // from inside, the (double-sided) exterior model would block the visor
+    pm.visible = !(this.state === 'cockpit' || (this.state === 'entry' && this.entry?.phase === 'inside'));
+    pm.position.copy(this.mechObj.position);
+    pm.position.y -= MECH.eyeHeight;
+    pm.quaternion.copy(this.mechObj.quaternion);
+    pm.updateMatrixWorld(true);
+  }
+
+  updateCameras(dt, pose) {
+    const stab = this.sw.stab && this.sys.gyro > 0.9;
     const bob = walkBob(this.mech);
-    // pilot head on a spring inside the cockpit
     const k = 90;
     const d = stab ? 13 : 7;
     this.headVel.addScaledVector(this.headOff, -k * dt).multiplyScalar(Math.max(0, 1 - d * dt));
@@ -292,39 +404,40 @@ class Game {
     const sh = this.shake * (stab ? 0.4 : 1) * 0.004;
     const t = this.time;
     const n = (a, b) => Math.sin(t * a) * Math.sin(t * b * 1.37);
-    // idle engine vibration
-    const idle = 0.00035 * this.cockpit.power;
-    this.cockpitCam.position.set(
-      this.headOff.x + n(41, 23) * sh + n(97, 61) * idle,
-      this.headOff.y + n(37, 29) * sh + n(89, 53) * idle,
-      this.headOff.z,
-    );
-    this.cockpitCam.rotation.set(this.pitch + n(43, 31) * sh * 1.5, this.yaw + n(29, 47) * sh, n(33, 19) * sh);
+    const idle = 0.0004 * (this.sys.reactorState === 'running' ? 1 : this.sys.apuRpm * 0.4);
+    if (pose) {
+      this.cockpitCam.position.copy(pose.pos);
+      this.cockpitCam.lookAt(pose.look);
+      this.cockpitCam.rotateY(pose.lookOff.yaw);
+      this.cockpitCam.rotateX(pose.lookOff.pitch);
+    } else {
+      this.cockpitCam.position.set(
+        this.headOff.x + n(41, 23) * sh + n(97, 61) * idle,
+        this.headOff.y + n(37, 29) * sh + n(89, 53) * idle,
+        this.headOff.z,
+      );
+      this.cockpitCam.rotation.set(this.pitch + n(43, 31) * sh * 1.5, this.yaw + n(29, 47) * sh, n(33, 19) * sh);
+    }
     if (this.debugCam) {
-      // inspection camera for screenshots (?manual + window.__game.debugCam = { pos, look })
       this.cockpitCam.position.set(...this.debugCam.pos);
       this.cockpitCam.lookAt(...this.debugCam.look);
     }
     this.cockpitCam.updateMatrixWorld(true);
 
-    const m = this.mech;
-    this.mechObj.position.set(m.x, this.groundY + MECH.eyeHeight + bob.y * (stab ? 0.6 : 1), m.z);
-    this.mechObj.rotation.set(bob.pitch, m.heading, bob.roll * (stab ? 0.5 : 1));
-    this.mechObj.updateMatrix();
-    this.mechObj.translateX(bob.x * (stab ? 0.5 : 1));
-    this.mechObj.updateMatrixWorld(true);
+    const sbob = { pitch: bob.pitch, roll: bob.roll * (stab ? 0.5 : 1), x: bob.x * (stab ? 0.5 : 1) };
+    this.placeMech(bob.y * (stab ? 0.6 : 1), sbob);
+    if (this.freeCam || this.state === 'title' || (this.state === 'entry' && this.entry.phase === 'outside')) return;
     const wm = new THREE.Matrix4().multiplyMatrices(this.mechObj.matrixWorld, this.cockpitCam.matrixWorld);
     wm.decompose(this.worldCam.position, this.worldCam.quaternion, this.worldCam.scale);
     this.worldCam.updateMatrixWorld(true);
 
-    // turret camera for the centre display: fixed to the mech, looking ahead
-    this.feedCam.position.copy(this.mechObj.position).add(new THREE.Vector3(-Math.sin(m.heading), -0.6, -Math.cos(m.heading)).multiplyScalar(2));
-    this.feedCam.rotation.set(-2.5 * DEG, m.heading, 0, 'YXZ');
+    const m = this.mech;
+    this.feedCam.position.copy(this.mechObj.position).add(new THREE.Vector3(-Math.sin(m.heading), -0.3, -Math.cos(m.heading)).multiplyScalar(1.2));
+    this.feedCam.rotation.set(-1.5 * DEG, m.heading, 0, 'YXZ');
     this.feedCam.updateMatrixWorld(true);
   }
 
   measureRange() {
-    // ray-march the terrain and check the obstacle circles in front of the turret camera
     const m = this.mech;
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.feedCam.quaternion);
     const o = this.feedCam.position;
@@ -350,13 +463,19 @@ class Game {
   }
 
   updateInteraction(inp) {
+    if (this.state !== 'cockpit') {
+      this.hovered = null;
+      ui.hover(null, false);
+      return;
+    }
     this.ray.setFromCamera(this.input.locked ? new THREE.Vector2(0, 0) : new THREE.Vector2(this.input.mouse.x, this.input.mouse.y), this.cockpitCam);
     this.ray.far = 2.2;
     const hits = this.ray.intersectObjects(this.cockpit.hitTargets, false);
     const ctl = hits.length ? hits[0].object.userData.control : null;
     this.hovered = ctl;
-    ui.hover(ctl ? KEY_HINTS[ctl.label] ? `${ctl.label.replace('\n', ' ')}  [${KEY_HINTS[ctl.label]}]` : ctl.label.replace('\n', ' ') : null, this.input.locked);
-    if (inp.clicked && ctl && this.state === 'play') ctl.toggle();
+    const hint = ctl && KEY_HINTS[ctl.label];
+    ui.hover(ctl ? (hint ? `${ctl.label.replace('\n', ' ')}  [${hint}]` : ctl.label.replace('\n', ' ')) : null, this.input.locked);
+    if (inp.clicked && ctl) ctl.toggle();
   }
 
   hotkeys() {
@@ -365,34 +484,51 @@ class Game {
     const map = { KeyL: 'lights', KeyH: 'hud', KeyN: 'nv', KeyR: 'radar', KeyG: 'stab', KeyO: 'optics' };
     for (const [code, key] of Object.entries(map)) if (I.hit(code)) sw[key].toggle();
     if (I.hit('KeyM')) this.sound.setMuted(!this.sound.muted);
-    if (I.hit('KeyQ') && this.sys.caution) this.cockpit.lamps.lock.toggle();
+    if (I.hit('KeyQ') && this.caution.active) this.cockpit.lamps.lock.toggle();
     if (I.hit('F1') || I.hit('Tab') || I.hit('Slash')) ui.toggleHelp();
+  }
+
+  /** tutorial target: pulsing marker on the control + arrow when it is off screen */
+  updateMarker() {
+    const key = this.tutorial.active ? this.tutorial.targetKey() : null;
+    const ctl = key ? this.cockpit.switches[key] || this.cockpit.lamps[key] : null;
+    const mesh = ctl ? ctl.hit || ctl.cap : null;
+    this.cockpit.setMarker(mesh, this.cockpitCam, this.time);
+    if (!mesh) return ui.arrow(null);
+    const p = mesh.getWorldPosition(new THREE.Vector3()).project(this.cockpitCam);
+    const behind = p.z > 1;
+    const on = !behind && Math.abs(p.x) < 0.92 && Math.abs(p.y) < 0.9;
+    ui.arrow(on ? null : Math.atan2(behind ? -p.y : p.y, behind ? -p.x : p.x));
   }
 
   drawDisplays() {
     const c = this.cockpit;
     const f = this.frame;
-    if (this.state === 'boot' && this.bootT < 3.6) {
-      if (f % 3 === 0) for (const k in c.mfd) drawBoot(c.mfd[k], this.bootT - 1.3);
+    if (!this.sys.mainBus) return;
+    const since = this.time - this.mainUpAt;
+    if (since < 3.2) {
+      if (f % 3 === 0) for (const k in c.mfd) drawBoot(c.mfd[k], since);
       return;
     }
     const m = this.mech;
     const s = this.sys;
     const clock = new Date();
+    const warning = s.warnings[0];
     if (f % 4 === 0)
       drawStatus(c.mfd.status, {
         ...s,
+        parts: { head: 0.94, torso: 0.81, larm: 0.62, rarm: 0.9, lleg: 0.77, rleg: 0.88 },
         time: `${String(clock.getHours()).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}`,
-        message: s.warning || s.message,
-        messageColor: s.warning ? '#ff4a3a' : s.messageColor,
+        message: warning || this.statusLine(),
+        messageColor: warning ? '#ff4a3a' : this.messageColor,
       });
     if (f % 4 === 1)
       drawCamera(c.mfd.camera, {
         heading: m.heading,
         range: this.range,
-        nv: c.switches.nv.on,
+        nv: this.sw.nv,
         zoom: 4,
-        contact: c.switches.optics.on ? null : 'NO SIGNAL',
+        contact: this.sw.optics ? null : 'OPTICS OFF',
       });
     if (f % 4 === 2)
       drawTactical(c.mfd.tactical, {
@@ -406,49 +542,75 @@ class Game {
       });
   }
 
+  statusLine() {
+    const s = this.sys;
+    if (s.reactorState === 'igniting') return `REACTOR IGNITION ${Math.round((s.ignT / 7) * 100)}%`;
+    if (this.sw.stab && s.gyro < 1 && s.mainBus) return `GYRO ALIGN ${Math.round(s.gyro * 100)}%`;
+    if (s.legsLocked && s.reactorState === 'running') return 'LEGS LOCKED';
+    return this.message;
+  }
+
+  hudWaypoint() {
+    if (this.waypoint == null) return null;
+    const b = this.world.beacons[this.waypoint];
+    const dx = b.x - this.mech.x;
+    const dz = b.z - this.mech.z;
+    return { bearing: Math.atan2(-dx, -dz), dist: Math.hypot(dx, dz), label: b.label };
+  }
+
   update(dt) {
     this.time += dt;
     this.frame++;
     const inp = this.input.consume();
-    if (this.state === 'boot') this.updateBoot(dt);
-    if (this.state === 'play') this.hotkeys();
-    const stab = this.state !== 'title' ? this.updateLook(dt, inp) : true;
+    let pose = null;
+    if (this.state === 'title') {
+      // slow orbit around the parked mech behind the title screen
+      const a = this.time * 0.05 + 2.4;
+      this.worldCam.position.set(Math.sin(a) * 15, 2.4, Math.cos(a) * 15);
+      this.worldCam.lookAt(0, 3.0, 0);
+      this.worldCam.updateMatrixWorld(true);
+    } else if (this.state === 'entry') {
+      if (this.input.hit('Space') || this.input.hit('Enter') || this.input.hit('KeyE')) this.entry.skip();
+      pose = this.entry.update(dt, inp);
+      if (this.entry.done) this.enterCockpitState();
+    } else if (this.state === 'cockpit') {
+      this.hotkeys();
+      this.updateLook(dt, inp);
+      this.tutorial.update(dt);
+    }
+    if (this.state !== 'title') this.updateSystems(dt);
     this.updateMech(dt);
-    this.updateSystems(dt);
-    this.updateCameras(dt, stab);
+    this.updateCameras(dt, pose);
     if (this.frame % 6 === 0) this.measureRange();
     this.updateInteraction(inp);
+    this.updateMarker();
 
-    // world and the light that falls through the visor
     this.world.update(dt, this.time, this.worldCam.position);
     const fx = this.world.effects;
     const fwd = new THREE.Vector3(-Math.sin(this.mech.heading), 0, -Math.cos(this.mech.heading));
     const inFront = Math.max(0, fx.flashDir.dot(fwd));
     this.cockpit.setDaylight(0.85 + 0.15 * Math.sin(this.mech.heading * 1.3), fx.flashLevel * (0.25 + inFront), new THREE.Color(1, 0.6, 0.3));
 
-    this.cockpit.update(dt, this.time, {
-      throttle: this.mech.throttle,
-      turnInput: this.turnInput || 0,
-      lookPitchRate: 0,
-    }, this.hovered);
+    this.cockpit.update(dt, this.time, { throttle: this.mech.throttle, turnInput: this.turnInput || 0, lookPitchRate: 0 }, this.hovered);
     this.cockpit.hud.update(dt, {
       heading: this.mech.heading,
       speed: this.mech.speed,
       throttle: this.mech.throttle,
       look: this.yaw,
-      stab: this.cockpit.switches.stab.on,
-      nv: this.cockpit.switches.nv.on,
-      lights: this.cockpit.lightsOn,
-      warning: this.sys.warning,
+      stab: this.sw.stab && this.sys.gyro >= 1,
+      nv: this.sw.nv,
+      lights: this.sw.lights,
+      warning: this.sys.warnings[0] || (this.sys.legsLocked ? 'LEG LOCK' : ''),
+      waypoint: this.hudWaypoint(),
       time: this.time,
     });
     this.drawDisplays();
-    this.sound.update({ turn: this.mech.turn, lookRate: this.lookRate, speed: this.mech.speed });
+    this.sound.update({ turn: this.mech.turn, lookRate: this.state === 'cockpit' ? this.lookRate : 0, speed: this.mech.speed, reactor: this.sys.reactor });
     ui.update(this);
   }
 
   render() {
-    if (this.frame % 2 === 0 && this.cockpit.switches.optics.on && this.cockpit.power > 0.5) {
+    if (this.frame % 2 === 0 && this.sw.optics && this.sys.mainBus && this.state === 'cockpit') {
       renderer.setRenderTarget(this.feedRT);
       renderer.render(this.world.scene, this.feedCam);
       renderer.setRenderTarget(null);
@@ -489,8 +651,20 @@ assets
     if (params.has('yaw')) game.yaw = +params.get('yaw') * DEG;
     if (params.has('pitch')) game.pitch = +params.get('pitch') * DEG;
     if (params.has('heading')) game.mech.heading = +params.get('heading') * DEG;
-    if (params.has('skip')) game.skipBoot();
-    else ui.ready(() => game.enter());
+    if (params.has('skip')) {
+      // test hook: straight into a running cockpit
+      game.goHot();
+      game.mode = 'free';
+      game.input.enabled = true;
+      ui.hideTitle();
+      game.enterCockpitState();
+    } else if (params.has('cold')) {
+      // test hook: straight into the cold cockpit with the tutorial
+      game.mode = 'mission';
+      game.input.enabled = true;
+      ui.hideTitle();
+      game.enterCockpitState();
+    } else ui.ready(() => game.startMission(), () => game.startFree());
     renderer.compile(game.world.scene, game.worldCam);
     renderer.compile(game.cockpit.scene, game.cockpitCam);
     if (params.has('manual')) {

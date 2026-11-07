@@ -6,8 +6,16 @@ const BASE = import.meta.env.BASE_URL + 'assets/';
 
 export const TEXTURE_SETS = ['armor', 'rivets', 'floor', 'console', 'hazard', 'concrete', 'ground'];
 export const DECALS = ['nameplate', 'danger', 'eject', 'reactor', 'hydraulic', 'radiation', 'weapons', 'nostep'];
-export const MODELS = ['seat', 'stick', 'throttle', 'radio', 'extinguisher', 'tank', 'hedgehog', 'ruin'];
-export const SOUNDS = ['cockpit_hum', 'battle_far', 'footstep', 'servo', 'startup'];
+export const MODELS = [
+  'seat', 'stick', 'throttle', 'radio', 'extinguisher', 'tank', 'hedgehog', 'ruin',
+  'mech', 'sandbags', 'crates', 'drums', 'generator',
+];
+export const SOUNDS = [
+  'cockpit_hum', 'battle_far', 'footstep', 'servo', 'startup',
+  'walk_gravel', 'stairs_metal', 'hatch_open', 'hatch_close', 'battery_on', 'apu_start',
+  'reactor_start', 'hyd_pump', 'gyro_spin', 'leg_release', 'harness', 'base_ambience',
+];
+export const VOICES = Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0'));
 
 /**
  * Loads every generated asset (Higgsfield images/audio, Meshy models) and
@@ -77,9 +85,10 @@ export class Assets {
     this._tick();
   }
 
-  async _audio(name) {
+  async _audio(name, dir = 'audio') {
     try {
-      const r = await fetch(BASE + 'audio/' + name + '.mp3');
+      const r = await fetch(BASE + dir + '/' + name + '.mp3');
+      if (!r.ok) throw new Error(r.status);
       this.audio[name] = await r.arrayBuffer();
     } catch (e) {
       console.warn('audio missing', name);
@@ -105,6 +114,7 @@ export class Assets {
     for (let k = 0; k < 2; k++) jobs.push(this._texture(`sky/pano_${k}.webp`, true, false).then((t) => (this.pano[k] = t)));
     for (const m of MODELS) jobs.push(this._model(m));
     for (const a of SOUNDS) jobs.push(this._audio(a));
+    for (const v of VOICES) jobs.push(this._audio(v, 'voice'));
     this._total = jobs.length;
     await Promise.all(jobs);
     this.materials = new MaterialLib(this);

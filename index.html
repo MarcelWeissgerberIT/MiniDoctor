@@ -13,15 +13,30 @@
     <div id="tooltip"></div>
     <div id="comms"></div>
     <div id="lockhint">Klicken, um die Steuerung zu übernehmen</div>
+    <div id="subtitle"></div>
+    <div id="arrow"></div>
+    <div id="skiphint">Leertaste: Einstieg überspringen</div>
+    <aside id="checklist">
+      <header><span>CHECKLISTE · KALTSTART</span><span class="state"></span></header>
+      <ol></ol>
+    </aside>
+    <div id="fade"></div>
 
     <section id="title">
       <div class="shade"></div>
       <div class="content">
-        <div class="tag">MECH-SIMULATION · PROTOTYP 0.1</div>
+        <div class="tag">MECH-SIMULATION · PROTOTYP 0.2</div>
         <h1>BATTLEBOT</h1>
-        <p class="sub">Du sitzt im Cockpit von BB-07, einem 70-Tonnen-Kampfroboter. Krieg. Die Sicht nach draußen ist auf einen Panzerglasschlitz begrenzt.</p>
+        <div class="mission">
+          <div class="mtag">MISSION 1 · EINWEISUNG</div>
+          <div class="mname">Kalt &amp; dunkel</div>
+          <p>BB-07 steht abgeschaltet an Rampe drei – fünf Meter Stahl, 18 Tonnen. Steig über die Leiter ein, fahr den Mech nach Checkliste hoch (Batterie, APU, Generatoren, Hydraulik, Reaktor, Gyro) und bring ihn zum Laufen.</p>
+        </div>
         <div class="load"><div id="loadbar"></div></div>
-        <button id="start" disabled>Lade Ressourcen …</button>
+        <div class="buttons">
+          <button id="start" disabled>Lade Ressourcen …</button>
+          <button id="quick" class="secondary" disabled>Schnellstart</button>
+        </div>
         <ul class="keys">
           <li><b>Maus</b> umsehen</li>
           <li><b>W / S</b> Schub</li>
@@ -50,8 +65,9 @@
         <tr><td>C</td><td>Blick zentrieren</td></tr>
         <tr><td>M</td><td>Ton an / aus</td></tr>
         <tr><td>F1 / Tab</td><td>diese Hilfe</td></tr>
+        <tr><td>Leertaste</td><td>Einstiegssequenz überspringen</td></tr>
       </table>
-      <p>Tipp: Kühlmittelpumpe (Overhead-Panel) aus = Überhitzung. Hydraulik aus = der Mech kommt kaum noch vom Fleck.</p>
+      <p>Kaltstart: BATT → APU (warten bis APU READY) → GEN 1 + GEN 2 → HYD PRESS → COOLANT PUMP → REACTOR START → APU aus → STAB ASSIST → OPTICS/HUD → LEG LOCK aus.</p>
     </section>
 
     <script type="module" src="/src/main.js"></script>

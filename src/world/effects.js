@@ -128,6 +128,19 @@ export class Effects {
     this.smoke.mesh.renderOrder = 2;
     scene.add(this.smoke.mesh);
 
+    // coloured signal smoke for waypoints
+    this.flareMat = this.smokeMat.clone();
+    this.flareMat.uniforms.color = { value: new THREE.Color(0.16, 0.42, 0.14) };
+    this.flareMat.uniforms.glow = { value: new THREE.Color(0.3, 0.8, 0.25) };
+    this.flareMat.uniforms.map = { value: assets.fx.smoke };
+    this.flareMat.uniforms.fogColor = fog.fogColor;
+    this.flareMat.uniforms.fogDensity = fog.fogDensity;
+    this.flare = new BillboardSet(220, this.flareMat);
+    this.flare.mesh.renderOrder = 2;
+    scene.add(this.flare.mesh);
+    this.flareParticles = [];
+    this.flareAcc = 0;
+
     this.flashMat = new THREE.ShaderMaterial({
       uniforms: {},
       vertexShader: billboardVert,
@@ -192,6 +205,15 @@ export class Effects {
       glow,
       alpha,
     });
+  }
+
+  flareEmit(dt, x, y, z) {
+    this.flareAcc += dt * 9;
+    while (this.flareAcc > 1) {
+      this.flareAcc -= 1;
+      if (this.flareParticles.length >= this.flare.max) this.flareParticles.shift();
+      this.flareParticles.push({ x: x + (Math.random() - 0.5) * 0.4, y, z: z + (Math.random() - 0.5) * 0.4, age: 0, life: 9 + Math.random() * 4, rot: Math.random() * 6, size: 1.2 });
+    }
   }
 
   buildAsh(scene) {
@@ -340,6 +362,23 @@ export class Effects {
       this.smoke.set(si++, p.x, p.y, p.z, size, p.rot, a, p.glow * Math.max(0, 1 - t * 4));
     }
     this.smoke.commit(si);
+
+    let fi2 = 0;
+    for (let i = this.flareParticles.length - 1; i >= 0; i--) {
+      const p = this.flareParticles[i];
+      p.age += dt;
+      if (p.age > p.life) {
+        this.flareParticles.splice(i, 1);
+        continue;
+      }
+      const t = p.age / p.life;
+      p.x += wind * t * dt * 1.4;
+      p.y += (2.4 - t * 1.6) * dt;
+      p.rot += dt * 0.2;
+      const a = 0.7 * Math.min(1, p.age * 3) * (1 - t);
+      this.flare.set(fi2++, p.x, p.y, p.z, p.size + p.age * 1.1, p.rot, a, 1 - t * 3);
+    }
+    this.flare.commit(fi2);
 
     // artillery flashes
     this.nextFlash -= dt;

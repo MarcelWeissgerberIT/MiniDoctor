@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { rng, rbox, StaticBatcher, projectUV } from '../geom.js';
+import { rng, rbox, cyl, tube, StaticBatcher, projectUV, fitModel } from '../geom.js';
 import { Effects } from './effects.js';
+import { MECH } from '../logic/mech.js';
+import { WAYPOINTS } from '../tutorial.js';
 
 /* ------------------------------------------------------------------ noise */
 
@@ -67,7 +69,9 @@ export class World {
     this.buildSky();
     this.buildTerrain();
     this.buildLights();
+    this.buildBase();
     this.buildProps();
+    this.buildBeacons();
     this.effects = new Effects(this, assets);
     for (const f of this.fires) this.effects.addFire(f);
   }
@@ -91,6 +95,8 @@ export class World {
     const d = Math.hypot(x, z);
     let h = fbm(x * 0.0035, z * 0.0035) * 14 + fbm(x * 0.02 + 5, z * 0.02) * 1.6;
     h *= THREE.MathUtils.smoothstep(d, 20, 160) * 0.85 + 0.15;
+    // the forward base around the parked mech is levelled
+    h *= THREE.MathUtils.smoothstep(d, 16, 40);
     for (const c of this.craters) {
       const dx = x - c.x;
       const dz = z - c.z;
@@ -522,10 +528,206 @@ export class World {
     this.scene.add(im);
   }
 
+  /* ---------------------------------------------------------------- base */
+
+  /** Forward base: the parked BB-07, a sandbag ring, generator, fuel and ammo. */
+  buildBase() {
+    const mdl = this.assets.models;
+    const r = rng(99);
+    // the player's mech, moved with the mech state every frame
+    this.playerMech = new THREE.Group();
+    this.scene.add(this.playerMech);
+    if (mdl.mech) {
+      const body = fitModel(mdl.mech.clone(true), { height: MECH.height, rotY: Math.PI });
+      body.traverse((o) => {
+        if (o.isMesh) {
+          o.material.envMapIntensity = 0.45;
+          o.material.metalness = 0.55;
+        }
+      });
+      this.playerMech.add(body);
+      this.mechBody = body;
+      this.playerMech.updateMatrixWorld(true);
+      this.centreOnTorso(body);
+    }
+    this.playerMech.updateMatrixWorld(true);
+    this.boarding = this.measureBoarding();
+    this.buildMechHatch();
+
+    // sandbag ring with a wide gap to the front (-Z) and a footpath gap at the back
+    const bags = this.instanced('sandbags', 32);
+    if (bags) {
+      const s = 3.2 / Math.max(bags.size.x, bags.size.z);
+      const R = 12.5;
+      for (let a = 50; a <= 310; a += 13.5) {
+        const deg = a;
+        if (deg > 165 && deg < 192) continue; // footpath
+        const t = (deg * Math.PI) / 180;
+        // angle 0 = straight ahead (-Z)
+        const x = Math.sin(t) * R;
+        const z = -Math.cos(t) * R;
+        bags.add(x, z, -t + (r() - 0.5) * 0.12, s * (0.95 + r() * 0.1), 0.02, 0, 0);
+        this.colliders.push({ x, z, r: 1.4 });
+      }
+    }
+    const place = (name, opts, x, z, rot) => {
+      if (!mdl[name]) return null;
+      const o = fitModel(mdl[name].clone(true), opts);
+      o.position.set(x, this.heightAt(x, z), z);
+      o.rotation.y = rot;
+      this.scene.add(o);
+      return o;
+    };
+    place('generator', { length: 2.6 }, 4.6, 4.2, 0.6);
+    this.colliders.push({ x: 4.6, z: 4.2, r: 1.6 });
+    place('drums', { height: 0.95 }, -5.2, 3.5, 0.3);
+    place('drums', { height: 0.95 }, -6.3, 5.1, 2.0);
+    place('crates', { height: 1.3 }, 6.4, -2.0, -0.4);
+    place('crates', { height: 1.1 }, -6.0, -3.2, 1.1);
+    this.colliders.push({ x: -5.7, z: 4.2, r: 1.4 }, { x: 6.4, z: -2, r: 1.2 }, { x: -6, z: -3.2, r: 1.1 });
+    // power umbilical from the generator to the mech's hip
+    const b = this.boarding;
+    this.umbilical = new THREE.Mesh(
+      tube([[4.0, 0.9, 3.6], [3.0, 0.05, 2.6], [1.6, 0.05, b.backZ + 0.8], [0.9, 1.2, b.backZ + 0.2], [0.6, 2.4, b.backZ - 0.05]], 0.045, 0.3, 8),
+      this.m.hose,
+    );
+    this.umbilical.castShadow = true;
+    this.scene.add(this.umbilical);
+    // a work light on a pole lighting the mech
+    const pole = new THREE.Mesh(cyl(0.05, 0.07, 5.5, 8, 0.5), this.m.pipe);
+    pole.position.set(-4.2, 2.75, 6.5);
+    const head = new THREE.Mesh(rbox(0.5, 0.3, 0.25, 0.03, 0.3), this.m.consoleMetal);
+    head.position.set(-4.0, 5.5, 6.3);
+    head.lookAt(0, 3, 0);
+    const lens = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.22), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.6, 3) }));
+    lens.position.set(0, 0, 0.13);
+    head.add(lens);
+    this.scene.add(pole, head);
+    this.workLight = new THREE.SpotLight(0xfff0d8, 45, 30, 0.55, 0.7, 1.5);
+    this.workLight.position.set(-3.9, 5.4, 6.1);
+    this.workLight.target.position.set(0, 2.6, 0);
+    this.scene.add(this.workLight, this.workLight.target);
+  }
+
+  /**
+   * The bounding box includes the arm cannon and the missile pod, so its centre is not the
+   * cockpit. Shift the model so the torso (measured by ray casts) is centred on the origin.
+   */
+  centreOnTorso(body) {
+    const ray = new THREE.Raycaster();
+    const y = MECH.height * 0.72;
+    const cast = (o, d) => {
+      ray.set(new THREE.Vector3(...o), new THREE.Vector3(...d));
+      const h = ray.intersectObject(body, true);
+      return h.length ? h[0].point : null;
+    };
+    const back = cast([0, y, 20], [0, 0, -1]);
+    const front = cast([0, y, -20], [0, 0, 1]);
+    if (!back || !front) return;
+    const cz = (back.z + front.z) / 2;
+    const left = cast([-20, y, cz], [1, 0, 0]);
+    const right = cast([20, y, cz], [-1, 0, 0]);
+    const cx = left && right ? (left.x + right.x) / 2 : 0;
+    body.position.x -= cx;
+    body.position.z -= cz;
+    body.updateMatrixWorld(true);
+  }
+
+  /** Finds the back of the torso (hatch) and the ladder on the left leg by ray casting the model. */
+  measureBoarding() {
+    const H = MECH.height;
+    const out = { hatchY: H * 0.72, backZ: 1.0, ladderX: -0.95, ladderZ: 0.9, frontZ: -1.0 };
+    if (!this.mechBody) return out;
+    const ray = new THREE.Raycaster();
+    const hit = (o, d) => {
+      ray.set(new THREE.Vector3(...o), new THREE.Vector3(...d));
+      const h = ray.intersectObject(this.mechBody, true);
+      return h.length ? h[0].point : null;
+    };
+    const back = hit([0, out.hatchY, 20], [0, 0, -1]);
+    if (back) out.backZ = back.z;
+    const front = hit([0, H * 0.82, -20], [0, 0, 1]);
+    if (front) out.frontZ = front.z;
+    // left leg (= -X when the mech faces -Z): scan for the leg at knee height
+    for (const x of [-1.2, -1.0, -0.8, -0.6]) {
+      const p = hit([x, H * 0.3, 20], [0, 0, -1]);
+      if (p) {
+        out.ladderX = x;
+        out.ladderZ = p.z;
+        break;
+      }
+    }
+    const top = hit([0, H + 5, 0], [0, -1, 0]);
+    out.topY = top ? top.y : H;
+    return out;
+  }
+
+  /** Hinged armour door over the painted hatch on the mech's back, plus a dark opening behind it. */
+  buildMechHatch() {
+    const b = this.boarding;
+    const w = 0.86;
+    const h = 1.12;
+    this.mechHatch = new THREE.Group();
+    this.mechHatch.position.set(-w / 2, b.hatchY, b.backZ + 0.04);
+    const door = new THREE.Mesh(rbox(w, h, 0.07, 0.02, 0.9), this.m.armor);
+    door.position.x = w / 2;
+    door.castShadow = true;
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.014, 8, 24), this.m.steel);
+    wheel.position.set(w / 2, 0, 0.05);
+    const stripe = new THREE.Mesh(rbox(w * 0.9, 0.06, 0.02, 0.005, 0.25), this.m.hazard);
+    stripe.position.set(w / 2, h / 2 - 0.08, 0.04);
+    this.mechHatch.add(door, wheel, stripe);
+    const opening = new THREE.Mesh(
+      new THREE.BoxGeometry(w - 0.04, h - 0.04, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1, side: THREE.BackSide }),
+    );
+    opening.position.set(0, b.hatchY, b.backZ - 0.2);
+    this.playerMech.add(this.mechHatch, opening);
+  }
+
+  setMechHatch(v) {
+    this.mechHatch.rotation.y = -v * 1.7;
+  }
+
+  /* ------------------------------------------------------------- beacons */
+
+  buildBeacons() {
+    this.beacons = WAYPOINTS.map((wp) => {
+      const g = new THREE.Group();
+      const y = this.heightAt(wp.x, wp.z);
+      g.position.set(wp.x, y, wp.z);
+      const pole = new THREE.Mesh(cyl(0.08, 0.1, 6, 8, 0.5), this.m.hazard);
+      pole.position.y = 3;
+      const lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 6, 1.2) });
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), lampMat);
+      lamp.position.y = 6.2;
+      g.add(pole, lamp);
+      g.visible = false;
+      this.scene.add(g);
+      this.contacts.push({ x: wp.x, z: wp.z, type: 'wp', hidden: true });
+      return { ...wp, y, group: g, lampMat, contact: this.contacts[this.contacts.length - 1] };
+    });
+    this.activeBeacon = -1;
+  }
+
+  setWaypoint(i) {
+    this.activeBeacon = i ?? -1;
+    this.beacons.forEach((b, k) => {
+      b.group.visible = k === this.activeBeacon;
+      b.contact.hidden = k !== this.activeBeacon;
+    });
+  }
+
   /* -------------------------------------------------------------- update */
 
   update(dt, time, camPos) {
     this.sky.position.set(camPos.x, camPos.y, camPos.z);
+    const b = this.beacons[this.activeBeacon];
+    if (b) {
+      const on = Math.sin(time * 6) > 0.3;
+      b.lampMat.color.setRGB(on ? 0.3 : 0.02, on ? 6 : 0.2, on ? 1.2 : 0.05);
+      this.effects.flareEmit(dt, b.x, b.y + 0.3, b.z);
+    }
     // hostiles drift around on the radar
     for (const h of this.hostiles) {
       h.a += h.w * dt;

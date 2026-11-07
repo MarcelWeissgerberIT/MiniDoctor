@@ -24,7 +24,7 @@ describe('mech throttle and speed', () => {
     expect(s.speed).toBeLessThan(MECH.maxForward * 0.5);
     run(s, {}, 10);
     expect(s.speed).toBeCloseTo(MECH.maxForward);
-    expect(kmh(s.speed)).toBeCloseTo(54);
+    expect(kmh(s.speed)).toBeCloseTo(39.6);
   });
 
   it('stop puts the throttle to zero and the mech brakes', () => {
@@ -93,8 +93,8 @@ describe('footsteps', () => {
     s.speed = MECH.maxForward;
     s.stepPhase = 0.5;
     const b = walkBob(s);
-    expect(b.y).toBeGreaterThan(0.2);
-    expect(b.y).toBeLessThan(0.5);
+    expect(b.y).toBeGreaterThan(0.1);
+    expect(b.y).toBeLessThan(0.35);
   });
 });
 

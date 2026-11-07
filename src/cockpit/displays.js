@@ -338,6 +338,7 @@ export function drawTactical(mfd, s) {
   const cos = Math.cos(s.heading);
   const sin = Math.sin(s.heading);
   for (const c of s.contacts) {
+    if (c.hidden) continue;
     const dx = c.x - s.x;
     const dz = c.z - s.z;
     // rotate into mech frame: forward (-Z) is up on the scope
@@ -359,6 +360,16 @@ export function drawTactical(mfd, s) {
       g.lineTo(px - 6, py + 5);
       g.closePath();
       g.fill();
+    } else if (c.type === 'wp') {
+      g.strokeStyle = '#d8ffe0';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(px, py - 8);
+      g.lineTo(px + 8, py);
+      g.lineTo(px, py + 8);
+      g.lineTo(px - 8, py);
+      g.closePath();
+      g.stroke();
     } else if (c.type === 'fire') {
       g.fillStyle = `rgba(255,179,71,${a})`;
       g.fillRect(px - 3, py - 3, 6, 6);

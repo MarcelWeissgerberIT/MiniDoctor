@@ -3,18 +3,20 @@
 // Units: metres, seconds, radians. Heading 0 looks along -Z, positive heading turns left
 // (counter-clockwise seen from above), like a three.js rotation around +Y.
 
+// BB-07 is 5 m tall and weighs about 18 t; the cockpit sits in the upper torso.
 export const MECH = {
-  eyeHeight: 10.5, // pilot eye above the ground
-  maxForward: 15, // m/s  (54 km/h)
-  maxReverse: 4.5, // m/s
-  accel: 2.6, // m/s^2  (a 70 t machine does not sprint off)
-  brake: 4.0, // m/s^2
+  height: 5.0,
+  eyeHeight: 3.95, // pilot eye above the ground (behind the visor slit)
+  maxForward: 11, // m/s  (~40 km/h)
+  maxReverse: 3.5, // m/s
+  accel: 2.8, // m/s^2
+  brake: 4.2, // m/s^2
   throttleRate: 0.55, // throttle units per second while W/S is held
   minThrottle: -0.3,
-  turnRate: 0.42, // rad/s at standstill
-  turnRateMoving: 0.3, // rad/s at full speed
-  stepLength: 4.2, // metres per footstep
-  radius: 3.2, // collision radius of the feet/legs
+  turnRate: 0.6, // rad/s at standstill
+  turnRateMoving: 0.42, // rad/s at full speed
+  stepLength: 2.4, // metres per footstep
+  radius: 1.7, // collision radius of the feet/legs
 };
 
 export function createMechState(x = 0, z = 0, heading = 0) {
@@ -118,7 +120,7 @@ export function walkBob(s) {
   const moving = Math.min(1, (Math.abs(s.speed) + Math.abs(s.turn) * 4) / 3);
   const lift = Math.sin(Math.PI * s.stepPhase);
   const sway = s.foot * Math.sin(Math.PI * s.stepPhase); // lean towards the stance leg
-  return { y: lift * 0.32 * moving, x: sway * 0.16 * moving, roll: -sway * 0.012 * moving, pitch: lift * 0.006 * moving };
+  return { y: lift * 0.2 * moving, x: sway * 0.1 * moving, roll: -sway * 0.014 * moving, pitch: lift * 0.007 * moving };
 }
 
 export const kmh = (ms) => ms * 3.6;

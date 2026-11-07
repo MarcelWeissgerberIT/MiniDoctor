@@ -1,17 +1,40 @@
 # BattleBot
 
-Ein 3D-Ego-Shooter im Browser: Du sitzt im Cockpit von **BB-07**, einem 70-Tonnen-Kampfroboter (Mech), mitten in einem Krieg. Wie in einem Flugzeug- oder Panzercockpit ist die Sicht nach draußen auf einen schmalen Panzerglasschlitz und zwei seitliche Sichtblöcke begrenzt.
+Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18 Tonnen schweren Kampfroboter (Mech), mitten in einem Krieg – aus einem engen, rostigen Cockpit. Wie in einem Flugzeug- oder Panzercockpit ist die Sicht nach draußen auf einen schmalen Panzerglasschlitz und zwei seitliche Sichtblöcke begrenzt.
 
-*A browser first-person mech game. You pilot a 70-tonne combat robot from a cramped, rusty cockpit with a narrow armoured visor.*
+*A browser first-person mech game. You board a 5 m combat robot, bring it up from cold and dark and walk it out of a forward base.*
 
-**Stand: Prototyp 0.1 – das Cockpit.** Waffen und Gegner folgen in den nächsten Schritten.
+**Stand: Prototyp 0.2 – Cockpit und Mission 1 „Kalt & dunkel“.** Waffen und Gegner folgen in den nächsten Schritten.
+
+## Mission 1 · Einweisung: Kalt & dunkel
+
+1. **Einstieg:** Du gehst über den Stützpunkt (Sandsackring, Generator mit Versorgungskabel, Treibstofffässer, Munitionskisten, Arbeitsscheinwerfer) zum abgeschalteten BB-07, schaust an der 5-m-Maschine hoch, kletterst die Leiter am linken Bein hinauf, öffnest die Einstiegsluke am Rücken, steigst ein, schnallst dich an – die Luke fällt zu. (Leertaste überspringt.)
+2. **Kaltstart nach Checkliste:** Das Cockpit ist komplett tot. Ein Ausbilder führt per Funk (deutsche Sprachausgabe mit Funkfilter und Untertiteln) durch den Start. Der nächste Schalter wird im Cockpit mit einem pulsierenden Ring markiert, ein Pfeil zeigt die Richtung, wenn er außerhalb des Blickfelds liegt:
+
+   | Schritt | Wirkung |
+   |---|---|
+   | BATT ein (linke Konsole, Schutzkappe) | Batteriebus: rotes Notlicht, Warnlampen, Instrumentenzeiger |
+   | APU starten | Hilfsturbine läuft in ~9 s hoch → Lampe APU READY |
+   | GEN 1 + GEN 2 | Hauptstrom: Displays booten, Kabinenlicht möglich |
+   | CABIN LIGHT | Deckenleuchte |
+   | HYD PRESS (Overhead) | Hydraulikdruck steigt auf ~23 MPa |
+   | COOLANT PUMP (Overhead) | Kühlmittelfluss |
+   | REACTOR START (Schutzkappe) | 7 s Zündung mit Grollen und Vibration; ohne Pumpe und Druck: Abbruch |
+   | APU aus | Reaktor versorgt jetzt die Generatoren |
+   | STAB ASSIST | Gyro richtet sich in ~6 s aus |
+   | OPTICS + HUD | Kamerabild und Head-up-Display |
+   | LEG LOCK aus | Beinverriegelung löst sich – erst jetzt kann der Mech laufen |
+
+3. **Laufen:** Schub geben, zur ersten Wegmarke (grüner Signalrauch, blinkende Leuchte, Markierung im HUD und auf dem Radar), drehen, zweite Wegmarke, anhalten, Nachtsicht testen. Danach freies Bewegen.
+
+Fehler werden realistisch behandelt: Reaktor ohne Kühlung/Hydraulik zündet nicht (der Schalter springt zurück), Kühlpumpe im Betrieb aus → Überhitzung, Master Caution, Alarmleuchte und schließlich Reaktor-Notabschaltung. **Schnellstart** im Titelmenü überspringt Einstieg und Checkliste.
 
 ## Starten
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # Logik-Tests (Mech-Bewegung, Schritte, Kollisionen)
+npm test         # Logik-Tests (Mech-Bewegung, Kaltstart-Reihenfolge, Verriegelungen)
 npm run build    # statischer Build in dist/
 ```
 
@@ -30,7 +53,7 @@ Bei jedem Push auf `main` baut und veröffentlicht GitHub Actions das Spiel auf 
 - **Bedienbare Schalter und Knöpfe** (Fadenkreuz + Klick): Kabinenlicht, HUD, Nachtsicht, Optik, Radarreichweite, Gyro-Stabilisator, Kühlmittelpumpe, Hydraulik, Generatoren, Master Caution u. a. Pumpe aus → Überhitzung mit Alarm; Hydraulik aus → der Mech kommt kaum noch vom Fleck; alle Generatoren aus → Cockpit wird dunkel.
 - **Joystick und Schubhebel** bewegen sich mit den Eingaben.
 - **Licht**: Tageslicht fällt mit weichen Schatten durch den Sichtschlitz, warme Deckenleuchte, rote Fußraumbeleuchtung, grünes Display-Streulicht, rote Alarmleuchte mit Drahtkäfig; Artillerieblitze erhellen kurz die Kabine. Staub schwebt in der Luft und wird bei jedem Schritt aufgewirbelt.
-- **Startsequenz**: Relais, flackerndes Licht, Displays booten, Zeigertest, HUD.
+- **Einstiegsluke** in der Rückwand, die beim Einsteigen offen steht und sich hinter dir schließt.
 
 ## Draußen
 
@@ -45,6 +68,7 @@ Ein zerbombtes Stadtrandgebiet: Krater, ausgebrannte Panzerwracks, Gebäuderuine
 | X / Leertaste | Schub auf null |
 | A / D | Mech drehen |
 | Linksklick | Schalter unter dem Fadenkreuz betätigen |
+| Leertaste | Einstiegssequenz überspringen |
 | L / H / N / O | Kabinenlicht / HUD / Nachtsicht / Optik |
 | R | Radarreichweite |
 | G | Gyro-Stabilisator (dämpft Schwanken und Erschütterungen) |
@@ -64,8 +88,10 @@ Alle Grafiken, Modelle und Sounds wurden für dieses Projekt generiert:
 | Glas-Schmutz, Rauch- und Feuer-Sprites | Higgsfield (GPT Image 2.6) | `public/assets/fx/` |
 | Warnschilder und Typenschild (Decals) | Higgsfield (GPT Image 2.6, transparent) | `public/assets/decals/` |
 | 360°-Stadtpanorama | Higgsfield (Nano Banana 2.1, 4:1) | `public/assets/sky/` |
-| 3D-Modelle: Pilotensitz, Joystick, Schubhebel, Funkgerät, Feuerlöscher, Panzerwrack, Gebäuderuine, Panzersperre | **Meshy 7 Image-to-3D** (über Higgsfield, mit PBR), Vorlagen von GPT Image 2.6 | `public/assets/models/*.glb` |
-| Cockpit-Brummen, Schlachtlärm, Mech-Schritt, Servo, Hochfahren | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
+| 3D-Modelle: Pilotensitz, Joystick, Schubhebel, Funkgerät, Feuerlöscher, Panzerwrack, Gebäuderuine, Panzersperre, Sandsäcke, Munitionskisten, Fässer, Stromgenerator | **Meshy 7 Image-to-3D** (über Higgsfield, mit PBR), Vorlagen von GPT Image 2.6 | `public/assets/models/*.glb` |
+| BB-07 von außen (5 m) | **Meshy Multi-Image-to-3D** aus Front-, Seiten- und Rückansicht (GPT Image 2.6, Rückansicht mit Luke und Leiter) | `public/assets/models/mech.glb` |
+| Cockpit-Brummen, Schlachtlärm, Mech-Schritt, Servo, Hochfahren, Schritte auf Schotter, Leiter, Luke auf/zu, Batterie-Relais, APU, Reaktorzündung, Hydraulikpumpe, Gyro, Beinverriegelung, Gurtschloss, Stützpunkt-Atmo | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
+| 22 Funksprüche des Ausbilders (Deutsch) | Higgsfield (Seed Audio, Stimme „Barrett“) | `public/assets/voice/` |
 
 `tools/process-assets.mjs` macht daraus spielfertige Dateien: Normal-Maps und gepackte ORM-Maps (Ambient Occlusion, Rauheit, Metallanteil) werden aus den Farbtexturen abgeleitet (Rost = rau und nicht-metallisch, blanker Stahl = metallisch), Texturen werden nahtlos gemacht, das Panorama wird horizontal nahtlos überblendet, die Decals ausgeschnitten und die GLBs mit WebP-Texturen und Meshopt komprimiert. Die Rohdateien liegen in `assets-src/` (nicht im Repo).
 
@@ -75,14 +101,18 @@ Das Cockpit selbst (Hülle, Armaturen, Displays, Schalter, Leitungen) ist in Thr
 
 - **Three.js** + Vite, keine weiteren Laufzeit-Abhängigkeiten.
 - Zwei Szenen: Schlachtfeld (Nahebene 0,4 m, Fernebene 7 km) und Cockpit (Nahebene 2 cm) werden nacheinander mit gelöschtem Tiefenpuffer gerendert – keine Z-Fighting-Probleme trotz riesiger Spannweite.
-- Pilotenkopf hängt an einer Feder: bei jedem Schritt des 70-t-Mechs sackt der Blick ab, das Cockpit rüttelt, Instrumente zittern.
+- Pilotenkopf hängt an einer Feder: bei jedem Schritt des Mechs sackt der Blick ab, das Cockpit rüttelt, Instrumente zittern.
+- Das Außenmodell wird per Raycast vermessen (Rumpfmitte, Rückenluke, Leiter am Bein), damit Kamerafahrt und Cockpit genau zum Meshy-Modell passen.
 - Nachbearbeitung: MSAA, Bloom, Farbgrading mit Vignette und chromatischer Aberration, ACES-Tonemapping, Filmkorn.
 - Bildbasierte Beleuchtung aus dem Panorama für realistische Metallreflexe.
 
 ```
 src/
-  main.js              Spielablauf, Kamera-Rig, Systeme (Reaktor, Hitze, Hydraulik)
+  main.js              Spielablauf, Kamera-Rig, Verdrahtung der Systeme
+  entry.js             Einstiegssequenz (Kamerafahrt, Leiter, Luke, Hinsetzen)
+  tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken
   logic/mech.js        reine Bewegungslogik (getestet)
+  logic/systems.js     Strom, APU, Hydraulik, Kühlung, Reaktor, Gyro, Beinverriegelung (getestet)
   cockpit/cockpit.js   Cockpit-Aufbau und Beleuchtung
   cockpit/instruments.js  Rundinstrumente, Kippschalter, Leuchttaster, Alarmleuchte
   cockpit/displays.js  Röhrendisplays (Status, Kamera, Taktik)

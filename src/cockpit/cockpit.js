@@ -28,7 +28,9 @@ export class Cockpit {
     this.switches = {};
     this.lamps = {};
     this.power = 0; // 0..1 cockpit electrical power (startup sequence)
-    this.lightsOn = true;
+    this.lightsOn = false;
+    this.batt = false;
+    this.main = false;
     this.batch = new StaticBatcher(this.root);
 
     RectAreaLightUniformsLib.init();
@@ -42,6 +44,7 @@ export class Cockpit {
     };
 
     this.buildShell();
+    this.buildHatch();
     this.buildFront();
     this.buildDash(feedTarget);
     this.buildOverhead();
@@ -51,6 +54,7 @@ export class Cockpit {
     this.buildDecals();
     this.buildLights();
     this.buildDust();
+    this.buildMarker();
     this.batch.finalize();
   }
 
@@ -65,8 +69,9 @@ export class Cockpit {
     for (const z of [-0.55, -0.1, 0.35, 0.8]) batch.add(rbox(2.16, 0.08, 0.07, 0.01, 0.6), m.rivets, [0, C.ceil - 0.035, z]);
     // longitudinal ceiling beams
     for (const x of [-0.7, 0.7]) batch.add(rbox(0.08, 0.07, 1.8, 0.01, 0.6), m.rivets, [x, C.ceil - 0.06, 0.06]);
-    // back wall with a hatch frame
-    batch.add(rbox(2.3, 2.15, 0.06, 0.01, 0.9), m.armorDark, [0, -0.22, C.back + 0.03]);
+    // back wall with the crew hatch opening (the door itself is dynamic, see buildHatch)
+    const backWall = plateWithHoles([-1.15, C.floor - 0.05, 1.15, C.ceil + 0.05, 0.01], [[-0.37, -1.01, 0.37, 0.38, 0.03]], 0.06, 0.9, 0.006);
+    batch.add(backWall, m.armorDark, [0, 0, C.back + 0.06], [0, Math.PI, 0]);
     const hatch = [
       [0, 0.42, 0.9, 0.08],
       [0, -1.05, 0.9, 0.08],
@@ -74,12 +79,6 @@ export class Cockpit {
       [0.41, -0.32, 0.08, 1.4],
     ];
     for (const [x, y, w, h] of hatch) batch.add(rbox(w, h, 0.05, 0.012, 0.5), m.rivets, [x, y, C.back - 0.02]);
-    batch.add(rbox(0.74, 1.38, 0.03, 0.01, 0.9), m.armor, [0, -0.32, C.back - 0.005]);
-    // hatch wheel
-    const wheel = new THREE.TorusGeometry(0.11, 0.012, 8, 28);
-    batch.add(wheel, m.steel, [0.0, -0.3, C.back - 0.06]);
-    for (let i = 0; i < 3; i++) batch.add(cyl(0.008, 0.008, 0.22, 6), m.steel, [0, -0.3, C.back - 0.06], [0, 0, (i * Math.PI) / 3]);
-    batch.add(cyl(0.025, 0.025, 0.06, 12), m.steel, [0, -0.3, C.back - 0.04], [Math.PI / 2, 0, 0]);
     // hatch hazard stripes
     batch.add(rbox(0.9, 0.05, 0.012, 0.004, 0.25), m.hazard, [0, 0.49, C.back - 0.05]);
 
@@ -112,6 +111,57 @@ export class Cockpit {
     }
     // knee well / lower front
     batch.add(rbox(2.2, 0.9, 0.06, 0.01, 0.9), m.armorDark, [0, -0.85, -1.08]);
+  }
+
+  /** Crew hatch in the back wall, hinged on the left; opens outwards. */
+  buildHatch() {
+    const { m } = this;
+    this.hatch = new THREE.Group();
+    this.hatch.position.set(-0.37, -0.315, C.back + 0.02);
+    const door = new THREE.Group();
+    door.position.x = 0.37;
+    const plate = new THREE.Mesh(rbox(0.76, 1.41, 0.07, 0.012, 0.9), m.armor);
+    const inner = new THREE.Mesh(rbox(0.62, 1.2, 0.02, 0.008, 0.6), m.rivets);
+    inner.position.z = -0.04;
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.012, 8, 28), m.steel);
+    wheel.position.set(0, 0.02, -0.09);
+    const hub = new THREE.Mesh(cyl(0.025, 0.025, 0.06, 12), m.steel);
+    hub.rotation.x = Math.PI / 2;
+    hub.position.set(0, 0.02, -0.065);
+    door.add(plate, inner, wheel, hub);
+    for (let i = 0; i < 3; i++) {
+      const spoke = new THREE.Mesh(cyl(0.008, 0.008, 0.22, 6), m.steel);
+      spoke.position.set(0, 0.02, -0.09);
+      spoke.rotation.z = (i * Math.PI) / 3;
+      door.add(spoke);
+    }
+    // locking bolts on the right edge
+    for (const y of [-0.5, 0, 0.5]) {
+      const bolt = new THREE.Mesh(rbox(0.08, 0.04, 0.03, 0.006, 0.1), m.steel);
+      bolt.position.set(0.36, y, -0.05);
+      door.add(bolt);
+    }
+    door.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+    this.wheel = wheel;
+    this.hatch.add(door);
+    this.root.add(this.hatch);
+    this.hatchOpen = 0;
+  }
+
+  /** 0 = closed, 1 = fully open (swung outwards) */
+  setHatch(v) {
+    this.hatchOpen = v;
+    this.hatch.rotation.y = -v * 1.75;
+    this.wheel.rotation.z = Math.min(1, v * 4) * 2.4;
+    if (this.hatchLight) {
+      this.hatchLight.intensity = v * 14;
+      this.hatchLight.visible = v > 0.01;
+    }
   }
 
   /* --------------------------------------------------------------- front */
@@ -253,11 +303,11 @@ export class Cockpit {
     const guarded = [
       ['firesup', 'FIRE\nSUPPR', -0.255],
       ['coolant', 'COOLANT\nBYPASS', -0.085],
-      ['reset', 'REACTOR\nRESET', 0.085],
+      ['reactor', 'REACTOR\nSTART', 0.085],
       ['stab', 'STAB\nASSIST', 0.255],
     ];
     for (const [key, label, x] of guarded) {
-      const sw = new ToggleSwitch(m, { label, guard: true, on: key === 'stab' });
+      const sw = new ToggleSwitch(m, { label, guard: true });
       sw.group.position.set(x, -0.215, 0);
       dash.add(sw.group);
       this.switches[key] = sw;
@@ -270,13 +320,13 @@ export class Cockpit {
     batch.add(rbox(1.5, 0.27, 0.06, 0.015, 0.7), m.console, [0, 0, -0.03], [0, 0, 0], low);
     batch.add(rbox(1.52, 0.016, 0.02, 0.004, 0.22), m.hazard, [0, 0.14, 0.0], [0, 0, 0], low);
     const toggles = [
-      ['optics', 'OPTICS', -0.45, true],
+      ['optics', 'OPTICS', -0.45, false],
       ['ir', 'IR', -0.3, false],
       ['nv', 'NV', -0.15, false],
-      ['lights', 'CABIN\nLIGHT', 0.0, true],
-      ['hud', 'HUD', 0.15, true],
+      ['lights', 'CABIN\nLIGHT', 0.0, false],
+      ['hud', 'HUD', 0.15, false],
       ['radar', 'RADAR\nRANGE', 0.3, false],
-      ['beacon', 'BEACON', 0.45, false],
+      ['legLock', 'LEG\nLOCK', 0.45, true],
     ];
     for (const [key, label, x, on] of toggles) {
       const sw = new ToggleSwitch(m, { label, on });
@@ -337,7 +387,7 @@ export class Cockpit {
       ['ecm', 'ECM', 0.28],
     ];
     for (const [key, label, x, guard] of defs) {
-      const sw = new ToggleSwitch(m, { label, guard: !!guard, on: key === 'pump' || key === 'hydp' });
+      const sw = new ToggleSwitch(m, { label, guard: !!guard });
       sw.group.position.set(x, 0.03, 0);
       oh.add(sw.group);
       this.switches[key] = sw;
@@ -379,16 +429,35 @@ export class Cockpit {
       for (let k = 0; k < 6; k++) batch.add(rbox(0.004, 0.014, 0.22, 0.002, 0.1), m.blackPaint, [sx * 0.519, -0.72 - k * 0.03, 0.12]);
     }
     // small switch panel on the left console
-    const lp = this.frame([-0.86, -0.565, 0.12], [-Math.PI / 2 + 0.25, 0, 0]);
-    batch.add(rbox(0.3, 0.22, 0.03, 0.008, 0.3), m.consoleMetal, [0, 0, -0.012], [0, 0, 0], lp);
-    for (const [i, label] of ['APU', 'GEN 1', 'GEN 2'].entries()) {
-      const sw = new ToggleSwitch(m, { label, on: true });
-      sw.group.position.set(-0.09 + i * 0.09, 0.02, 0);
+    const lp = this.frame([-0.82, -0.565, 0.1], [-Math.PI / 2 + 0.3, 0, 0]);
+    batch.add(rbox(0.38, 0.26, 0.03, 0.008, 0.3), m.consoleMetal, [0, 0, -0.012], [0, 0, 0], lp);
+    const elec = [
+      ['batt', 'BATT', true],
+      ['apu', 'APU'],
+      ['gen1', 'GEN 1'],
+      ['gen2', 'GEN 2'],
+    ];
+    for (const [i, [key, label, guard]] of elec.entries()) {
+      const sw = new ToggleSwitch(m, { label, guard: !!guard });
+      sw.group.position.set(-0.135 + i * 0.09, -0.01, 0);
       lp.add(sw.group);
-      this.switches['gen' + i] = sw;
+      this.switches[key] = sw;
       this.controls.push(sw);
       this.hitTargets.push(sw.hit);
     }
+    const apuLamp = new LampButton(m, { text: 'APU\nREADY', color: '#4dff6a', w: 0.07, h: 0.035 });
+    apuLamp.group.position.set(0.0, 0.085, 0);
+    lp.add(apuLamp.group);
+    this.lamps.apu = apuLamp;
+    this.controls.push(apuLamp);
+    const battLamp = new LampButton(m, { text: 'BATT\nON', color: '#ffb020', w: 0.07, h: 0.035 });
+    battLamp.group.position.set(-0.12, 0.085, 0);
+    lp.add(battLamp.group);
+    this.lamps.batt = battLamp;
+    this.controls.push(battLamp);
+    const elecLabel = makeLabel('ELECTRICAL', 0.16, 0.025, { size: 34, h: 64, w: 512 });
+    elecLabel.position.set(0.11, 0.09, 0.001);
+    lp.add(elecLabel);
     // keypad on the right console
     const rp = this.frame([0.88, -0.565, 0.12], [-Math.PI / 2 + 0.25, 0, 0]);
     batch.add(rbox(0.24, 0.2, 0.03, 0.008, 0.3), m.consoleMetal, [0, 0, -0.012], [0, 0, 0], rp);
@@ -537,6 +606,22 @@ export class Cockpit {
     this.ambient = new THREE.HemisphereLight(0x8a8f96, 0x2a221a, 0.12);
     this.scene.add(this.ambient);
 
+    // daylight through the open crew hatch (boarding)
+    this.hatchLight = new THREE.SpotLight(0xd8dbe2, 0, 6, 0.8, 0.9, 1.2);
+    this.hatchLight.position.set(0, 0.5, C.back + 1.8);
+    this.hatchLight.target.position.set(0, -0.7, -0.4);
+    this.hatchLight.castShadow = true;
+    this.hatchLight.shadow.mapSize.set(1024, 1024);
+    this.hatchLight.shadow.bias = -0.0005;
+    this.hatchLight.shadow.normalBias = 0.02;
+    this.hatchLight.visible = false;
+    this.scene.add(this.hatchLight, this.hatchLight.target);
+
+    // red emergency light (battery bus only)
+    this.emergency = new THREE.PointLight(0xff2a14, 0, 2.6, 1.6);
+    this.emergency.position.set(0.0, C.ceil - 0.12, -0.2);
+    this.scene.add(this.emergency);
+
     // daylight through the visor: a soft shadow-casting spot outside the window
     this.windowLight = new THREE.SpotLight(0xd4d6de, 9, 7, 0.75, 1, 1.2);
     this.windowLight.position.set(0, 1.4, -3.0);
@@ -619,6 +704,38 @@ export class Cockpit {
     this.root.add(this.dust);
   }
 
+  /** pulsing ring the tutorial puts around the control to use next */
+  buildMarker() {
+    const mat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(3, 1.9, 0.5),
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.marker = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.034, 0.04, 40), mat);
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.052, 0.055, 40), mat);
+    this.marker.add(ring, ring2);
+    this.marker.renderOrder = 20;
+    ring.renderOrder = ring2.renderOrder = 20;
+    this.marker.visible = false;
+    this.markerMat = mat;
+    this.scene.add(this.marker);
+  }
+
+  setMarker(mesh, cam, time) {
+    if (!mesh) {
+      this.marker.visible = false;
+      return;
+    }
+    mesh.getWorldPosition(this.marker.position);
+    this.marker.quaternion.copy(cam.quaternion);
+    this.marker.scale.setScalar(1 + 0.18 * Math.sin(time * 6));
+    this.markerMat.opacity = 0.55 + 0.45 * Math.abs(Math.sin(time * 3));
+    this.marker.visible = true;
+  }
+
   /** a footstep shakes dust loose */
   jolt(strength) {
     const v = this.dustVel;
@@ -653,20 +770,40 @@ export class Cockpit {
   /* -------------------------------------------------------------- update */
 
   /** state: mech/pilot state used to drive the instruments */
+  /**
+   * batt: battery bus alive, main: main bus alive, lights: cabin light switch.
+   * The main bus fades in with a few flickers like a real bus coming online.
+   */
+  setElectrics(batt, main, lights) {
+    this.batt = batt;
+    this.main = main;
+    this.lightsOn = lights;
+  }
+
   update(dt, time, s, hovered) {
+    const target = this.main ? 1 : 0;
+    if (target > this.power) {
+      this.power = Math.min(1, this.power + dt * 1.6);
+      if (this.power < 0.8 && Math.random() < 0.25) this.power *= 0.4; // flicker while coming up
+    } else this.power = Math.max(0, this.power - dt * 3);
     const p = this.power;
-    for (const c of this.controls) c.update(dt, hovered === c, time, p);
+    const lampPower = Math.max(this.batt ? 0.7 : 0, p);
+    for (const c of this.controls) c.update(dt, hovered === c, time, lampPower);
     for (const k in this.mfd) this.mfd[k].update(dt, time);
     this.updateDust(dt, time);
 
-    // lights follow the power level and switches
+    // lights follow the buses and switches
     const flicker = 0.92 + 0.08 * Math.sin(time * 37) * Math.sin(time * 11.3) + (Math.random() < 0.004 ? -0.5 : 0);
     const domeOn = this.lightsOn ? 1 : 0;
     this.dome.intensity = 6 * p * domeOn * flicker;
     this.domeLampMat.emissiveIntensity = 2.5 * p * domeOn * flicker;
-    this.screenGlow.intensity = 0.35 * p;
+    const screens = Object.values(this.mfd).some((m) => m.on) ? 1 : 0;
+    this.screenGlow.intensity = 0.35 * p * screens;
     this.footLight.intensity = (this.lightsOn ? 0.15 : 0.6) * p;
-    for (const g of Object.values(this.gauges)) g.setLight((this.lightsOn ? 0.06 : 0.25) * p);
+    const emergency = this.batt && p < 0.5 ? 1 : 0;
+    this.emergencyLevel = (this.emergencyLevel ?? 0) + (emergency - (this.emergencyLevel ?? 0)) * Math.min(1, dt * 6);
+    this.emergency.intensity = this.emergencyLevel * (1.3 + 0.1 * Math.sin(time * 3));
+    for (const g of Object.values(this.gauges)) g.setLight((this.lightsOn ? 0.06 : 0.25) * p + this.emergencyLevel * 0.05);
 
     // stick and throttle follow the controls
     if (this.throttle) this.throttle.rotation.x = -s.throttle * 0.45;
