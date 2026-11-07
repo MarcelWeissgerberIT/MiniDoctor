@@ -3,26 +3,73 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MiniDoctor</title>
-    <link rel="preload" href="assets/cockpit.webp" as="image" />
+    <title>BattleBot</title>
+    <link rel="preload" href="assets/ui/keyart.webp" as="image" />
   </head>
   <body>
     <canvas id="scene"></canvas>
-    <div id="cockpit"></div>
+
+    <div id="crosshair" class="hidden"></div>
+    <div id="tooltip"></div>
+    <div id="comms"></div>
+    <div id="lockhint">Klicken = Maus einfangen · oder mit gedrückter Maustaste ziehen zum Umsehen</div>
+    <div id="subtitle"></div>
+    <div id="arrow"></div>
+    <div id="skiphint">Leertaste: Einstieg überspringen</div>
+    <aside id="checklist">
+      <header><span>CHECKLISTE · KALTSTART</span><span class="state"></span></header>
+      <ol></ol>
+    </aside>
     <div id="fade"></div>
-    <div id="lockhint"></div>
 
-    <section id="menu" class="screen"></section>
-    <section id="briefing" class="screen"></section>
-    <section id="result" class="screen"></section>
-    <section id="outcome" class="screen"></section>
-    <section id="videoscreen" class="screen"></section>
+    <section id="title">
+      <div class="shade"></div>
+      <div class="content">
+        <div class="tag">MECH-SIMULATION · PROTOTYP 0.2</div>
+        <h1>BATTLEBOT</h1>
+        <div class="mission">
+          <div class="mtag">MISSION 1 · EINWEISUNG</div>
+          <div class="mname">Kalt &amp; dunkel</div>
+          <p>BB-07 steht abgeschaltet an Rampe drei – fünf Meter Stahl, 18 Tonnen. Steig über die Leiter ein, fahr den Mech nach Checkliste hoch (Batterie, APU, Generatoren, Hydraulik, Reaktor, Gyro) und bring ihn zum Laufen.</p>
+        </div>
+        <div class="load"><div id="loadbar"></div></div>
+        <div class="buttons">
+          <button id="start" disabled>Lade Ressourcen …</button>
+          <button id="quick" class="secondary" disabled>Schnellstart</button>
+        </div>
+        <ul class="keys">
+          <li><b>Maus</b> umsehen</li>
+          <li><b>W / S</b> Schub</li>
+          <li><b>A / D</b> drehen</li>
+          <li><b>Klick</b> Schalter</li>
+          <li><b>F1</b> Hilfe</li>
+        </ul>
+      </div>
+    </section>
 
-    <div id="video-layer">
-      <video id="dropvideo" playsinline muted preload="auto" poster="assets/transition_start.webp"></video>
-      <div id="video-caption"></div>
-      <button id="video-skip" class="btn sm"></button>
-    </div>
+    <section id="help">
+      <h2>Steuerung</h2>
+      <table>
+        <tr><td>Maus</td><td>Kopf drehen (begrenzt wie im echten Cockpit)</td></tr>
+        <tr><td>W / S</td><td>Schubhebel vor / zurück (bis −30 % Rückwärts)</td></tr>
+        <tr><td>X / Leertaste</td><td>Schub auf null, Mech bremst</td></tr>
+        <tr><td>A / D</td><td>Mech drehen</td></tr>
+        <tr><td>Linksklick</td><td>Schalter / Knopf unter dem Fadenkreuz betätigen</td></tr>
+        <tr><td>L</td><td>Kabinenlicht</td></tr>
+        <tr><td>H</td><td>Head-up-Display</td></tr>
+        <tr><td>N</td><td>Nachtsicht auf dem Kamera-Display</td></tr>
+        <tr><td>O</td><td>Optik / Kamera an–aus</td></tr>
+        <tr><td>R</td><td>Radarreichweite 500 / 1000 m</td></tr>
+        <tr><td>G</td><td>Gyro-Stabilisator</td></tr>
+        <tr><td>Q</td><td>Master Caution quittieren</td></tr>
+        <tr><td>C</td><td>Blick zentrieren</td></tr>
+        <tr><td>M</td><td>Ton an / aus</td></tr>
+        <tr><td>F1 / Tab</td><td>diese Hilfe</td></tr>
+        <tr><td>Leertaste</td><td>Einstiegssequenz überspringen</td></tr>
+      </table>
+      <p>Kaltstart: BATT → APU (warten bis APU READY) → GEN 1 + GEN 2 → HYD PRESS → COOLANT PUMP → REACTOR START → APU aus → STAB ASSIST → OPTICS/HUD → LEG LOCK aus.</p>
+    </section>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

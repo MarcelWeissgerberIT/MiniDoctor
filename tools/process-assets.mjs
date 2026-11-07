@@ -1,152 +1,366 @@
-// Post-processes the raw OpenArt generations in assets-src/ into
-// web-ready files in public/assets/ (chroma key, crops, compression).
+// Turns the raw Higgsfield / Meshy generations in assets-src/ into game-ready
+// files in public/assets/.
+//
+//   node tools/process-assets.mjs            (everything)
+//   node tools/process-assets.mjs tex glb    (only some steps)
+//
+// Steps
+//   tex    PBR texture sets: albedo, normal map (derived from luminance height)
+//          and a packed ORM map (R = ambient occlusion, G = roughness, B = metalness)
+//          derived from colour: rust is rough dielectric, bare steel is metal.
+//   fx     glass grime, smoke and fire sprites
+//   decals the 2x4 decal sheet cut into single trimmed decals
+//   pano   battlefield panorama made horizontally seamless and split in two halves
+//   ui     title key art
+//   glb    Meshy GLBs: textures to WebP (max 1024), welded, world props simplified, meshopt-compressed
+//   audio  sound effects and radio voice lines, copied as is (loops are made seamless at runtime)
+import fs from 'node:fs';
+import path from 'node:path';
 import sharp from 'sharp';
-import { mkdirSync } from 'node:fs';
 
 const SRC = 'assets-src';
 const OUT = 'public/assets';
-mkdirSync(OUT, { recursive: true });
+const steps = process.argv.slice(2);
+const want = (s) => steps.length === 0 || steps.includes(s);
+const mk = (d) => fs.mkdirSync(d, { recursive: true });
 
-// Grip regions on the 2752×1536 cockpit (also used by src/cockpit.js).
-export const GRIPS = {
-  left: { x: 400, y: 1330, w: 470, h: 206 },
-  right: { x: 1885, y: 1330, w: 470, h: 206 },
+/* ------------------------------------------------------------------ helpers */
+
+async function readRGB(file, size) {
+  const { data, info } = await sharp(file)
+    .resize(size, size, { fit: 'fill' })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return { data, w: info.width, h: info.height };
+}
+
+// Blend a half-offset copy over the borders so the texture tiles without seams.
+function makeTileable({ data, w, h }, feather = 0.14) {
+  const out = Buffer.alloc(data.length);
+  const f = Math.max(1, Math.round(w * feather));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = Math.min(x, w - 1 - x);
+      const dy = Math.min(y, h - 1 - y);
+      const t = Math.min(1, Math.min(dx, dy) / f);
+      const a = t * t * (3 - 2 * t); // weight of the original
+      const ox = (x + (w >> 1)) % w;
+      const oy = (y + (h >> 1)) % h;
+      const i = (y * w + x) * 3;
+      const j = (oy * w + ox) * 3;
+      for (let c = 0; c < 3; c++) out[i + c] = data[i + c] * a + data[j + c] * (1 - a);
+    }
+  }
+  return { data: out, w, h };
+}
+
+function luminance({ data, w, h }) {
+  const L = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    L[i] = (0.2126 * data[i * 3] + 0.7152 * data[i * 3 + 1] + 0.0722 * data[i * 3 + 2]) / 255;
+  }
+  return L;
+}
+
+// Separable box blur with wrap-around (keeps maps tileable).
+function blur(src, w, h, r) {
+  if (r < 1) return src.slice();
+  const tmp = new Float32Array(w * h);
+  const out = new Float32Array(w * h);
+  const n = 2 * r + 1;
+  for (let y = 0; y < h; y++) {
+    let s = 0;
+    for (let k = -r; k <= r; k++) s += src[y * w + ((k + w) % w)];
+    for (let x = 0; x < w; x++) {
+      tmp[y * w + x] = s / n;
+      s += src[y * w + ((x + r + 1) % w)] - src[y * w + ((x - r + w) % w)];
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let s = 0;
+    for (let k = -r; k <= r; k++) s += tmp[((k + h) % h) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = s / n;
+      s += tmp[((y + r + 1) % h) * w + x] - tmp[((y - r + h) % h) * w + x];
+    }
+  }
+  return out;
+}
+
+function rgbToHsv(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let hue = 0;
+  if (d > 1e-5) {
+    if (max === r) hue = ((g - b) / d) % 6;
+    else if (max === g) hue = (b - r) / d + 2;
+    else hue = (r - g) / d + 4;
+    hue *= 60;
+    if (hue < 0) hue += 360;
+  }
+  return [hue, max > 0 ? d / max : 0, max];
+}
+
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 };
 
-function chromaKey(data) {
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
-    const key = g - Math.max(r, b); // "greenness"
-    if (key > 90) data[i + 3] = 0;
-    else if (key > 30) {
-      data[i + 3] = Math.round(255 * (1 - (key - 30) / 60));
-      data[i + 1] = Math.max(r, b); // despill
+/* ---------------------------------------------------------------- textures */
+
+// cfg: per material heuristics for the derived maps
+const TEXTURES = {
+  armor: { src: 'tex_armor', size: 1024, tile: true, bump: 5, paintRough: 0.62, steel: 0.62, rustRough: 0.92 },
+  rivets: { src: 'tex_rivets', size: 1024, tile: false, bump: 7, paintRough: 0.7, steel: 0.6, rustRough: 0.9 },
+  floor: { src: 'tex_floor', size: 1024, tile: false, bump: 9, paintRough: 0.75, steel: 0.5, rustRough: 0.92 },
+  console: { src: 'tex_console', size: 1024, tile: true, bump: 2.5, paintRough: 0.78, steel: 0.62, rustRough: 0.9 },
+  hazard: { src: 'tex_hazard', size: 1024, tile: false, bump: 3, paintRough: 0.66, steel: 0.7, rustRough: 0.92 },
+  concrete: { src: 'tex_concrete', size: 1024, tile: true, bump: 6, paintRough: 0.95, steel: 2, rustRough: 0.95, noMetal: true },
+  ground: { src: 'tex_ground', size: 1024, tile: true, bump: 7, paintRough: 0.97, steel: 2, rustRough: 0.97, noMetal: true },
+};
+
+async function processTexture(name, cfg) {
+  let img = await readRGB(path.join(SRC, 'img', cfg.src + '.png'), cfg.size);
+  if (cfg.tile) img = makeTileable(img);
+  const { data, w, h } = img;
+  const L = luminance(img);
+
+  // height: fine detail minus large-scale shading
+  const fine = blur(L, w, h, 1);
+  const coarse = blur(L, w, h, Math.round(w / 48));
+  const H = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) H[i] = fine[i] - coarse[i] * 0.85;
+
+  const normal = Buffer.alloc(w * h * 3);
+  const s = cfg.bump;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const at = (xx, yy) => H[((yy + h) % h) * w + ((xx + w) % w)];
+      const dx =
+        at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1);
+      const dy =
+        at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1);
+      let nx = -dx * s;
+      let ny = dy * s; // OpenGL convention (green up)
+      let nz = 1;
+      const len = Math.hypot(nx, ny, nz);
+      nx /= len;
+      ny /= len;
+      nz /= len;
+      const i = (y * w + x) * 3;
+      normal[i] = (nx * 0.5 + 0.5) * 255;
+      normal[i + 1] = (ny * 0.5 + 0.5) * 255;
+      normal[i + 2] = (nz * 0.5 + 0.5) * 255;
     }
+  }
+
+  // ORM
+  const cavity = blur(L, w, h, Math.round(w / 128));
+  const orm = Buffer.alloc(w * h * 3);
+  for (let i = 0; i < w * h; i++) {
+    const r = data[i * 3] / 255;
+    const g = data[i * 3 + 1] / 255;
+    const b = data[i * 3 + 2] / 255;
+    const [hue, sat, val] = rgbToHsv(r, g, b);
+    // rust: saturated orange/brown
+    const rustHue = hue > 8 && hue < 45 ? 1 : 0;
+    const rust = rustHue * smooth(0.28, 0.55, sat) * smooth(0.12, 0.3, val);
+    // bare steel: bright, desaturated
+    const steel = cfg.noMetal ? 0 : smooth(cfg.steel - 0.08, cfg.steel + 0.1, val) * (1 - smooth(0.12, 0.3, sat));
+    const metal = Math.min(1, steel) * (1 - rust);
+    let rough = cfg.paintRough * (1 - rust) + cfg.rustRough * rust;
+    rough = rough * (1 - metal) + (0.32 + 0.25 * (1 - val)) * metal;
+    rough += (Math.random() - 0.5) * 0.03;
+    const ao = Math.min(1, Math.max(0.35, 1 - (cavity[i] - L[i]) * 2.2));
+    orm[i * 3] = ao * 255;
+    orm[i * 3 + 1] = Math.min(1, Math.max(0.05, rough)) * 255;
+    orm[i * 3 + 2] = metal * 255;
+  }
+
+  const dir = path.join(OUT, 'tex');
+  mk(dir);
+  const raw = { raw: { width: w, height: h, channels: 3 } };
+  await sharp(data, raw).webp({ quality: 86 }).toFile(path.join(dir, `${name}_c.webp`));
+  await sharp(normal, raw).webp({ quality: 90 }).toFile(path.join(dir, `${name}_n.webp`));
+  await sharp(orm, raw).webp({ quality: 88 }).toFile(path.join(dir, `${name}_orm.webp`));
+  console.log('tex', name);
+}
+
+/* --------------------------------------------------------------------- fx */
+
+async function processFx() {
+  const dir = path.join(OUT, 'fx');
+  mk(dir);
+  // glass grime -> alpha map with a 10% baseline so the pane itself stays visible
+  const g = await sharp(path.join(SRC, 'img/glass_grime.png')).resize(1024, 1024).greyscale().raw().toBuffer();
+  const ga = Buffer.alloc(g.length);
+  for (let i = 0; i < g.length; i++) ga[i] = Math.min(255, 22 + g[i] * 0.95);
+  await sharp(ga, { raw: { width: 1024, height: 1024, channels: 1 } }).webp({ quality: 88 }).toFile(path.join(dir, 'glass_grime.webp'));
+
+  // smoke: luminance becomes alpha, colour is set in the material
+  const s = await sharp(path.join(SRC, 'img/smoke.png')).resize(512, 512).greyscale().raw().toBuffer();
+  for (let i = 0; i < s.length; i++) s[i] = Math.min(255, Math.max(0, (s[i] - 6) * 1.25));
+  // fade to zero at the borders
+  for (let y = 0; y < 512; y++)
+    for (let x = 0; x < 512; x++) {
+      const d = Math.hypot(x - 256, y - 256) / 256;
+      s[y * 512 + x] *= 1 - smooth(0.78, 1.0, d);
+    }
+  await sharp(s, { raw: { width: 512, height: 512, channels: 1 } }).webp({ quality: 85 }).toFile(path.join(dir, 'smoke.webp'));
+
+  await sharp(path.join(SRC, 'img/fire.png')).resize(512, 512).webp({ quality: 85 }).toFile(path.join(dir, 'fire.webp'));
+  console.log('fx');
+}
+
+/* ----------------------------------------------------------------- decals */
+
+const DECALS = ['nameplate', 'danger', 'eject', 'reactor', 'hydraulic', 'radiation', 'weapons', 'nostep'];
+
+async function processDecals() {
+  const dir = path.join(OUT, 'decals');
+  mk(dir);
+  const file = path.join(SRC, 'img/decals.png');
+  const meta = await sharp(file).metadata();
+  const cw = Math.floor(meta.width / 2);
+  const ch = Math.floor(meta.height / 4);
+  const sizes = {};
+  for (let i = 0; i < 8; i++) {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const buf = await sharp(file)
+      .extract({ left: col * cw, top: row * ch, width: cw, height: ch })
+      .png()
+      .toBuffer();
+    const trimmed = await sharp(buf).trim({ threshold: 10 }).png().toBuffer({ resolveWithObject: true });
+    await sharp(trimmed.data).resize({ width: 512, withoutEnlargement: true }).webp({ quality: 88, alphaQuality: 90 }).toFile(path.join(dir, DECALS[i] + '.webp'));
+    sizes[DECALS[i]] = +(trimmed.info.width / trimmed.info.height).toFixed(3);
+  }
+  fs.writeFileSync(path.join(dir, 'decals.json'), JSON.stringify(sizes, null, 2));
+  console.log('decals', sizes);
+}
+
+/* ------------------------------------------------------------------- pano */
+
+async function processPano() {
+  const dir = path.join(OUT, 'sky');
+  mk(dir);
+  const file = path.join(SRC, 'img/panorama.png');
+  const { data, info } = await sharp(file).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const W = info.width;
+  const H = info.height;
+  const F = Math.round(W * 0.03); // crossfade width
+  const outW = W - F;
+  const out = Buffer.alloc(outW * H * 3);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < outW; x++) {
+      const o = (y * outW + x) * 3;
+      if (x < F) {
+        const t = smooth(0, 1, x / F);
+        const a = (y * W + (W - F + x)) * 3;
+        const b = (y * W + x) * 3;
+        for (let c = 0; c < 3; c++) out[o + c] = data[a + c] * (1 - t) + data[b + c] * t;
+      } else {
+        const a = (y * W + x) * 3;
+        for (let c = 0; c < 3; c++) out[o + c] = data[a + c];
+      }
+    }
+  }
+  // sky colours for the dome above the panorama and the fog at the horizon
+  const avgRow = (y0, y1) => {
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let y = y0; y < y1; y++)
+      for (let x = 0; x < outW; x += 7) {
+        const i = (y * outW + x) * 3;
+        r += out[i]; g += out[i + 1]; b += out[i + 2]; n++;
+      }
+    return [r / n / 255, g / n / 255, b / n / 255].map((v) => +v.toFixed(4));
+  };
+  const finalW = 8192;
+  const finalH = Math.round((H * finalW) / outW);
+  const resized = await sharp(out, { raw: { width: outW, height: H, channels: 3 } })
+    .resize(finalW, finalH, { fit: 'fill' })
+    .raw()
+    .toBuffer();
+  const half = finalW / 2;
+  for (let k = 0; k < 2; k++) {
+    await sharp(resized, { raw: { width: finalW, height: finalH, channels: 3 } })
+      .extract({ left: k * half, top: 0, width: half, height: finalH })
+      .webp({ quality: 82 })
+      .toFile(path.join(dir, `pano_${k}.webp`));
+  }
+  const meta = {
+    width: finalW,
+    height: finalH,
+    horizon: 0.635, // horizon row, as a fraction from the top
+    top: avgRow(0, Math.round(H * 0.04)),
+    haze: avgRow(Math.round(H * 0.6), Math.round(H * 0.66)),
+  };
+  fs.writeFileSync(path.join(dir, 'pano.json'), JSON.stringify(meta, null, 2));
+  console.log('pano', meta);
+}
+
+/* --------------------------------------------------------------------- ui */
+
+async function processUi() {
+  const dir = path.join(OUT, 'ui');
+  mk(dir);
+  await sharp(path.join(SRC, 'img/concept.png')).resize(1920).webp({ quality: 82 }).toFile(path.join(dir, 'keyart.webp'));
+  console.log('ui');
+}
+
+/* -------------------------------------------------------------------- glb */
+
+async function processGlb() {
+  const { NodeIO } = await import('@gltf-transform/core');
+  const { ALL_EXTENSIONS } = await import('@gltf-transform/extensions');
+  const { dedup, prune, weld, simplify, textureCompress, meshopt } = await import('@gltf-transform/functions');
+  const { MeshoptEncoder, MeshoptSimplifier } = await import('meshoptimizer');
+  await MeshoptEncoder.ready;
+  await MeshoptSimplifier.ready;
+  // battlefield props are instanced many times and seen from afar: fewer triangles
+  const SIMPLIFY = { hedgehog: 0.25, ruin: 0.4, tank: 0.4, sandbags: 0.5 };
+  const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
+  const srcDir = path.join(SRC, 'glb');
+  const dir = path.join(OUT, 'models');
+  mk(dir);
+  for (const f of fs.readdirSync(srcDir).filter((f) => f.endsWith('.glb'))) {
+    const doc = await io.read(path.join(srcDir, f));
+    // the player's own mech is seen up close during boarding
+    const max = f === 'mech.glb' ? 2048 : 1024;
+    const ratio = SIMPLIFY[f.replace('.glb', '')];
+    await doc.transform(
+      dedup(),
+      weld(),
+      ...(ratio ? [simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.012 })] : []),
+      prune(),
+      textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [max, max], quality: 85 }),
+      meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
+    );
+    await io.write(path.join(dir, f), doc);
+    const kb = (fs.statSync(path.join(dir, f)).size / 1024).toFixed(0);
+    console.log('glb', f, kb + ' KB');
   }
 }
 
-async function cockpit() {
-  // The control grips become separate, animated layers: the base image gets
-  // the grip-less version (second OpenArt generation) patched in under the grips.
-  const orig = await sharp(`${SRC}/cockpit_raw.png`).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  const nog = await sharp(`${SRC}/cockpit_nogrips.png`).resize(orig.info.width, orig.info.height).ensureAlpha().raw().toBuffer();
-  const { width: W, height: H } = orig.info;
-  const base = Buffer.from(orig.data);
-  const scale = 1920 / W;
-  for (const [name, r] of Object.entries(GRIPS)) {
-    // grip mask = where the two generations differ
-    const mask = new Float32Array(r.w * r.h);
-    for (let y = 0; y < r.h; y++)
-      for (let x = 0; x < r.w; x++) {
-        const k = ((r.y + y) * W + r.x + x) * 4;
-        const d = Math.abs(orig.data[k] - nog[k]) + Math.abs(orig.data[k + 1] - nog[k + 1]) + Math.abs(orig.data[k + 2] - nog[k + 2]);
-        mask[y * r.w + x] = Math.min(1, Math.max(0, (d - 25) / 45));
-      }
-    // Solid grip shape: flood-fill the background from the top/left/right
-    // borders; everything unreachable (grip + enclosed holes) is grip.
-    const outside = new Uint8Array(mask.length);
-    const stack = [];
-    const push = (x, y) => {
-      const i = y * r.w + x;
-      if (x < 0 || y < 0 || x >= r.w || y >= r.h || outside[i] || mask[i] > 0.5) return;
-      outside[i] = 1;
-      stack.push(i);
-    };
-    for (let x = 0; x < r.w; x++) push(x, 0);
-    for (let y = 0; y < r.h; y++) push(0, y), push(r.w - 1, y);
-    while (stack.length) {
-      const i = stack.pop();
-      const x = i % r.w;
-      const y = (i / r.w) | 0;
-      push(x + 1, y), push(x - 1, y), push(x, y + 1), push(x, y - 1);
-    }
-    // keep only the largest connected grip component (drops stray specks)
-    const comp = new Int32Array(mask.length).fill(-1);
-    let best = -1;
-    let bestSize = 0;
-    for (let i0 = 0; i0 < mask.length; i0++) {
-      if (outside[i0] || comp[i0] >= 0) continue;
-      const q = [i0];
-      comp[i0] = i0;
-      let n = 0;
-      while (q.length) {
-        const i = q.pop();
-        n++;
-        const x = i % r.w;
-        const y = (i / r.w) | 0;
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const xx = x + dx, yy = y + dy;
-          if (xx < 0 || yy < 0 || xx >= r.w || yy >= r.h) continue;
-          const j = yy * r.w + xx;
-          if (!outside[j] && comp[j] < 0) {
-            comp[j] = i0;
-            q.push(j);
-          }
-        }
-      }
-      if (n > bestSize) (bestSize = n), (best = i0);
-    }
-    const solid = new Float32Array(mask.length);
-    for (let i = 0; i < mask.length; i++) solid[i] = comp[i] === best ? 1 : 0;
-    // soft 1-2 px edge
-    const soft = new Float32Array(mask.length);
-    for (let y = 0; y < r.h; y++)
-      for (let x = 0; x < r.w; x++) {
-        let m = 0;
-        let n = 0;
-        for (let dy = -1; dy <= 1; dy++)
-          for (let dx = -1; dx <= 1; dx++) {
-            const xx = x + dx, yy = y + dy;
-            if (xx >= 0 && yy >= 0 && xx < r.w && yy < r.h) (m += solid[yy * r.w + xx]), n++;
-          }
-        soft[y * r.w + x] = m / n;
-      }
-    const layer = Buffer.alloc(r.w * r.h * 4);
-    for (let y = 0; y < r.h; y++)
-      for (let x = 0; x < r.w; x++) {
-        const i = y * r.w + x;
-        const k = ((r.y + y) * W + r.x + x) * 4;
-        const a = soft[i];
-        for (let c = 0; c < 3; c++) {
-          layer[i * 4 + c] = orig.data[k + c];
-          base[k + c] = Math.round(orig.data[k + c] * (1 - a) + nog[k + c] * a);
-        }
-        layer[i * 4 + 3] = Math.round(a * 255);
-      }
-    await sharp(layer, { raw: { width: r.w, height: r.h, channels: 4 } })
-      .resize(Math.round(r.w * scale))
-      .webp({ quality: 90, alphaQuality: 95 })
-      .toFile(`${OUT}/grip_${name}.webp`);
+/* ------------------------------------------------------------------ audio */
+
+function processAudio() {
+  for (const sub of ['audio', 'voice']) {
+    const dir = path.join(OUT, sub);
+    mk(dir);
+    for (const f of fs.readdirSync(path.join(SRC, sub))) fs.copyFileSync(path.join(SRC, sub, f), path.join(dir, f));
   }
-  chromaKey(base);
-  await sharp(base, { raw: { width: W, height: H, channels: 4 } }).resize(1920).webp({ quality: 88, alphaQuality: 90 }).toFile(`${OUT}/cockpit.webp`);
+  console.log('audio + voice');
 }
 
-async function icons() {
-  const names = ['laser', 'scalpel', 'antibody', 'anchor', 'scanner'];
-  // Tiles measured on the 3168×1344 sheet.
-  const top = 412, size = 520, lefts = [172, 752, 1331, 1910, 2490];
-  for (let k = 0; k < 5; k++)
-    await sharp(`${SRC}/tool_icons.png`)
-      .extract({ left: lefts[k], top, width: size, height: size })
-      .resize(160)
-      .webp({ quality: 90 })
-      .toFile(`${OUT}/tool_${names[k]}.webp`);
-}
+/* ------------------------------------------------------------------- main */
 
-async function simple(name, width, q = 82) {
-  await sharp(`${SRC}/${name}.png`).resize(width).webp({ quality: q }).toFile(`${OUT}/${name}.webp`);
-}
-
-await cockpit();
-await icons();
-for (const n of ['tex_endothelium', 'tex_plaque', 'tex_fibrin', 'tex_endocardium']) await simple(n, 1024, 85);
-// The RBC generation came out as a field of cells; a small patch of one cell
-// gives the smooth, mottled membrane surface we need.
-await sharp(`${SRC}/tex_rbc.png`).extract({ left: 590, top: 400, width: 70, height: 70 }).resize(512, 512, { kernel: 'cubic' }).blur(6).webp({ quality: 85 }).toFile(`${OUT}/tex_rbc.webp`);
-for (const n of ['transition_start', 'transition_end']) await simple(n, 1920, 80);
-await simple('bodymap', 480, 85);
-await simple('doctor', 480, 82);
-for (const n of ['brief_stent', 'brief_virus', 'brief_clot', 'brief_stroke', 'ship_concept']) await simple(n, 960);
-for (const n of ['keyart', 'outcome_survived', 'outcome_died']) await simple(n, 1920);
-console.log('assets processed');
+if (want('tex')) for (const [k, v] of Object.entries(TEXTURES)) await processTexture(k, v);
+if (want('fx')) await processFx();
+if (want('decals')) await processDecals();
+if (want('pano')) await processPano();
+if (want('ui')) await processUi();
+if (want('glb') && fs.existsSync(path.join(SRC, 'glb'))) await processGlb();
+if (want('audio')) processAudio();

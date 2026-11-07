@@ -1,0 +1,123 @@
+// Pure walking/driving logic of the mech. No three.js in here so it can be unit tested.
+//
+// Units: metres, seconds, radians. Heading 0 looks along -Z, positive heading turns left
+// (counter-clockwise seen from above), like a three.js rotation around +Y.
+
+// BB-07 is 5 m tall and weighs about 18 t; the cockpit sits in the upper torso.
+export const MECH = {
+  height: 5.0,
+  eyeHeight: 3.95, // pilot eye above the ground (behind the visor slit)
+  maxForward: 9, // m/s  (~32 km/h)
+  maxReverse: 3.5, // m/s
+  accel: 2.8, // m/s^2
+  brake: 4.2, // m/s^2
+  throttleRate: 0.55, // throttle units per second while W/S is held
+  minThrottle: -0.3,
+  turnRate: 0.6, // rad/s at standstill
+  turnRateMoving: 0.42, // rad/s at full speed
+  stepLength: 2.4, // metres per footstep at half speed (see stepLength())
+  radius: 1.7, // collision radius of the feet/legs
+};
+
+export function createMechState(x = 0, z = 0, heading = 0) {
+  return {
+    x,
+    z,
+    heading,
+    throttle: 0,
+    speed: 0,
+    turn: 0, // current angular velocity (rad/s)
+    stepPhase: 0, // 0..1 within the current step
+    steps: 0, // total footsteps taken
+    foot: 1, // +1 right foot, -1 left foot (the foot that lands next)
+    odometer: 0,
+  };
+}
+
+export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/** short, lumbering steps when slow, long strides at speed */
+export function stepLength(speed) {
+  return 1.8 + 0.11 * Math.abs(speed);
+}
+
+export function approach(v, target, rate) {
+  if (v < target) return Math.min(target, v + rate);
+  return Math.max(target, v - rate);
+}
+
+export function wrapAngle(a) {
+  a = (a + Math.PI) % (Math.PI * 2);
+  if (a < 0) a += Math.PI * 2;
+  return a - Math.PI;
+}
+
+/**
+ * Advances the mech by dt.
+ * input: { throttle: -1|0|1, turn: -1..1 (positive = left), stop: bool }
+ * colliders: [{ x, z, r }]
+ * Returns the list of footstep events of this tick: [{ foot, strength }]
+ */
+export function stepMech(s, input, dt, colliders = [], bounds = 900) {
+  const events = [];
+  if (input.stop) s.throttle = 0;
+  s.throttle = clamp(s.throttle + (input.throttle || 0) * MECH.throttleRate * dt, MECH.minThrottle, 1);
+  // a little dead zone around zero so the lever can be parked
+  if (!input.throttle && Math.abs(s.throttle) < 0.03) s.throttle = 0;
+
+  const target = s.throttle >= 0 ? s.throttle * MECH.maxForward : (s.throttle / -MECH.minThrottle) * MECH.maxReverse;
+  const braking = Math.sign(target) !== Math.sign(s.speed) || Math.abs(target) < Math.abs(s.speed);
+  s.speed = approach(s.speed, target, (braking ? MECH.brake : MECH.accel) * dt);
+
+  const speedFrac = Math.min(1, Math.abs(s.speed) / MECH.maxForward);
+  const maxTurn = MECH.turnRate + (MECH.turnRateMoving - MECH.turnRate) * speedFrac;
+  s.turn = approach(s.turn, clamp(input.turn || 0, -1, 1) * maxTurn, 1.6 * dt);
+  s.heading = wrapAngle(s.heading + s.turn * dt);
+
+  // forward is -Z rotated by heading
+  const fx = -Math.sin(s.heading);
+  const fz = -Math.cos(s.heading);
+  const dist = s.speed * dt;
+  let nx = s.x + fx * dist;
+  let nz = s.z + fz * dist;
+
+  // push out of colliders
+  for (const c of colliders) {
+    const dx = nx - c.x;
+    const dz = nz - c.z;
+    const min = c.r + MECH.radius;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < min * min) {
+      const d = Math.sqrt(d2) || 0.0001;
+      nx = c.x + (dx / d) * min;
+      nz = c.z + (dz / d) * min;
+      s.speed *= 0.6;
+    }
+  }
+  const r = Math.hypot(nx, nz);
+  if (r > bounds) {
+    nx *= bounds / r;
+    nz *= bounds / r;
+  }
+  s.odometer += Math.hypot(nx - s.x, nz - s.z);
+  s.x = nx;
+  s.z = nz;
+
+  // legs keep walking while turning on the spot
+  const stride = Math.abs(dist) + Math.abs(s.turn) * dt * 2.2;
+  if (stride > 0) {
+    s.stepPhase += stride / stepLength(s.speed);
+    while (s.stepPhase >= 1) {
+      s.stepPhase -= 1;
+      s.steps++;
+      events.push({ foot: s.foot, strength: clamp(0.35 + speedFrac * 0.65, 0, 1) });
+      s.foot = -s.foot;
+    }
+  } else {
+    // settle the legs when standing
+    s.stepPhase = approach(s.stepPhase, 0, dt * 0.5);
+  }
+  return events;
+}
+
+export const kmh = (ms) => ms * 3.6;

@@ -1,98 +1,127 @@
-# MiniDoctor
+# BattleBot
 
-Ein kleines 3D-First-Person-Spiel im Browser: Du sitzt in einem Mini-Raumschiff, **so groß wie ein Blutplättchen (2,5 µm)**, das in die Blutbahn eines Patienten gespritzt wird. Das Schiff hat **keinen Antrieb** – es treibt mit dem Blutstrom. Alles passiert aus dem Cockpit.
+Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18 Tonnen schweren Kampfroboter (Mech), mitten in einem Krieg – aus einem engen, rostigen Cockpit. Wie in einem Flugzeug- oder Panzercockpit ist die Sicht nach draußen auf einen schmalen Panzerglasschlitz und zwei seitliche Sichtblöcke begrenzt.
 
-*A small 3D first-person browser game: you pilot a platelet-sized ship with no engine through a patient's bloodstream. German & English.*
+*A browser first-person mech game. You board a 5 m combat robot, bring it up from cold and dark and walk it out of a forward base.*
+
+**Stand: Prototyp 0.2 – Cockpit und Mission 1 „Kalt & dunkel“.** Waffen und Gegner folgen in den nächsten Schritten.
+
+## Mission 1 · Einweisung: Kalt & dunkel
+
+1. **Einstieg:** Du gehst über den Stützpunkt (Sandsackring, Generator mit Versorgungskabel, Treibstofffässer, Munitionskisten, Arbeitsscheinwerfer) zum abgeschalteten BB-07, schaust an der 5-m-Maschine hoch, kletterst die Leiter am linken Bein hinauf, öffnest die Einstiegsluke am Rücken, steigst ein, schnallst dich an – die Luke fällt zu. (Leertaste überspringt.)
+2. **Kaltstart nach Checkliste:** Das Cockpit ist komplett tot. Ein Ausbilder führt per Funk (deutsche Sprachausgabe mit Funkfilter und Untertiteln) durch den Start. Der nächste Schalter wird im Cockpit mit einem pulsierenden Ring markiert, ein Pfeil zeigt die Richtung, wenn er außerhalb des Blickfelds liegt:
+
+   | Schritt | Wirkung |
+   |---|---|
+   | BATT ein (linke Konsole, Schutzkappe) | Batteriebus: rotes Notlicht, Warnlampen, Instrumentenzeiger |
+   | APU starten | Hilfsturbine läuft in ~9 s hoch → Lampe APU READY |
+   | GEN 1 + GEN 2 | Hauptstrom: Displays booten, Kabinenlicht möglich |
+   | CABIN LIGHT | Deckenleuchte |
+   | HYD PRESS (Overhead) | Hydraulikdruck steigt auf ~23 MPa |
+   | COOLANT PUMP (Overhead) | Kühlmittelfluss |
+   | REACTOR START (Schutzkappe) | 7 s Zündung mit Grollen und Vibration; ohne Pumpe und Druck: Abbruch |
+   | APU aus | Reaktor versorgt jetzt die Generatoren |
+   | STAB ASSIST | Gyro richtet sich in ~6 s aus |
+   | OPTICS + HUD | Kamerabild und Head-up-Display |
+   | LEG LOCK aus | Beinverriegelung löst sich – erst jetzt kann der Mech laufen |
+
+3. **Laufen:** Schub geben, zur ersten Wegmarke (grüner Signalrauch, blinkende Leuchte, Markierung im HUD und auf dem Radar), drehen, zweite Wegmarke, anhalten, Nachtsicht testen. Danach freies Bewegen.
+
+**Laufen fühlt sich nach Laufen an:** Bei jedem Schritt verlagert der Mech sein Gewicht aufs Standbein (Kabine kippt 3–4°), hebt sich über das Bein, sackt beim Aufsetzen ab und nickt nach vorn, der Rumpf verdreht sich leicht. Der Pilotenkopf hängt federnd darin und hält den Blick teilweise waagerecht – dadurch schaukelt das Cockpit sichtbar um dich herum. Kurven, Beschleunigen, Bremsen und Kraterränder neigen die Maschine, beim Anhalten schwingt sie nach. Erkennungsmarken an einer Kette pendeln über dem Sichtschlitz, Röhrendisplays springen kurz, das Licht flackert, die Kabine knarzt, Hydraulik zischt, Schritte kommen von links bzw. rechts. Der Gyro-Stabilisator (G) dämpft das Schwanken.
+
+Fehler werden realistisch behandelt: Reaktor ohne Kühlung/Hydraulik zündet nicht (der Schalter springt zurück), Kühlpumpe im Betrieb aus → Überhitzung, Master Caution, Alarmleuchte und schließlich Reaktor-Notabschaltung. **Schnellstart** im Titelmenü überspringt Einstieg und Checkliste.
 
 ## Starten
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # Logik-Tests (Physik, Puzzles, Übersetzungen)
+npm test         # Logik-Tests (Mech-Bewegung, Kaltstart-Reihenfolge, Verriegelungen)
 npm run build    # statischer Build in dist/
 ```
 
-**Online spielen:** https://marcelweissgerberit.github.io/MiniDoctor/ (automatisches Deployment per GitHub Actions bei jedem Push)
+Bei jedem Push auf `main` baut und veröffentlicht GitHub Actions das Spiel auf GitHub Pages.
 
-## Ablauf
+## Das Cockpit
 
-Nach jedem Drop folgt eine **animierte Anreise durch den Kreislauf**: Arm-Vene → obere Hohlvene → rechter Vorhof → Trikuspidalklappe → rechte Kammer → Lungenkapillaren (Gasaustausch, die Blutkörperchen werden hellrot) → linkes Herz → Aorta → Zielort (Herzkranzgefäß, Magen, Bein, Lunge oder über die Halsschlagader ins Gehirn). Im Herzen sieht man schlagende Kammerwände, Muskelbälkchen, Papillarmuskeln mit Sehnenfäden, die sich öffnenden Klappen und die Abgänge der Herzkranzgefäße – jeweils beschriftet. Eine Körperkarte zeigt die Route mit blinkender Position („Du bist hier“); auch während der Missionen zeigt eine kleine Karte den Einsatzort. Leertaste überspringt, Shift beschleunigt.
+- **Panzerhülle** aus olivgrünen, rostigen Stahlplatten, genieteten Spanten, Diamant-Riffelblech am Boden, Hydraulikleitungen und Kabelbäumen.
+- **Sichtschlitz** aus drei verschmutzten Panzerglasscheiben (Kratzer, Staub, Schlieren), getrennt durch Stahlstreben, dazu zwei kleine seitliche Sichtblöcke. Der Kopf lässt sich nur begrenzt drehen (±105° seitlich, 38° hoch, 62° runter).
+- **Drei Röhren-Multifunktionsdisplays** (grüner Phosphor, Scanlines, Bildwölbung):
+  - *Mech Status*: Schadensbild der Baugruppen, Reaktor, Hitze, Kühlmittel, Hydraulik.
+  - *Kamera*: Live-Bild der Bugkamera mit 4-fach-Zoom, Kompassband, Entfernungsmesser, Nachtsicht.
+  - *Taktik*: Radar mit Sweep, Strukturen, Brände und feindliche Kontakte (500/1000 m).
+- **Analoge Instrumente** (Reaktor, Hydraulikdruck, Temperatur, Geschwindigkeit) mit gedämpften Zeigern, die bei jedem Schritt zittern.
+- **Head-up-Display** auf einer Combiner-Glasscheibe: Kompass, Geschwindigkeit, Schubhebel, Kopfdrehung, Warnungen.
+- **Bedienbare Schalter und Knöpfe** (Fadenkreuz + Klick): Kabinenlicht, HUD, Nachtsicht, Optik, Radarreichweite, Gyro-Stabilisator, Kühlmittelpumpe, Hydraulik, Generatoren, Master Caution u. a. Pumpe aus → Überhitzung mit Alarm; Hydraulik aus → der Mech kommt kaum noch vom Fleck; alle Generatoren aus → Cockpit wird dunkel.
+- **Joystick und Schubhebel** bewegen sich mit den Eingaben.
+- **Licht**: Tageslicht fällt mit weichen Schatten durch den Sichtschlitz, warme Deckenleuchte, rote Fußraumbeleuchtung, grünes Display-Streulicht, rote Alarmleuchte mit Drahtkäfig; Artillerieblitze erhellen kurz die Kabine. Staub schwebt in der Luft und wird bei jedem Schritt aufgewirbelt.
+- **Einstiegsluke** in der Rückwand, die beim Einsteigen offen steht und sich hinter dir schließt.
 
-1. **Drop 1 – Diagnose** (Arteriole der Magenschleimhaut, Ø 100 µm): Proben im Blut scannen (Plasma, Leukozyt, Thrombozyt, Lipoproteine, Partikel) und die Krankheit bestimmen.
-2. **Drop 2 – Behandlung**, abhängig von der Diagnose:
-   - **Koronarstent** (LAD, Ø 3 mm): zur Plaque treiben, verankern, Läsion scannen, Kalkknoten mit dem Skalpell anritzen, Stent wählen, im Herzschlag positionieren, Ballon auf 12–16 atm aufdehnen.
-   - **Virämie** (Lungenvenole, Ø 40 µm): Asteroids-artig Virus-Aggregate mit dem Antikörper-Werfer zerschießen, bevor sie die Wand infizieren.
-   - **Tiefe Venenthrombose** (V. poplitea, Ø 6 mm): Gerinnsel mit Laser/tPA auflösen, ohne Embolien auszulösen.
-   - **Schlaganfall** (A. cerebri media, Gehirn, Ø 3 mm): mechanische Thrombektomie mit Stent-Retriever unter Zeitdruck („Time is brain“: ~1,9 Mio. Nervenzellen pro Minute). Gerinnsel vermessen, Retriever wählen, Katheterspitze setzen, 3 Herzschläge verankern lassen und dann mit dem linken Steuergriff (oder S) gleichmäßig zurückziehen – zu fest reißt Fragmente ab. Ergebnis als TICI-Reperfusionsgrad.
-3. Je nach Erfolg **überlebt oder stirbt** der Patient. Einzelmissionen gibt es im Menü unter „Training".
+## Draußen
 
-Jeder Drop beginnt mit einem Video (Injektion → Pille öffnet sich → Kamerafahrt ins Cockpit), das nahtlos ins Live-Spiel überblendet. Der **Autopilot** fliegt die ersten 5 Sekunden, dann übernimmst du. Der Autopilot bleibt standardmäßig an und ist mit **P** abschaltbar.
+Ein zerbombtes Stadtrandgebiet: Krater, ausgebrannte Panzerwracks, Gebäuderuinen, Panzersperren-Linien, verkohlte Bäume, Trümmer, brennende Feuer mit Rauchsäulen, Ascheflocken, Leuchtspurgarben und Artillerieeinschläge am Horizont (mit Donner, verzögert um die Schallgeschwindigkeit). Dahinter ein 360°-Panorama einer brennenden Stadt.
 
 ## Steuerung
 
 | Eingabe | Aktion |
 |---|---|
-| Maus / rechter Steuergriff | umsehen (Klick = Maus einfangen) |
-| W A S D / Pfeile / linker Steuergriff | Strömungsklappen: seitlich driften |
-| Leertaste | GP-Ib-Anker-Harpune (greift bis 200 µm Wandabstand und zieht das Schiff an die Wand). Vor der Ankerzone gedrückt: Anker scharf – der Anker-Assistent steuert hin und greift automatisch |
-| 1–6 / Mausrad | Werkzeug: Laser, Skalpell, Antikörper, Anker, Scanner, tPA |
-| Linksklick | Werkzeug benutzen (Scanner/Ballon: halten) |
-| P | Autopilot an/aus |
-| H | Hilfe (Schritt-für-Schritt-Anleitung der Mission) |
-| R | Funk: Dr. Brandt nach dem nächsten Schritt fragen |
-| L | Scheinwerfer an/aus |
-| T | Sonar-Ping |
+| Maus | umsehen (Klick fängt die Maus ein) |
+| W / S | Schubhebel vor / zurück (bis −30 % rückwärts) |
+| X / Leertaste | Schub auf null |
+| A / D | Mech drehen |
+| Linksklick | Schalter unter dem Fadenkreuz betätigen |
+| Leertaste | Einstiegssequenz überspringen |
+| L / H / N / O | Kabinenlicht / HUD / Nachtsicht / Optik |
+| R | Radarreichweite |
+| G | Gyro-Stabilisator (dämpft Schwanken und Erschütterungen) |
+| Q | Master Caution quittieren |
+| C | Blick zentrieren |
 | M | Ton an/aus |
+| F1 / Tab | Hilfe |
 
-Die beiden **Steuergriffe im Cockpit** lassen sich mit der Maus oder per Touch ziehen: vor, zurück, links, rechts. Sie bewegen sich auch mit, wenn du Tastatur oder Maus benutzt.
+## Ressourcen: Higgsfield + Meshy
 
-## Realismus
+Alle Grafiken, Modelle und Sounds wurden für dieses Projekt generiert:
 
-- **Maßstab 1:1** (1 Welteinheit = 1 µm): Schiff 2,5 µm, Erythrozyt 7,8 µm (echtes Evans-Fung-Profil), Virion 0,1 µm, Führungsdraht 0,36 mm, Stentstrebe 80 µm.
-- **Strömung** nach Hagen-Poiseuille (Mitte schnell, Wand langsam), pulsierend mit dem Puls des Patienten; Koronarfluss ist in der Diastole am stärksten; vor einem Verschluss kommt der Fluss zum Stillstand (Stase).
-- Nur die **Zeit ist gedehnt** (1:100 bis 1:1000), damit man dem Fluss folgen kann; die Cockpit-Anzeigen zeigen die echten Werte. Nahe der Gefäßwand, wo das Blut fast stillsteht, schaltet sich automatisch ein Zeitraffer zu (Anzeige z. B. 1:8000).
-- Die Dichte der Blutkörperchen ist für die Sicht reduziert.
+| Was | Werkzeug | Dateien |
+|---|---|---|
+| Konzeptbild / Titelbild | Higgsfield (GPT Image 2.6) | `public/assets/ui/keyart.webp` |
+| PBR-Texturen: lackierter Panzerstahl mit Rost, genietete Platten, Riffelblech, Konsolenlack, Warnstreifen, Beton, Schlachtfeldboden | Higgsfield (GPT Image 2.6) | `public/assets/tex/*_c.webp` |
+| Glas-Schmutz, Rauch- und Feuer-Sprites | Higgsfield (GPT Image 2.6) | `public/assets/fx/` |
+| Warnschilder und Typenschild (Decals) | Higgsfield (GPT Image 2.6, transparent) | `public/assets/decals/` |
+| 360°-Stadtpanorama | Higgsfield (Nano Banana 2.1, 4:1) | `public/assets/sky/` |
+| 3D-Modelle: Pilotensitz, Joystick, Schubhebel, Funkgerät, Feuerlöscher, Panzerwrack, Gebäuderuine, Panzersperre, Sandsäcke, Munitionskisten, Fässer, Stromgenerator | **Meshy 7 Image-to-3D** (über Higgsfield, mit PBR), Vorlagen von GPT Image 2.6 | `public/assets/models/*.glb` |
+| BB-07 von außen (5 m) | **Meshy Multi-Image-to-3D** aus Front-, Seiten- und Rückansicht (GPT Image 2.6, Rückansicht mit Luke und Leiter) | `public/assets/models/mech.glb` |
+| Cockpit-Brummen, Schlachtlärm, Mech-Schritt, Servo, Hochfahren, Schritte auf Schotter, Leiter, Luke auf/zu, Batterie-Relais, APU, Reaktorzündung, Hydraulikpumpe, Gyro, Beinverriegelung, Gurtschloss, Stützpunkt-Atmo | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
+| Kabinenknarzen, Hydraulik pro Schritt, klappernde Ausrüstung | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
+| 22 Funksprüche des Ausbilders (Deutsch) | Higgsfield (Seed Audio, Stimme „Barrett“) | `public/assets/voice/` |
 
-## Sound & Musik
+`tools/process-assets.mjs` macht daraus spielfertige Dateien: Normal-Maps und gepackte ORM-Maps (Ambient Occlusion, Rauheit, Metallanteil) werden aus den Farbtexturen abgeleitet (Rost = rau und nicht-metallisch, blanker Stahl = metallisch), Texturen werden nahtlos gemacht, das Panorama wird horizontal nahtlos überblendet, die Decals ausgeschnitten und die GLBs mit WebP-Texturen und Meshopt komprimiert. Die Rohdateien liegen in `assets-src/` (nicht im Repo).
 
-- **Musik** für die Anreise: zwei von OpenArt generierte Soundtracks (Wan 3.0): ein ruhiges, dunkles *venöses* Thema bis zur Lunge und ein helleres, treibendes *arterielles* Thema, in das beim Gasaustausch übergeblendet wird. Nahtlose Schleifen per Crossfade.
-- **Geräuschkulissen** (ebenfalls OpenArt): gedämpftes Herzinneres in den Herzkammern, Atmen in der Lunge.
-- **Effekte** (synthetisiert, synchron zum Geschehen): Stationsgong, Klappenschlag beim Durchfahren, Herzschlag (in den Kammern laut), Pulswelle in Arterien, Sauerstoff-Funkeln in der Lunge, Strömungsrauschen, das in engen Gefäßen höher pfeift, vorbeiziehende Blutkörperchen, Ankunfts-Akkord.
-- In den Missionen läuft die Musik leise weiter.
-- Musik und Ton sind im Menü getrennt abschaltbar, **M** schaltet den Ton stumm.
-- `tools/process-audio.mjs` extrahiert die Tonspuren der OpenArt-Videos als Opus (+ AAC-Fallback).
+Das Cockpit selbst (Hülle, Armaturen, Displays, Schalter, Leitungen) ist in Three.js aus Primitiven aufgebaut und mit diesen Texturen belegt, die Meshy-Modelle sind darin platziert.
 
-## Kein Motion-Sickness
+## Technik
 
-Fester Horizont (kein Rollen), sichtbarer Cockpitrahmen, ruhige Kamera, begrenzter Blickwinkel, keine FOV-Sprünge. Der **Komfortmodus** im Menü schaltet auch das leichte Herzschlag-Wippen ab.
-
-## Cockpit
-
-**Funk mit der Ärztin:** Oben links sitzt der Funk-Bildschirm mit Dr. L. Brandt (fiktive Interventionsradiologin im Angio-Leitstand; Porträt und Sprech-Animation von OpenArt). Sie meldet sich an den Stationen der Reise, beim Missionsstart, bei Fehlern (Vorbeitreiben, Embolie, Dissektion …), bei Zeitdruck und am Ende. Untertitel mit Schreibmaschinen-Effekt, Funkrauschen und – abschaltbar – Sprachausgabe über die Browser-Stimme. Die FUNK-Taste (oder R) fragt sie nach dem aktuellen nächsten Schritt.
-
-**Knöpfe & Schalter:** Die fünf Rundknöpfe am Armaturenbrett sind echte Druckknöpfe (AUTO, ANKER, WERKZEUG, TON, FUNK). An der Deckenkonsole sitzen vier Kippschalter: LICHT (Scheinwerfer), SONAR (Ping, markiert Ziele kurz im Sichtfenster), HUD (Einblendungen aus/an), KOMFORT. Oben rechts läuft ein Sonar mit Radar-Sweep und Zielkontakten.
-
-**Animationen:** Beim Start fährt die Cockpit-Beleuchtung flackernd hoch und die Displays schalten nacheinander ein; bei Gefahr pulsiert rotes Alarmlicht; Ankern und Herzklappen rütteln das Cockpit kurz (im Komfortmodus aus).
-
-
-Die Displays im Armaturenbrett zeigen Live-Werte: EKG und Puls des Patienten, Zustand, echte Flussgeschwindigkeit, Wandabstand, Zieldistanz, Gefäßquerschnitt mit Schiffsposition, Zeitdehnung, Autopilot-Status. Die Rundlampen zeigen Autopilot, Anker, Werkzeug aktiv, Ton und Warnung.
-
-## Assets
-
-Alle Bilder, Texturen und Videos wurden mit **OpenArt** generiert (Projekt „MiniDoctor"): Cockpit (per Chroma-Key freigestellt; Griffe als eigene Ebenen über eine zweite, griffelose Generation), Körperkarte, Texturen (Endothel, Plaque, Fibrin, Erythrozyt), Missionsbilder, Key-Art, Ausgangsbilder, Werkzeug-Icons, Herzinnenwand-Textur, Schlaganfall-Briefing, Porträt und Sprech-Animation der Funk-Ärztin, Drop-Video (Wan 3.0) und Übergangsvideo Pille → Cockpit (Kling 3 Omni, Start-/Endframe). `tools/process-assets.mjs` erzeugt aus den Rohdaten (`assets-src/`, nicht im Repo) die Web-Versionen in `public/assets/`. Die 3D-Werkzeuge sind prozedural modelliert und animiert; Sounds werden per WebAudio synthetisiert.
-
-## Code
+- **Three.js** + Vite, keine weiteren Laufzeit-Abhängigkeiten.
+- Zwei Szenen: Schlachtfeld (Nahebene 0,4 m, Fernebene 7 km) und Cockpit (Nahebene 2 cm) werden nacheinander mit gelöschtem Tiefenpuffer gerendert – keine Z-Fighting-Probleme trotz riesiger Spannweite.
+- Pilotenkopf hängt an einer Feder: bei jedem Schritt des Mechs sackt der Blick ab, das Cockpit rüttelt, Instrumente zittern.
+- Das Außenmodell wird per Raycast vermessen (Rumpfmitte, Rückenluke, Leiter am Bein), damit Kamerafahrt und Cockpit genau zum Meshy-Modell passen.
+- Nachbearbeitung: MSAA, Bloom, Farbgrading mit Vignette und chromatischer Aberration, ACES-Tonemapping, Filmkorn.
+- Bildbasierte Beleuchtung aus dem Panorama für realistische Metallreflexe.
 
 ```
-src/physics.js        Maßstäbe, Gefäße, Poiseuille, Puls, Erythrozytenform
-src/world.js          Gefäß, Blutzellen, Licht, Nebel
-src/ship.js           Schiff ohne Antrieb, Klappen, Anker, Autopilot, Eingabe
-src/journey.js        animierte Anreise durch Herz und Kreislauf
-src/tools.js          animierte Werkzeuge (Laser, Skalpell, Antikörper, Anker, Scanner, tPA)
-src/cockpit.js        Cockpit-Overlay + Live-Displays
-src/hud.js            HUD, Zielmarker, Werkzeugleiste
-src/comm.js           Funkverbindung zur Ärztin
-src/missions/*.js     Diagnose, Stent, Viren, Thrombose, Schlaganfall (+ testbare *Logic.js)
-src/i18n.js           Deutsch / Englisch
+src/
+  main.js              Spielablauf, Kamera-Rig, Verdrahtung der Systeme
+  entry.js             Einstiegssequenz (Kamerafahrt, Leiter, Luke, Hinsetzen)
+  tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken
+  logic/mech.js        reine Bewegungslogik (getestet)
+  logic/systems.js     Strom, APU, Hydraulik, Kühlung, Reaktor, Gyro, Beinverriegelung (getestet)
+  logic/gait.js        Gang: Gewichtsverlagerung, Nachschwingen, Kopf-Feder, Pendel (getestet)
+  cockpit/cockpit.js   Cockpit-Aufbau und Beleuchtung
+  cockpit/instruments.js  Rundinstrumente, Kippschalter, Leuchttaster, Alarmleuchte
+  cockpit/displays.js  Röhrendisplays (Status, Kamera, Taktik)
+  cockpit/hud.js       Head-up-Display
+  world/world.js       Gelände, Panorama, Ruinen, Wracks
+  world/effects.js     Feuer, Rauch, Asche, Leuchtspur, Artillerie
+  audio.js  post.js  input.js  ui.js  assets.js  geom.js
 ```
