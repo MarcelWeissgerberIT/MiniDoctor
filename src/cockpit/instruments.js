@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rbox, cyl } from '../geom.js';
 
-const FONT = "'DejaVu Sans Condensed','Arial Narrow','Roboto Condensed',Arial,sans-serif";
+const FONT = "'Barlow Condensed','DejaVu Sans Condensed','Arial Narrow',Arial,sans-serif";
 
 /** Small stencil label texture (white paint on transparent). */
 export function labelTexture(text, { w = 256, h = 64, size = 34, color = '#e9e4d4', bg = null, weight = 'bold' } = {}) {

@@ -7,7 +7,7 @@ const W = '#effff2';
 const DIM = 'rgba(166,255,184,0.45)';
 const AMBER = '#ffc15e';
 const RED = '#ff5a48';
-const FONT = "'DejaVu Sans Mono','Consolas','Courier New',monospace";
+const FONT = "'JetBrains Mono','DejaVu Sans Mono','Consolas',monospace";
 
 export class HMD {
   constructor(canvas) {
@@ -57,9 +57,16 @@ export class HMD {
     const W_ = innerWidth;
     const H = innerHeight;
     g.globalAlpha = 0.35 + 0.65 * s.power;
-    this.drawThrottle(s, 26, H - 130);
-    if (s.weapons) this.drawWeapons(s, W_ - 26, H - 60);
-    if (s.parts) this.drawParts(s.parts, W_ - 26, H - (s.weapons ? 230 : 100));
+    // corner panels shrink on small screens (phones)
+    const k = Math.max(0.55, Math.min(1, W_ / 1100, H / 620));
+    g.save();
+    g.scale(k, k);
+    const w = W_ / k;
+    const h = H / k;
+    this.drawThrottle(s, 26, h - 130);
+    if (s.weapons) this.drawWeapons(s, w - 26, h - 60);
+    if (s.parts) this.drawParts(s.parts, w - 26, h - (s.weapons ? 230 : 100));
+    g.restore();
     if (s.weapons) this.drawSight(s, W_ / 2, H / 2);
     if (s.targets) this.drawTargets(s, W_, H);
     this.drawHits(dt, W_, H);

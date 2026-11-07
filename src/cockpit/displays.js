@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const FONT = "'DejaVu Sans Mono','Consolas','Courier New',monospace";
+const FONT = "'JetBrains Mono','DejaVu Sans Mono','Consolas',monospace";
 const G = '#8dffa0';
 const W = '#e8fff0';
 const GD = 'rgba(125,255,138,0.4)';
