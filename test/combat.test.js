@@ -6,6 +6,8 @@ import {
   weaponState,
   stepWeapons,
   fireGun,
+  fireMG,
+  MG,
   gunInLimits,
   stepLock,
   fireMissile,
@@ -22,9 +24,23 @@ import {
 
 describe('weapons', () => {
   it('needs master arm, the weapon switch and main power', () => {
-    expect(weaponState({ wpnArm: true, gun: true, missile: false }, true)).toEqual({ master: true, gun: true, missile: false });
+    expect(weaponState({ wpnArm: true, gun: true, missile: false }, true)).toEqual({ master: true, gun: true, missile: false, mg: false });
     expect(weaponState({ wpnArm: false, gun: true, missile: true }, true).gun).toBe(false);
     expect(weaponState({ wpnArm: true, gun: true, missile: true }, false).gun).toBe(false);
+    expect(weaponState({ wpnArm: true, mg: true }, true).mg).toBe(true);
+  });
+
+  it('the MG fires much faster than the cannon and never overheats it', () => {
+    const w = createWeapons();
+    let shots = 0;
+    for (let t = 0; t < 1; t += 1 / 120) {
+      stepWeapons(w, 1 / 120);
+      if (fireMG(w, true)) shots++;
+    }
+    expect(shots).toBeGreaterThanOrEqual(MG.rpm / 60 - 1);
+    expect(w.mg.ammo).toBe(MG.ammo - shots);
+    expect(w.gun.heat).toBe(0);
+    expect(fireMG(w, false)).toBe(false);
   });
 
   it('fires at the cyclic rate and uses ammo', () => {

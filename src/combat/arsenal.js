@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { GUN, MISSILE, createWeapons, stepWeapons, fireGun, stepLock, fireMissile, steer, segmentHitsSphere } from '../logic/combat.js';
+import { GUN, MG, MISSILE, createWeapons, stepWeapons, fireGun, fireMG, stepLock, fireMissile, steer, segmentHitsSphere } from '../logic/combat.js';
 
-// hard points relative to the pilot's eye (mech body frame, -Z forward)
-export const MUZZLE = new THREE.Vector3(1.35, -0.95, -2.2); // 30 mm autocannon on the right arm
-const POD = new THREE.Vector3(-1.15, 0.65, 0.2); // missile pod on the left shoulder
+// missile pod on the left shoulder, relative to the pilot's eye (mech body frame, -Z forward);
+// far enough forward that the pilot sees the missiles leave
+const POD = new THREE.Vector3(-1.2, 0.6, -0.6);
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -82,7 +82,7 @@ export class Arsenal {
   }
 
   /**
-   * ctx: { live: {gun, missile}, trigger, launch, inLimits, origin, dir, mechObj }
+   * ctx: { live: {gun, missile, mg}, trigger, triggerMG, launch, inLimits, origin, dir, mechObj, rig }
    */
   update(dt, ctx) {
     const w = this.w;
@@ -102,6 +102,7 @@ export class Arsenal {
       if (fireGun(w, ctx.live.gun)) this.shoot(ctx);
       if (w.gun.overheated && !wasHot) this.g.onGunOverheat?.();
     }
+    if (ctx.triggerMG && ctx.inLimits && fireMG(w, ctx.live.mg)) this.shoot(ctx, true);
     if (ctx.launch) {
       const m = fireMissile(w, ctx.live.missile);
       if (m) this.launch(m.target, ctx);
@@ -111,20 +112,30 @@ export class Arsenal {
     this.updateMissiles(dt);
   }
 
-  shoot(ctx) {
-    const muzzle = ctx.mechObj.localToWorld(MUZZLE.clone());
-    const aim = this.aimPoint(ctx.origin, ctx.dir);
-    const dir = aim.sub(muzzle).normalize();
-    // dispersion
-    dir.x += (Math.random() - 0.5) * 2 * GUN.spread;
-    dir.y += (Math.random() - 0.5) * 2 * GUN.spread;
-    dir.z += (Math.random() - 0.5) * 2 * GUN.spread;
+  /** one round from the cannon or the coaxial MG: it leaves along the barrel */
+  shoot(ctx, mg = false) {
+    const muzzle = ctx.rig.muzzle(new THREE.Vector3(), mg);
+    const dir = ctx.rig.forward(new THREE.Vector3());
+    const spread = mg ? MG.spread : GUN.spread;
+    dir.x += (Math.random() - 0.5) * 2 * spread;
+    dir.y += (Math.random() - 0.5) * 2 * spread;
+    dir.z += (Math.random() - 0.5) * 2 * spread;
     dir.normalize();
-    this.rounds.push({ p: muzzle.clone(), v: dir.clone().multiplyScalar(GUN.speed), life: 2.4, prev: muzzle.clone() });
-    const f = muzzle.clone().addScaledVector(dir, 1.4);
-    this.fx.muzzle(f.x, f.y, f.z, 2.4);
-    this.fx.blastLight(f.x, f.y, f.z, 120, 0.07);
-    this.g.onGunFired?.();
+    const shot = mg ? this.w.mg.shots : this.w.gun.shots;
+    this.rounds.push({
+      p: muzzle.clone(),
+      v: dir.clone().multiplyScalar(mg ? MG.speed : GUN.speed),
+      life: mg ? 1.6 : 2.4,
+      prev: muzzle.clone(),
+      mg,
+      dmg: mg ? MG.damage : GUN.damage,
+      tracer: !mg || shot % MG.tracerEvery === 0,
+    });
+    const f = muzzle.clone().addScaledVector(dir, mg ? 0.3 : 0.5);
+    this.fx.muzzle(f.x, f.y, f.z, mg ? 0.9 : 2.4);
+    if (!mg || shot % 3 === 0) this.fx.blastLight(f.x, f.y, f.z, mg ? 40 : 120, 0.06);
+    ctx.rig.fired(mg);
+    this.g.onGunFired?.(mg);
   }
 
   updateRounds(dt) {
@@ -144,10 +155,10 @@ export class Arsenal {
         const t = segmentHitsSphere(p0, p1, c.toArray(), e.radius * 0.9);
         if (t < 0) continue;
         _a.copy(r.prev).lerp(r.p, t);
-        this.fx.impact(_a.x, _a.y, _a.z, 'metal', 1.2);
+        this.fx.impact(_a.x, _a.y, _a.z, 'metal', r.mg ? 0.5 : 1.2);
         if (e.state !== 'dead') {
-          this.w.gun.hits++;
-          enemies.damage(e, GUN.damage);
+          this.w[r.mg ? 'mg' : 'gun'].hits++;
+          enemies.damage(e, r.dmg);
         }
         done = true;
         break;
@@ -169,7 +180,7 @@ export class Arsenal {
       if (!done) {
         const h = this.world.heightAt(r.p.x, r.p.z);
         if (r.p.y < h) {
-          this.fx.impact(r.p.x, h, r.p.z, 'ground', 1);
+          this.fx.impact(r.p.x, h, r.p.z, 'ground', r.mg ? 0.45 : 1);
           done = true;
         }
       }
@@ -189,11 +200,11 @@ export class Arsenal {
         this.rounds.splice(i, 1);
         continue;
       }
-      if (n < this.tracers.instanceMatrix.count) {
-        const len = Math.min(14, r.prev.distanceTo(r.p) * 0.9 + 2);
+      if (r.tracer && n < this.tracers.instanceMatrix.count) {
+        const len = Math.min(r.mg ? 8 : 14, r.prev.distanceTo(r.p) * 0.9 + 2);
         _b.copy(r.v).normalize();
         _q.setFromUnitVectors(Z, _b);
-        _m.compose(_a.copy(r.p).addScaledVector(_b, -len), _q, _s.set(1, 1, len));
+        _m.compose(_a.copy(r.p).addScaledVector(_b, -len), _q, _s.set(r.mg ? 0.45 : 1, r.mg ? 0.45 : 1, len));
         this.tracers.setMatrixAt(n++, _m);
       }
     }
@@ -204,7 +215,7 @@ export class Arsenal {
   launch(targetId, ctx) {
     const p = ctx.mechObj.localToWorld(POD.clone());
     const dir = ctx.dir.clone();
-    dir.y += 0.1;
+    dir.y += 0.05;
     dir.normalize();
     const mesh = new THREE.Group();
     mesh.add(new THREE.Mesh(this.missileBody, this.missileMat));

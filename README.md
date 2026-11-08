@@ -71,7 +71,7 @@ Eine Panzerkolonne rollt auf Sektor Kilo zu. Der Mech steht betriebsbereit an de
 2. **Stellung beziehen** an der Panzersperre (Wegmarke 3, grüner Rauch).
 3. **Welle 1:** drei Kampfpanzer aus Nordost. **Welle 2:** zwei Panzer und ein Schützenpanzer aus Osten.
 
-**Waffen:** Die 30-mm-Kanone am rechten Arm folgt dem Helm (±70° seitlich), Feuer mit der linken Maustaste (halten = Dauerfeuer, 5 Schuss/s, Leuchtspur, Rückstoß, Mündungsfeuer erhellt die Kabine). Sie überhitzt bei Dauerfeuer. Lenkraketen aus dem Schulterwerfer: Ziel im gestrichelten Suchkreis halten, bis der Aufschaltton schnell wird (LOCK), dann **F**. Ohne Lock fliegen sie ungelenkt auf den Zielpunkt.
+**Waffen:** Die 30-mm-Kanone am rechten Arm ist rechts durch die Kanzel zu sehen: Sie schwenkt mit dem Helm (±70° seitlich, mit Servo-Verzögerung), der Lauf fährt bei jedem Schuss zurück, glüht bei Hitze und wirft große Messinghülsen aus, die klirrend auf dem Boden landen. Feuer mit der linken Maustaste (halten = Dauerfeuer, 5 Schuss/s, jede Granate mit Leuchtspur); der Blick wird bei jedem Schuss hochgerissen, die Kabine bebt, das Mündungsfeuer erhellt das Cockpit. Sie überhitzt bei Dauerfeuer. Darüber sitzt ein **Koaxial-MG 7,62 mm** (Schalter MG, Taste **E** halten): 15 Schuss/s, jede dritte Leuchtspur, kleine Hülsen – gegen Schützenpanzer. Lenkraketen aus dem Schulterwerfer: Ziel im gestrichelten Suchkreis halten, bis der Aufschaltton schnell wird (LOCK), dann **F**. Ohne Lock fliegen sie ungelenkt auf den Zielpunkt.
 
 **Gegner** fahren über das Gelände (Hindernissen ausweichend), halten auf Kampfentfernung an, drehen sich zum Mech und feuern. Leuchtspurgeschosse zeigen, woher es kommt; wer stehen bleibt, wird leichter getroffen, Fehlschüsse schlagen neben dir ein oder pfeifen vorbei. Treffer gehen auf Kopf, Torso, Arme oder Beine: das Licht setzt aus, Funken sprühen, die Scheibe kann reißen, ein roter Pfeil zeigt die Richtung. Zerstörter rechter Arm = Kanone tot, beschädigte Beine = langsamer. Mit etwas Pech **brennt es an Bord** (Rauch in der Kabine, Hitze steigt) – dann FIRE SUPPR an der Mittelkonsole umlegen (3 Löschflaschen). Kopf oder Torso auf 0 % = Mech zerstört. Am Ende gibt es eine Auswertung mit Abschüssen, Trefferquote und Einsatzzeit.
 
@@ -130,6 +130,7 @@ Die Instrumententafeln haben einen helleren Anstrich, größere hinterleuchtete 
 | A / D | Mech drehen |
 | Linksklick | Schalter unter dem Fadenkreuz betätigen · sonst Kanone feuern (Waffen scharf) |
 | F | Rakete starten |
+| E (halten) | Koaxial-MG |
 | B / V / T | Lanze: folgen / Position halten / Ziel angreifen |
 | Leertaste | Einstiegssequenz überspringen |
 | L / H / N / O | Kabinenlicht / HUD / Nachtsicht / Optik |
@@ -191,6 +192,7 @@ src/
   combat/arsenal.js    Kanone, Leuchtspur, Lenkraketen, Einschläge
   combat/enemies.js    Panzer/Schützenpanzer im Gelände, Granaten, Wracks
   combat/hmd.js        Helmdisplay (Schub, Waffen, Zielmarken, Trefferrichtung)
+  combat/gunrig.js     sichtbarer Waffenarm: Kanone + MG, Schwenken, Rücklauf, Hitzeglühen, Hülsen
   logic/combat.js      Waffen-, Schadens- und Gegnerlogik (getestet)
   logic/mech.js        reine Bewegungslogik (getestet)
   logic/systems.js     Strom, APU, Hydraulik, Kühlung, Reaktor, Gyro, Beinverriegelung (getestet)

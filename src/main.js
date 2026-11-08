@@ -21,6 +21,7 @@ import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
 import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
 import { Arsenal } from './combat/arsenal.js';
+import { GunRig } from './combat/gunrig.js';
 import { Enemies } from './combat/enemies.js';
 import { HMD } from './combat/hmd.js';
 import { Mission, MISSIONS, MISSION_TEXT } from './missions.js';
@@ -32,7 +33,7 @@ import { fitModel } from './geom.js';
 const params = new URLSearchParams(location.search);
 const DEG = Math.PI / 180;
 const LOOK = { yaw: 125 * DEG, up: 62 * DEG, down: 68 * DEG, sens: 0.0022 };
-const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv', 'wpnArm', 'gun', 'missile', 'firesup'];
+const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv', 'wpnArm', 'gun', 'missile', 'firesup', 'mg'];
 const newStats = () => ({ kills: 0, hitsTaken: 0, start: 0 });
 const EXTRA_VOICE = {
   v18: 'Negativ. Ohne Kühlmittelpumpe und Hydraulikdruck zündet der Reaktor nicht. Prüfen Sie Ihre Checkliste.',
@@ -92,6 +93,9 @@ class Game {
     this.enemies = new Enemies(this);
     this.allies = new Allies(this);
     this.arsenal = new Arsenal(this);
+    this.gunRig = new GunRig(this);
+    this.gunRig.visible = false;
+    this.kick = 0; // recoil kick of the view (rad)
     // the player as a target for enemy gunners (kept as one object: they remember it)
     this.playerTarget = {
       isPlayer: true,
@@ -208,7 +212,8 @@ class Game {
     });
     bind('gun', (on) => say(on ? 'MAIN GUN 30MM READY' : 'MAIN GUN SAFE'));
     bind('missile', (on) => say(on ? `MISSILES ${this.arsenal.w.missiles.count} READY` : 'MISSILES SAFE'));
-    for (const k of ['mg', 'aux']) bind(k, (on) => on && say(`${k.toUpperCase()}: OFFLINE`, '#ffb347'));
+    bind('mg', (on) => say(on ? 'COAX MG 7.62 READY' : 'COAX MG SAFE'));
+    bind('aux', (on) => on && say('AUX: OFFLINE', '#ffb347'));
     bind('pump', (on) => say(on ? 'COOLANT PUMP ON' : 'COOLANT PUMP OFF', on ? null : '#ffb347'));
     bind('hydp', (on) => {
       if (on && this.sys.mainBus) this.sound.one('hyd_pump', 0.7);
@@ -357,8 +362,13 @@ class Game {
     const local = dir.clone().applyQuaternion(this.mechObj.quaternion.clone().invert());
     const inLimits = gunInLimits(Math.atan2(-local.x, -local.z), Math.asin(clamp(local.y, -1, 1)));
     const aiming = this.view === 'front' && !this.hovered && !this.dead && (this.input.locked || this.external);
+    // the visible arm swings towards where the pilot looks
+    if (!this.aimPt || this.frame % 2 === 0) this.aimPt = this.arsenal.aimPoint(cam.position, dir, this.aimPt || new THREE.Vector3());
+    this.gunRig.update(dt, { mechObj: this.mechObj, aim: this.aimPt, heat: this.arsenal.w.gun.heat, show: !this.external });
     this.arsenal.update(dt, {
       live,
+      rig: this.gunRig,
+      triggerMG: aiming && this.input.down('KeyE'),
       trigger: aiming && this.input.lmb,
       launch: !this.dead && this.input.hit('KeyF'),
       inLimits,
@@ -503,12 +513,25 @@ class Game {
     this.sound.one('missile_launch', clamp(40 / (d + 20), 0.05, 0.6), 1, this.sound.outside, Math.min(3, d / 343), this.panOf(p));
   }
 
-  onGunFired() {
-    this.sound.one('gun_shot', 0.55, 0.94 + Math.random() * 0.1, undefined, 0, this.external ? 0 : 0.45);
-    this.shake += 0.2;
-    this.headVel.z += 0.04;
+  onGunFired(mg = false) {
+    const pan = this.external ? 0 : 0.45;
+    if (mg) {
+      // light and fast: a rattle, a small twitch
+      this.sound.one('gun_shot', 0.2, 1.7 + Math.random() * 0.15, undefined, 0, pan);
+      this.shake += 0.05;
+      this.kick += 0.0012;
+      if (Math.random() < 0.3) this.cockpit.gunFlash();
+      return;
+    }
+    // 30 mm: the whole cabin takes the blow, the view kicks up and settles
+    this.sound.one('gun_shot', 0.6, 0.92 + Math.random() * 0.1, undefined, 0, pan);
+    this.sound.thump(62, 0.35, 0.18);
+    this.shake += 0.32;
+    this.kick += 0.011;
+    this.headVel.z += 0.07;
+    this.headVel.x -= 0.02;
     this.cockpit.gunFlash();
-    this.cockpit.jolt(0.12);
+    this.cockpit.jolt(0.18);
   }
 
   onGunOverheat() {
@@ -676,6 +699,7 @@ class Game {
     this.enemies.clear();
     this.allies.clear();
     this.arsenal.reset();
+    this.gunRig.reset();
     this.parts = createParts();
     this.fire = null;
     this.fireCharges = 3;
@@ -700,7 +724,7 @@ class Game {
     this.mode = 'combat';
     this.goHot();
     const armed = !!def.armed;
-    this.setSwitches({ wpnArm: armed, gun: armed, missile: armed, firesup: false });
+    this.setSwitches({ wpnArm: armed, gun: armed, missile: armed, mg: armed, firesup: false });
     this.sys.prev = { ...this.switchSnapshot() };
     this.resetCombat();
     this.mech = createMechState(0, 0, 0);
@@ -779,7 +803,7 @@ class Game {
     this.input.lock();
     ui.hideTitle();
     this.goHot();
-    this.setSwitches({ wpnArm: true, gun: true, missile: true });
+    this.setSwitches({ wpnArm: true, gun: true, missile: true, mg: true });
     this.sys.prev = { ...this.switchSnapshot() };
     this.mode = 'free';
     this.enterCockpitState();
@@ -1071,7 +1095,8 @@ class Game {
       this._ql ??= new THREE.Quaternion();
       this._e ??= new THREE.Euler();
       this._qs.setFromEuler(this._e.set(head.pitch + n(43, 31) * sh * 1.5, head.yaw, head.roll + n(33, 19) * sh, 'XYZ'));
-      this._ql.setFromEuler(this._e.set(this.pitch, this.yaw + n(29, 47) * sh, 0, 'YXZ'));
+      this.kick = Math.max(0, this.kick - this.kick * Math.min(1, dt * 9) - dt * 0.004);
+      this._ql.setFromEuler(this._e.set(this.pitch + this.kick, this.yaw + n(29, 47) * sh, 0, 'YXZ'));
       const e = this.viewBlend * this.viewBlend * (3 - 2 * this.viewBlend);
       if (e > 0) {
         // lean towards the panel in focus
@@ -1317,6 +1342,8 @@ class Game {
               gun: live.gun,
               gunDamaged: this.parts.rarm <= 0,
               ammo: w.gun.ammo,
+              mgAmmo: w.mg.ammo,
+              mg: live.mg,
               heat: w.gun.heat,
               overheated: w.gun.overheated,
               inLimits: live.inLimits,
@@ -1377,6 +1404,7 @@ class Game {
     this.updateInteraction(inp);
     this.updateMarker();
     if (this.state === 'cockpit') this.updateCombat(dt);
+    else this.gunRig.visible = false;
 
     this.world.update(dt, this.time, this.worldCam.position);
     const fx = this.world.effects;
