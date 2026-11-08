@@ -330,7 +330,7 @@ export class Arsenal {
             // head for a point high above the target, dive once it lies steeply below
             const hd = Math.hypot(_b.x - m.p.x, _b.z - m.p.z);
             const above = m.p.y - _b.y;
-            if (!m.terminal && above > 8 && hd < above * 1.4) m.terminal = true;
+            if (!m.terminal && above > 8 && hd < above * 1.0) m.terminal = true;
             if (!m.terminal) m.aim.y = _b.y + m.loft;
             // first a steep climb off the pod, clear of the ruins around the mech
             if (!m.terminal && m.p.y < m.y0 + MISSILE.climbOut && hd > 140) {
@@ -346,7 +346,7 @@ export class Arsenal {
       if (m.age > 0.2) {
         const to = _a.copy(m.aim).sub(m.p).normalize().toArray();
         // fins bite harder in the steep terminal dive of a top attack
-        m.dir = steer(m.dir, to, MISSILE.turn * dt * (m.age < 0.6 ? 2 : m.terminal ? 2.4 : 1));
+        m.dir = steer(m.dir, to, MISSILE.turn * dt * (m.age < 0.6 ? 2 : m.terminal ? 3.2 : 1));
       }
       const prev = m.p.clone();
       m.p.x += m.dir[0] * m.speed * dt;
