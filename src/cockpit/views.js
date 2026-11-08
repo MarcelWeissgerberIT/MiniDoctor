@@ -23,6 +23,7 @@ export const CONTROL_VIEW = {
   wpnArm: 'overhead',
   gun: 'overhead',
   missile: 'overhead',
+  mg: 'overhead',
   ecm: 'overhead',
   reactor: 'center',
   stab: 'center',

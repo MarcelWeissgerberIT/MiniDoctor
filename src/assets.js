@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { VOICE_KEYS } from './missions.js';
+import { TRAINING_TEXT } from './tutorial.js';
 
 const BASE = import.meta.env.BASE_URL + 'assets/';
 
@@ -17,8 +18,9 @@ export const SOUNDS = [
   'reactor_start', 'hyd_pump', 'gyro_spin', 'leg_release', 'harness', 'base_ambience',
   'creak_1', 'creak_2', 'hyd_step', 'rattle',
   'gun_shot', 'missile_launch', 'explosion_near', 'armor_hit', 'sparks', 'enemy_cannon', 'shell_whizz', 'extinguisher',
+  'drone_loop', 'drone_launch',
 ];
-export const VOICES = [...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')), ...VOICE_KEYS];
+export const VOICES = [...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')), ...VOICE_KEYS, ...Object.keys(TRAINING_TEXT)];
 
 /**
  * Loads every generated asset (Higgsfield images/audio, Meshy models) and

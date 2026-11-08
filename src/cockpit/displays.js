@@ -77,6 +77,16 @@ export class MFD {
     );
     this.on = false;
     this.bootT = 0;
+    this.hits = []; // clickable regions in display units, filled while drawing
+  }
+
+  /** the topmost clickable region under a point (display units) */
+  hitAt(x, y) {
+    for (let i = this.hits.length - 1; i >= 0; i--) {
+      const h = this.hits[i];
+      if (x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) return h;
+    }
+    return null;
   }
 
   update(dt, time) {
@@ -89,6 +99,7 @@ export class MFD {
 
   begin(clearAlpha = 1) {
     const g = this.ctx;
+    this.hits = [];
     g.setTransform(2, 0, 0, 2, 0, 0);
     if (clearAlpha < 1) g.clearRect(0, 0, 512, 384);
     else {
@@ -127,6 +138,36 @@ function frame(g, title, right) {
   if (right) text(g, right, 492, 28, { size: 19, align: 'right' });
 }
 
+/** page tabs in the title bar; the active one is lit */
+function tabs(mfd, g, items, active, x = 14, y = 14) {
+  let xx = x;
+  for (const [id, label] of items) {
+    g.font = `bold 17px ${FONT}`;
+    const w = g.measureText(label).width + 18;
+    const on = id === active;
+    g.fillStyle = on ? G : 'rgba(10,5,3,0.6)';
+    g.fillRect(xx, y, w, 26);
+    g.strokeStyle = on ? G : GD;
+    g.lineWidth = 1.5;
+    g.strokeRect(xx, y, w, 26);
+    text(g, label, xx + w / 2, y + 13, { size: 17, align: 'center', color: on ? '#140a04' : G, weight: 'bold' });
+    mfd.hits.push({ x: xx, y, w, h: 26, action: { type: 'page', page: id } });
+    xx += w + 6;
+  }
+  return xx;
+}
+
+/** a soft key (bezel button) with a click region */
+function key(mfd, g, label, x, y, w, action, { on = false, dim = false, warn = false, h = 24 } = {}) {
+  g.fillStyle = on ? (warn ? RED : G) : 'rgba(10,5,3,0.7)';
+  g.fillRect(x, y, w, h);
+  g.strokeStyle = dim ? GD : warn ? RED : G;
+  g.lineWidth = 1.5;
+  g.strokeRect(x, y, w, h);
+  text(g, label, x + w / 2, y + h / 2, { size: 14, align: 'center', color: on ? '#140a04' : dim ? GD : warn ? RED : W, weight: 'bold' });
+  if (action && !dim) mfd.hits.push({ x, y, w, h, action });
+}
+
 const bar = (g, x, y, w, h, v, color = G) => {
   g.strokeStyle = GD;
   g.lineWidth = 2;
@@ -160,7 +201,8 @@ export function drawBoot(mfd, t) {
 
 export function drawStatus(mfd, s) {
   const g = mfd.begin();
-  frame(g, 'MECH STATUS', s.time);
+  frame(g, '', s.time);
+  tabs(mfd, g, [['status', 'STATUS'], ['targets', 'ZIELE']], 'status', 14, 14);
   const col = (v) => (v > 0.7 ? G : v > 0.4 ? AMBER : RED);
   // structure per part: name, bar, percent
   const parts = [
@@ -288,7 +330,7 @@ export function drawCamera(mfd, s) {
   for (let d = -40; d <= 40; d += 5) {
     const a = Math.round(deg / 5) * 5 + d;
     const x = 256 + (a - deg) * 6;
-    if (x < 70 || x > 442) continue;
+    if (x < 104 || x > 408) continue;
     const major = ((a % 30) + 30) % 30 === 0;
     g.beginPath();
     g.moveTo(x, 18);
@@ -335,7 +377,8 @@ export function drawCamera(mfd, s) {
     g.lineTo(x + sx * k, y);
   }
   g.stroke();
-  // target boxes on the picture: tracked vehicles
+  camTabs(mfd, g, 'camera');
+  // target boxes on the picture: tracked vehicles (click to select)
   for (const b of s.boxes || []) {
     const r = Math.max(9, Math.min(60, b.r));
     g.strokeStyle = b.aiming ? RED : b.primary ? AMBER : G;
@@ -354,6 +397,12 @@ export function drawCamera(mfd, s) {
     }
     g.stroke();
     text(g, `${b.label} ${Math.round(b.dist)}`, b.x, b.y - r - 10, { size: 14, align: 'center', color: g.strokeStyle, weight: 'bold' });
+    if (b.selected) {
+      g.strokeStyle = W;
+      g.lineWidth = 1.5;
+      g.strokeRect(b.x - r - 5, b.y - r - 5, (r + 5) * 2, (r + 5) * 2);
+    }
+    mfd.hits.push({ x: b.x - r - 6, y: b.y - r - 6, w: (r + 6) * 2, h: (r + 6) * 2, action: { type: 'select', id: b.id } });
   }
   // camera attitude (upper left) and contact count (upper right)
   text(g, `AZ ${String(Math.round(((-s.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}  EL ${(s.el ?? -1.5).toFixed(1)}`, 34, 308, { size: 15, color: G });
@@ -436,6 +485,8 @@ export function drawTactical(mfd, s) {
     const wz = -Math.cos(a);
     return [wx * cos - wz * sin, wx * sin + wz * cos];
   };
+  mfd.map = { cx, cy, R, range: s.range, x: s.x, z: s.z, heading: s.heading };
+  mfd.hits.push({ x: cx - R, y: cy - R, w: R * 2, h: R * 2, action: { type: 'map' } });
   // north on the outer ring
   text(g, 'N', cx + Math.sin(s.heading) * (R - 12), cy - Math.cos(s.heading) * (R - 12), { size: 15, align: 'center', color: W, weight: 'bold' });
   // smoke screens
@@ -516,11 +567,40 @@ export function drawTactical(mfd, s) {
     g.fill();
     text(g, w.call, p.px + 9, p.py + 10, { size: 12, color: '#9fe8ff' });
   }
-  // known vehicles: diamond, gun line, label
+  // the drone, its search circle and goal
+  const dr = s.drone;
+  if (dr && dr.state !== 'docked' && dr.state !== 'lost') {
+    if (dr.goal) {
+      const q = toScope(dr.goal[0], dr.goal[1]);
+      if (q.d < s.range * 1.2) {
+        g.strokeStyle = 'rgba(159,232,255,0.6)';
+        g.setLineDash([4, 4]);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(q.px, q.py, Math.max(5, (110 / s.range) * R), 0, Math.PI * 2);
+        g.stroke();
+        g.setLineDash([]);
+      }
+    }
+    const p = toScope(dr.x, dr.z);
+    if (p.d < s.range) {
+      g.strokeStyle = '#9fe8ff';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(p.px - 6, p.py - 6);
+      g.lineTo(p.px + 6, p.py + 6);
+      g.moveTo(p.px + 6, p.py - 6);
+      g.lineTo(p.px - 6, p.py + 6);
+      g.stroke();
+      text(g, 'UAV', p.px + 8, p.py + 9, { size: 11, color: '#9fe8ff' });
+    }
+  }
+  // known vehicles: diamond, gun line, label (click to select)
   (s.enemies || []).forEach((t, i) => {
     const p = toScope(t.x, t.z);
     if (p.d > s.range) return;
-    const col = t.aiming ? RED : t.primary ? AMBER : 'rgba(255,74,58,0.85)';
+    mfd.hits.push({ x: p.px - 12, y: p.py - 12, w: 24, h: 24, action: { type: 'select', id: t.id } });
+    const col = t.stale ? GD : t.aiming ? RED : t.primary ? AMBER : 'rgba(255,74,58,0.85)';
     g.fillStyle = col;
     g.strokeStyle = col;
     g.beginPath();
@@ -539,8 +619,31 @@ export function drawTactical(mfd, s) {
       g.lineTo(p.px + gx * (t.aiming ? 22 : 14), p.py + gy * (t.aiming ? 22 : 14));
       g.stroke();
     }
-    // only the primary and the closest get a label: a cluster would be unreadable
-    if (i === 0 || t.primary) text(g, `${t.label} ${Math.round(t.dist)}`, p.px + 9, p.py - 9, { size: 12, color: col });
+    // only the primary, the selected and the closest get a label: a cluster would be unreadable
+    if (i === 0 || t.primary || t.id === s.selected) text(g, `${t.label} ${Math.round(t.dist)}${t.stale ? '?' : ''}`, p.px + 9, p.py - 9, { size: 12, color: col });
+    if (t.marked) {
+      g.strokeStyle = '#9fe8ff';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.arc(p.px, p.py, 9, 0, Math.PI * 2);
+      g.stroke();
+    }
+    if (t.id === s.selected) {
+      g.strokeStyle = W;
+      g.lineWidth = 2;
+      g.strokeRect(p.px - 11, p.py - 11, 22, 22);
+    }
+    if (t.id === s.designated) {
+      g.strokeStyle = s.locked ? RED : AMBER;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(p.px, p.py - 15);
+      g.lineTo(p.px + 15, p.py);
+      g.lineTo(p.px, p.py + 15);
+      g.lineTo(p.px - 15, p.py);
+      g.closePath();
+      g.stroke();
+    }
   });
   // own mech
   g.fillStyle = G;
@@ -553,31 +656,157 @@ export function drawTactical(mfd, s) {
   g.fill();
   // data column
   const lx = 348;
+  const eta = s.wp?.eta != null ? `${Math.floor(s.wp.eta / 60)}:${String(Math.floor(s.wp.eta % 60)).padStart(2, '0')}` : '--:--';
+  const dstate = { docked: 'DOCK', launch: 'START', transit: 'ANFLUG', orbit: 'SUCHE', return: 'RÜCKK.', land: 'LANDUNG', lost: 'VERLOREN' };
   const rows = [
-    [`HDG ${String(Math.round(((-s.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}`, W, 16, 'bold'],
-    [`SPD ${String(Math.round(Math.abs(s.speed) * 3.6)).padStart(3)} km/h`, W, 15, 'bold'],
-    [`THR ${String(Math.round(s.throttle * 100)).padStart(4)}%`, W, 15, 'bold'],
-    [s.grid, G, 14],
-    null,
-    s.wp ? [`${s.wp.label} ${Math.round(s.wp.dist)} m`, W, 16, 'bold'] : ['KEINE WEGMARKE', GD, 15],
-    s.wp ? [`ETA ${s.wp.eta != null ? `${Math.floor(s.wp.eta / 60)}:${String(Math.floor(s.wp.eta % 60)).padStart(2, '0')}` : '--:--'}`, G, 15] : null,
-    null,
-    [`FEIND ${s.hostiles}`, s.hostiles ? RED : G, 16, 'bold'],
-    s.nearest ? [`${s.nearest.label} ${Math.round(s.nearest.dist)} m ${s.nearest.clock}h`, RED, 15] : null,
-    s.threats ? [`BEDROHT ${s.threats}`, RED, 16, 'bold'] : null,
-    s.allies?.length ? [`${s.allies.map((w) => `${w.call} ${w.dead ? '✕' : Math.round(w.hp * 100) + '%'}`).join(' ')}`, '#9fe8ff', 14] : null,
-    s.kills != null ? [`ABSCH ${s.kills}/${s.total}`, G, 15] : null,
-    s.sensorsDown ? ['SENSOR DEFEKT', RED, 15, 'bold'] : null,
+    [`HDG ${String(Math.round(((-s.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')} ${String(Math.round(Math.abs(s.speed) * 3.6)).padStart(3)}km/h`, W, 15, 'bold'],
+    [`THR ${String(Math.round(s.throttle * 100)).padStart(3)}% ${s.grid}`, G, 13],
+    s.wp ? [`${s.wp.label} ${Math.round(s.wp.dist)}m ${eta}`, W, 14, 'bold'] : ['KEINE WEGMARKE', GD, 14],
+    [`FEIND ${s.hostiles}${s.threats ? ` · BEDR ${s.threats}` : ''}`, s.threats ? RED : s.hostiles ? AMBER : G, 15, 'bold'],
+    s.nearest ? [`${s.nearest.label} ${Math.round(s.nearest.dist)}m ${s.nearest.clock}h`, RED, 14] : null,
+    s.allies?.length ? [`${s.allies.map((w) => `${w.call} ${w.dead ? '✕' : Math.round(w.hp * 100) + '%'}`).join(' ')}`, '#9fe8ff', 13] : null,
+    dr ? [`UAV ${dstate[dr.state] || dr.state} ${Math.round(dr.battery * 100)}%`, dr.state === 'lost' ? RED : '#9fe8ff', 14] : null,
+    s.kills != null ? [`ABSCH ${s.kills}/${s.total}`, G, 14] : null,
+    s.sensorsDown ? ['SENSOR DEFEKT', RED, 14, 'bold'] : null,
   ];
-  let y = 66;
+  let y = 64;
   for (const r of rows) {
-    if (!r) {
-      y += 8;
-      continue;
-    }
+    if (!r) continue;
     text(g, r[0], lx, y, { size: r[2], color: r[1], weight: r[3] || 'normal' });
-    y += r[2] + 5;
+    y += r[2] + 6;
   }
+  // soft keys: range, designate the selection, send the drone with the next map click
+  key(mfd, g, '−', lx, 274, 36, { type: 'zoom', d: 1 });
+  text(g, `${s.range}`, lx + 77, 286, { size: 14, align: 'center', color: W, weight: 'bold' });
+  key(mfd, g, '+', lx + 118, 274, 36, { type: 'zoom', d: -1 });
+  key(mfd, g, s.designated != null && s.designated === s.selected ? 'FREI' : 'AUFSCHALTEN', lx, 304, 154, s.designated != null && s.designated === s.selected ? { type: 'release' } : { type: 'designate' }, { dim: s.selected == null, on: s.designated != null && s.designated === s.selected, warn: s.locked });
+  key(mfd, g, s.droneMode ? 'DROHNE: ZIEL KLICKEN' : 'DROHNE ►', lx, 334, 154, { type: 'droneMode' }, { on: !!s.droneMode });
+  mfd.end();
+}
+
+/* --------------------------------------------------------- target list */
+
+const FILTERS = [
+  ['all', 'ALLE'],
+  ['tank', 'PZ'],
+  ['apc', 'SPZ'],
+  ['threat', 'BEDR'],
+  ['marked', 'MARK'],
+];
+
+/** ZIELE: every known vehicle, filterable; pick one and hand it to the missile seeker */
+export function drawTargetList(mfd, s) {
+  const g = mfd.begin();
+  frame(g, '', `${s.list.length} BEKANNT`);
+  tabs(mfd, g, [['status', 'STATUS'], ['targets', 'ZIELE']], 'targets', 14, 14);
+  FILTERS.forEach(([id, label], i) => key(mfd, g, label, 14 + i * 64, 52, 58, { type: 'filter', filter: id }, { on: s.filter === id }));
+  const rows = s.list.filter((t) => (s.filter === 'all' ? true : s.filter === 'threat' ? t.aiming : s.filter === 'marked' ? t.marked : t.type === s.filter));
+  const cols = [
+    ['#', 16, 'left'],
+    ['TYP', 60, 'left'],
+    ['ENTF', 158, 'right'],
+    ['RICHT', 172, 'left'],
+    ['SEITE', 232, 'left'],
+    ['LAGE', 300, 'left'],
+    ['ZST', 496, 'right'],
+  ];
+  for (const [n, x, a] of cols) text(g, n, x, 92, { size: 13, color: GD, align: a, weight: 'bold' });
+  const max = 8;
+  const first = Math.max(0, Math.min(s.scroll || 0, rows.length - max));
+  rows.slice(first, first + max).forEach((t, i) => {
+    const y = 108 + i * 25;
+    const sel = t.id === s.selected;
+    if (sel) {
+      g.fillStyle = 'rgba(255,160,64,0.85)';
+      g.fillRect(12, y - 11, 488, 22);
+    }
+    const c = sel ? '#140a04' : t.stale ? GD : t.aiming ? RED : W;
+    const icons = `${t.id === s.designated ? (s.locked ? '◆' : '◇') : ' '}${t.aiming ? '!' : t.marked ? '●' : t.stale ? '?' : ' '}`;
+    text(g, String(first + i + 1), 16, y, { size: 15, color: c, weight: 'bold' });
+    text(g, icons, 34, y, { size: 14, color: sel ? c : t.aiming ? RED : '#9fe8ff', weight: 'bold' });
+    text(g, t.label, 60, y, { size: 15, color: c, weight: 'bold' });
+    text(g, `${Math.round(t.dist)}`, 158, y, { size: 15, color: c, align: 'right' });
+    text(g, `${t.clock}h`, 172, y, { size: 15, color: c });
+    text(g, t.face || '-', 232, y, { size: 14, color: c });
+    text(g, t.stale ? 'LETZTE POS.' : t.state, 300, y, { size: 14, color: c });
+    text(g, `${Math.round(t.hp * 100)}%`, 496, y, { size: 15, color: c, align: 'right' });
+    mfd.hits.push({ x: 12, y: y - 12, w: 488, h: 24, action: { type: 'select', id: t.id } });
+  });
+  if (!rows.length) text(g, s.list.length ? 'KEIN ZIEL IN DIESEM FILTER' : 'KEINE KONTAKTE · DROHNE EINSETZEN', 256, 180, { size: 16, align: 'center', color: GD, weight: 'bold' });
+  if (rows.length > max) text(g, `${first + 1}-${Math.min(rows.length, first + max)} / ${rows.length}`, 496, 312, { size: 12, color: GD, align: 'right' });
+  // seeker state
+  const d = s.list.find((t) => t.id === s.designated);
+  text(
+    g,
+    d ? (s.locked ? `LOCK ${d.label} ${Math.round(d.dist)} m · F = FEUER` : `AUFSCHALTUNG ${d.label} ${Math.round((s.lockT || 0) * 100)}%${d.visible || d.marked ? '' : ' · KEINE SICHT'}`) : 'SUCHER FREI',
+    16,
+    316,
+    { size: 14, color: d ? (s.locked ? RED : AMBER) : GD, weight: 'bold' },
+  );
+  key(mfd, g, '▲', 14, 334, 40, { type: 'scroll', d: -1 });
+  key(mfd, g, '▼', 58, 334, 40, { type: 'scroll', d: 1 });
+  const isDes = s.selected != null && s.selected === s.designated;
+  key(mfd, g, isDes ? 'FREI' : 'AUFSCHALTEN', 104, 334, 150, isDes ? { type: 'release' } : { type: 'designate' }, { dim: s.selected == null, on: isDes, warn: isDes && s.locked });
+  key(mfd, g, 'DROHNE ZUM ZIEL', 260, 334, 160, { type: 'droneTo' }, { dim: s.selected == null || s.droneDisabled });
+  key(mfd, g, 'TAB', 426, 334, 72, { type: 'next' });
+  mfd.end();
+}
+
+/* ---------------------------------------------------------------- drone */
+
+/** the two pages of the centre display share their tabs (corners: the tape runs in between) */
+function camTabs(mfd, g, active) {
+  key(mfd, g, 'KAMERA', 6, 6, 88, { type: 'page', page: 'camera' }, { on: active === 'camera', h: 22 });
+  key(mfd, g, 'DROHNE', 418, 6, 88, { type: 'page', page: 'drone' }, { on: active === 'drone', h: 22 });
+}
+
+/** DROHNE: the drone's camera with its marks, battery and controls */
+export function drawDrone(mfd, s) {
+  const d = s.drone;
+  const up = d.state !== 'docked' && d.state !== 'lost';
+  const g = mfd.begin(up && s.feed ? 0 : 1);
+  camTabs(mfd, g, 'drone');
+  const names = { docked: 'ANGEDOCKT', launch: 'START', transit: 'ANFLUG', orbit: 'SUCHE', return: 'RÜCKKEHR', land: 'LANDUNG', lost: 'VERLOREN' };
+  if (!up) {
+    text(g, d.jammed ? 'STÖRSENDER AKTIV' : `DROHNE ${names[d.state]}`, 256, 130, { size: 24, align: 'center', color: d.state === 'lost' || d.jammed ? RED : W, weight: 'bold' });
+    if (d.state === 'lost') text(g, d.spares ? 'ERSATZDROHNE WIRD MONTIERT' : 'KEINE ERSATZDROHNE', 256, 162, { size: 16, align: 'center', color: AMBER });
+    else {
+      text(g, `AKKU ${Math.round(d.battery * 100)}%`, 256, 166, { size: 18, align: 'center', color: d.battery > 0.35 ? G : AMBER, weight: 'bold' });
+      bar(g, 156, 184, 200, 18, d.battery, d.battery > 0.35 ? G : AMBER);
+      text(g, 'Q · START IN BLICKRICHTUNG', 256, 230, { size: 15, align: 'center', color: G });
+      text(g, 'TAKTIK: DROHNE ► · KARTE KLICKEN', 256, 252, { size: 15, align: 'center', color: G });
+    }
+    text(g, `MARKIERT ${d.marks}  ·  ERSATZ ${d.spares}`, 256, 300, { size: 14, align: 'center', color: GD });
+  } else {
+    // crosshair and marks on the picture
+    g.strokeStyle = G;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(236, 192);
+    g.lineTo(276, 192);
+    g.moveTo(256, 172);
+    g.lineTo(256, 212);
+    g.stroke();
+    for (const b of s.boxes || []) {
+      const r = Math.max(8, Math.min(40, b.r));
+      g.strokeStyle = b.marked ? RED : AMBER;
+      g.lineWidth = b.selected ? 3 : 2;
+      g.strokeRect(b.x - r, b.y - r, r * 2, r * 2);
+      text(g, `${b.label} ${Math.round(b.dist)}`, b.x, b.y - r - 9, { size: 13, align: 'center', color: g.strokeStyle, weight: 'bold' });
+      mfd.hits.push({ x: b.x - r - 6, y: b.y - r - 6, w: (r + 6) * 2, h: (r + 6) * 2, action: { type: 'select', id: b.id } });
+    }
+    g.fillStyle = 'rgba(10,5,3,0.55)';
+    g.fillRect(8, 40, 150, 104);
+    text(g, names[d.state], 16, 54, { size: 15, color: '#9fe8ff', weight: 'bold' });
+    text(g, `ALT ${Math.round(d.alt)} m`, 16, 74, { size: 14, color: W });
+    text(g, `ENTF ${Math.round(d.dist)} m`, 16, 92, { size: 14, color: W });
+    text(g, `MARK ${d.marks}`, 16, 110, { size: 14, color: W });
+    bar(g, 16, 122, 100, 14, d.battery, d.battery > 0.3 ? G : RED);
+    text(g, `${Math.round(d.battery * 100)}%`, 150, 129, { size: 13, color: d.battery > 0.3 ? G : RED, align: 'right' });
+  }
+  const up2 = up && d.state !== 'land';
+  key(mfd, g, up ? 'RÜCKRUF' : 'START', 14, 340, 120, up2 ? { type: 'recall' } : { type: 'launch' }, { dim: d.jammed || d.state === 'lost' || (up && !up2), on: up });
+  key(mfd, g, 'ZUM ZIEL', 140, 340, 120, { type: 'droneTo' }, { dim: s.selected == null || d.jammed || d.state === 'lost' });
   mfd.end();
 }
 

@@ -101,3 +101,17 @@ describe('body dynamics', () => {
     expect(run(true)).toBeLessThan(run(false));
   });
 });
+
+describe('long frames', () => {
+  it('stays finite at 10 fps', () => {
+    const b = new BodyDynamics();
+    const s = { speed: 0, turn: 0, stepPhase: 0, foot: 1 };
+    for (let i = 0; i < 600; i++) {
+      s.speed = i < 300 ? 9 : 0;
+      s.stepPhase = (i * 0.13) % 1;
+      b.update(0.1, s, { pitch: 0.05, roll: 0.06 }, true);
+    }
+    expect(Number.isFinite(b.head.p[1])).toBe(true);
+    expect(Number.isFinite(b.pose.y)).toBe(true);
+  });
+});

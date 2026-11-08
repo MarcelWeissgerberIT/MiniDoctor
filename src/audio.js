@@ -44,7 +44,7 @@ export class Radio {
     shaper.curve = RADIO_CURVE;
     const g = c.createGain();
     g.gain.value = 1.15;
-    src.connect(hp).connect(lp).connect(shaper).connect(g).connect(s.master);
+    src.connect(hp).connect(lp).connect(shaper).connect(g).connect(s.voiceGain || s.master);
     src.start(t);
     this.current = src;
     this.squelch(t - 0.1);
@@ -106,6 +106,8 @@ export class Sound {
     comp.threshold.value = -14;
     comp.ratio.value = 4;
     this.master.connect(comp).connect(c.destination);
+    this.voiceGain = c.createGain();
+    this.voiceGain.connect(this.master);
     for (const [k, ab] of Object.entries(this.raw)) {
       try {
         this.buf[k] = await c.decodeAudioData(ab.slice(0));
@@ -115,6 +117,7 @@ export class Sound {
     }
     for (const k of ['cockpit_hum', 'battle_far', 'base_ambience']) if (this.buf[k]) this.buf[k] = this.seamless(this.buf[k], 2.5);
     if (this.buf.walk_gravel) this.buf.walk_gravel = this.seamless(this.buf.walk_gravel, 0.5);
+    if (this.buf.drone_loop) this.buf.drone_loop = this.seamless(this.buf.drone_loop, 0.8);
     if (this.buf.servo) this.buf.servoLoop = this.seamless(this.buf.servo, 0.6);
     this.noise = this.makeNoise(2);
     if (c.state === 'suspended') await c.resume();

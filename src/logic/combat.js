@@ -38,8 +38,26 @@ export const MISSILE = {
   speedMax: 280,
   accel: 260,
   turn: 1.8, // rad/s
-  life: 9,
+  life: 12,
+  gimbal: (75 * Math.PI) / 180, // a designated target may lie this far off the hull axis
+  loft: 95, // m a top-attack missile climbs over the cover
 };
+
+/* --------------------------------------------------------------- tracks */
+
+// what our side knows: a vehicle seen by us, the lance or the drone stays on the displays
+// at its last known position for a while after it drops out of sight
+export const TRACK = { memory: 20 };
+
+export function observe(e, time) {
+  e.seenT = time;
+  e.kx = e.x;
+  e.kz = e.z;
+}
+
+export function isKnown(e, time) {
+  return e.seenT != null && time - e.seenT < TRACK.memory;
+}
 
 export const ENEMY_TYPES = {
   tank: { hp: 100, speed: 7, engage: 560, reload: [6, 9], shellSpeed: 800, damage: [10, 17], burst: 1, radius: 3.4, height: 2.6, traverse: 0.7, skill: 1 },
@@ -122,9 +140,17 @@ export function stepLock(w, candidates, dt, live) {
     return;
   }
   let best = null;
-  for (const c of candidates) {
-    if (c.dist > MISSILE.lockRange || c.angle > MISSILE.lockCone) continue;
-    if (!best || c.angle < best.angle) best = c;
+  if (m.designated != null) {
+    // a target picked on the display: the seeker slews to it within its gimbal, and needs
+    // either its own view of it or a drone mark to guide on
+    const d = candidates.find((c) => c.id === m.designated);
+    if (d && d.dist <= MISSILE.lockRange && (d.gimbal ?? 0) <= MISSILE.gimbal && (d.visible !== false || d.marked)) best = d;
+  } else {
+    for (const c of candidates) {
+      if (c.visible === false) continue;
+      if (c.dist > MISSILE.lockRange || c.angle > MISSILE.lockCone) continue;
+      if (!best || c.angle < best.angle) best = c;
+    }
   }
   if (!best) {
     m.lockT = Math.max(0, m.lockT - dt * 2);

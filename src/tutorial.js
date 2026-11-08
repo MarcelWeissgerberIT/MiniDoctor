@@ -1,4 +1,6 @@
-// Mission 1: cold-and-dark start-up and walking drill.
+// Mission 1, basic training in the base: cold-and-dark start-up, walking, the displays,
+// the firing range (cannon, MG, missile via the map), the recon drone with a top attack,
+// a fire drill, lance orders and the outside view.
 // Each step names the control to highlight, the radio line to play and the
 // condition that completes it.
 
@@ -31,6 +33,26 @@ export const VOICE_TEXT = {
   v17: 'Einweisung abgeschlossen. BB-07 ist einsatzbereit. Viel Glück da draußen, Pilot. Ausbilder Ende.',
 };
 
+// the training lines after the walking drill
+export const TRAINING_TEXT = {
+  t01: 'Gut. Jetzt Ihre Anzeigen. Auf der Scheibe liegt das Holo-HUD: links Navigation und Systeme, rechts Ziel und Waffen. Mit Taste sechs sehen Sie die drei Displays. Klicken Sie ein Display an, um es zu öffnen.',
+  t02: 'Das Display ist offen. Oben wechseln Sie die Seiten, unten liegen die Funktionstasten. Mit Escape oder einem Rechtsklick schließen Sie es wieder.',
+  t03: 'Weiter zur Waffenausbildung. Overhead-Panel, Taste zwei: Schutzkappe öffnen, Weapons Arm einschalten, dann Main Gun, Missile und das MG.',
+  t04: 'Waffen scharf. Laufen Sie zur Schießbahn an Wegmarke drei. Dort stehen ausgemusterte Panzer als Übungsziele.',
+  t05: 'Übungsziel eins. Richten Sie den Kopf auf das Ziel, die Kanone folgt Ihrem Blick. Linke Maustaste feuert. Achten Sie auf die Rohrhitze, und denken Sie dran: vorne ist ein Panzer am dicksten.',
+  t06: 'Sauber. Das Maschinengewehr, Taste E, ist für weiche Ziele. Nehmen Sie die Munitionskisten bei Ziel zwei unter Feuer.',
+  t07: 'Jetzt die Zielerfassung über das Display. Taste M öffnet die Taktikkarte. Klicken Sie Ziel drei an und dann auf Aufschalten.',
+  t08: 'Aufgeschaltet. Schließen Sie das Display und drücken Sie F. Rakete los.',
+  t09: 'Ziel vier steht hinter der Ruine, kein Sichtkontakt. Dafür haben Sie die Aufklärungsdrohne. Taste Q startet sie in Blickrichtung. Oder schicken Sie sie über die Taktikkarte.',
+  t10: 'Drohne in der Luft. Sie kreist über dem Gebiet und markiert alles, was sie sieht. Das Bild sehen Sie auf dem mittleren Display, Seite Drohne.',
+  t11: 'Ziel vier ist markiert. Wählen Sie es mit Tab oder auf der Karte, schalten Sie auf und feuern Sie. Die Rakete steigt über die Deckung und stößt von oben herab.',
+  t12: 'Treffer. Holen Sie die Drohne zurück, Taste Q. Sie landet selbstständig auf Ihrem Rücken und lädt den Akku nach.',
+  t13: 'Achtung, Übung! Brand im Torso. Feuerlöschanlage auf der Mittelkonsole, Taste fünf, Schalter Fire Suppression. Schnell!',
+  t14: 'Feuer aus. Jetzt Ihre Lanze: Hammer zwei und Hammer drei stoßen zu Ihnen. Taste B heißt folgen, V heißt Position halten, T heißt Ihr Ziel angreifen. Befehlen Sie: folgen.',
+  t15: 'Gut. Und jetzt: Position halten, Taste V.',
+  t16: 'Zum Schluss: Mit Taste neun sehen Sie Ihren Mech von außen. Mit neun geht es zurück ins Cockpit.',
+};
+
 const near = (g, wp, r = 16) => Math.hypot(g.mech.x - wp.x, g.mech.z - wp.z) < r;
 
 /** g is the game: g.sw (switch snapshot), g.sys (systems), g.mech, g.cockpit */
@@ -51,11 +73,38 @@ export const STEPS = [
   { id: 'wp2', title: 'Wegmarke 2 anlaufen', text: 'A / D: drehen. Die Marke liegt rechts.', voice: 'v14', waypoint: 1, done: (g) => near(g, WAYPOINTS[1]) },
   { id: 'stop', title: 'Anhalten', text: 'X: Schub auf null.', voice: 'v15', done: (g) => Math.abs(g.mech.speed) < 0.3 && g.mech.throttle === 0 },
   { id: 'nv', title: 'Nachtsicht testen', text: 'Taste N oder Schalter NV, Mittelkonsole unten.', voice: 'v16', target: 'nv', done: (g) => g.sw.nv },
-  { id: 'end', title: 'Einweisung abgeschlossen', text: 'BB-07 ist einsatzbereit. Frei bewegen.', voice: 'v17', wait: 8, done: () => true },
+  // --- displays
+  { id: 'mfd', title: 'Ein Display öffnen', text: 'Taste 6 zeigt die Displays. Ein Display anklicken öffnet es.', voice: 't01', wait: 4, done: (g) => g.openMfd != null },
+  { id: 'mfdclose', title: 'Display schließen', text: 'Oben Seiten, unten Funktionstasten. Esc oder Rechtsklick schließt.', voice: 't02', wait: 4, done: (g) => g.openMfd == null },
+  // --- firing range
+  {
+    id: 'arm',
+    title: 'WEAPONS ARM, MAIN GUN, MISSILE, MG → EIN',
+    text: 'Overhead-Panel (Taste 2): Schutzkappe öffnen, dann die Waffenschalter.',
+    voice: 't03',
+    target: (g) => (!g.sw.wpnArm ? 'wpnArm' : !g.sw.gun ? 'gun' : !g.sw.missile ? 'missile' : 'mg'),
+    done: (g) => g.sw.wpnArm && g.sw.gun && g.sw.missile && g.sw.mg,
+  },
+  { id: 'range', title: 'Zur Schießbahn: Wegmarke 3', text: 'Übungsziele (ÜZ) stehen nördlich von WP 3.', voice: 't04', waypoint: 2, start: (g) => g.firingRange.setup(), done: (g) => near(g, WAYPOINTS[2], 25) },
+  { id: 'gun', title: 'ÜZ 1 mit der Kanone zerstören', text: 'Kopf aufs Ziel, linke Maustaste. Rohrhitze beachten; das HUD zeigt die Seite, die er dir zeigt.', voice: 't05', done: (g) => g.firingRange.dead(1) },
+  { id: 'mgfire', title: 'ÜZ 2 (Munitionskisten) mit dem MG', text: 'E gedrückt halten: das MG ist für weiche Ziele.', voice: 't06', done: (g) => g.firingRange.dead(2) },
+  { id: 'map', title: 'Taktikkarte: ÜZ 3 aufschalten', text: 'M öffnet die Karte. ÜZ 3 anklicken, dann AUFSCHALTEN.', voice: 't07', done: (g) => g.firingRange.locked(3) || g.firingRange.dead(3) },
+  { id: 'missile', title: 'Rakete auf ÜZ 3', text: 'Display schließen (Esc), dann F.', voice: 't08', done: (g) => g.firingRange.dead(3) },
+  // --- drone and top attack
+  { id: 'drone', title: 'Aufklärungsdrohne starten', text: 'Q startet sie in Blickrichtung (ÜZ 4 hinter der Ruine). Oder Karte: DROHNE ►, dann Ziel anklicken.', voice: 't09', done: (g) => g.drone.airborne },
+  { id: 'dmark', title: 'Die Drohne markiert ÜZ 4', text: 'Mittleres Display, Seite DROHNE. Die Drohne kreist und markiert, was sie sieht.', voice: 't10', done: (g) => g.firingRange.marked(4) || g.firingRange.dead(4) },
+  { id: 'indirect', title: 'ÜZ 4 im Steilangriff', text: 'Tab (oder Karte) weist es zu, F feuert: die Rakete steigt über die Deckung.', voice: 't11', done: (g) => g.firingRange.dead(4) },
+  { id: 'recall', title: 'Drohne zurückrufen', text: 'Q. Sie landet selbstständig und lädt nach.', voice: 't12', done: (g) => !g.drone.airborne || g.drone.state === 'return' || g.drone.state === 'land' },
+  // --- damage control, lance, outside view
+  { id: 'fire', title: 'Brandübung: FIRE SUPPR', text: 'Mittelkonsole (Taste 5), Schalter FIRE SUPPR.', voice: 't13', target: 'firesup', start: (g) => g.startFire('torso', true), done: (g) => !g.fire },
+  { id: 'lance', title: 'Lanze: folgen (B)', text: 'B folgen · V Position halten · T dein Ziel angreifen.', voice: 't14', start: (g) => g.spawnTrainingLance(), done: (g) => g.lastLanceOrder === 'follow' },
+  { id: 'hold', title: 'Lanze: Position halten (V)', text: 'V.', voice: 't15', done: (g) => g.lastLanceOrder === 'hold' },
+  { id: 'ext', title: 'Außenansicht: 9 und zurück', text: 'Taste 9 zeigt den Mech von außen, 9 wieder zurück.', voice: 't16', done: (g) => g.extSeen && !g.external },
+  { id: 'end', title: 'Grundausbildung abgeschlossen', text: 'BB-07 ist einsatzbereit.', voice: 'v17', wait: 8, done: () => true },
 ];
 
 export class Tutorial {
-  constructor(game, ui, steps = STEPS, text = VOICE_TEXT, title = 'CHECKLISTE · KALTSTART') {
+  constructor(game, ui, steps = STEPS, text = { ...VOICE_TEXT, ...TRAINING_TEXT }, title = 'GRUNDAUSBILDUNG') {
     this.g = game;
     this.ui = ui;
     this.steps = steps;

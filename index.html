@@ -46,7 +46,7 @@
     <section id="title">
       <div class="shade"></div>
       <div class="content">
-        <div class="tag">MECH-SIMULATION · PROTOTYP 0.4</div>
+        <div class="tag">MECH-SIMULATION · PROTOTYP 0.5</div>
         <h1>BATTLEBOT</h1>
         <div class="catalog">
           <div class="ctag">MISSIONSKATALOG</div>
@@ -57,6 +57,8 @@
         <div class="buttons">
           <button id="start" disabled>Lade Ressourcen …</button>
           <button id="quick" class="secondary" disabled>Freies Spiel</button>
+          <button id="opts" class="secondary">Einstellungen</button>
+          <button id="achbtn" class="secondary">Erfolge</button>
         </div>
         <ul class="keys">
           <li><b>Maus</b> umsehen</li>
@@ -67,6 +69,10 @@
           <li><b>E</b> MG</li>
           <li><b>9</b> Außenansicht</li>
           <li><b>B / V / T</b> Lanze</li>
+          <li><b>M</b> Karte</li>
+          <li><b>Tab</b> Ziel</li>
+          <li><b>Q</b> Drohne</li>
+          <li><b>P / Esc</b> Pause</li>
           <li><b>F1</b> Hilfe</li>
         </ul>
       </div>
@@ -80,7 +86,11 @@
         <tr><td>X / Leertaste</td><td>Schub auf null, Mech bremst</td></tr>
         <tr><td>A / D</td><td>Mech drehen</td></tr>
         <tr><td>Linksklick</td><td>Schalter / Knopf unter dem Fadenkreuz betätigen · sonst (Waffen scharf) Kanone feuern, gedrückt halten = Dauerfeuer</td></tr>
-        <tr><td>F</td><td>Rakete starten (Ziel im gestrichelten Kreis halten bis LOCK)</td></tr>
+        <tr><td>F</td><td>Rakete starten (Ziel im gestrichelten Kreis halten bis LOCK, oder ein zugewiesenes Ziel)</td></tr>
+        <tr><td>Tab</td><td>nächstes bekanntes Ziel dem Raketensucher zuweisen</td></tr>
+        <tr><td>M</td><td>Taktikkarte öffnen / schließen (Ziele anklicken, AUFSCHALTEN, Drohne schicken)</td></tr>
+        <tr><td>Q</td><td>Aufklärungsdrohne starten (in Blickrichtung) / zurückrufen</td></tr>
+        <tr><td>Klick auf ein Display</td><td>Display öffnen: Seiten oben, Funktionstasten unten, Ziele anklicken · Esc / Rechtsklick schließt</td></tr>
         <tr><td>E (halten)</td><td>Koaxial-MG 7,62 mm (Schalter MG auf dem Overhead-Panel) – gegen Schützenpanzer</td></tr>
         <tr><td>L</td><td>Kabinenlicht</td></tr>
         <tr><td>H</td><td>Head-up-Display</td></tr>
@@ -88,15 +98,15 @@
         <tr><td>O</td><td>Optik / Kamera an–aus</td></tr>
         <tr><td>R</td><td>Radarreichweite 500 / 1000 m</td></tr>
         <tr><td>G</td><td>Gyro-Stabilisator</td></tr>
-        <tr><td>Q</td><td>Master Caution quittieren</td></tr>
+        <tr><td>Rücktaste</td><td>Master Caution quittieren</td></tr>
         <tr><td>1 – 6</td><td>Ansicht: Vorne, Overhead, linke / rechte Konsole, Mittelkonsole, Displays (Schalter dann direkt mit dem Mauszeiger anklicken)</td></tr>
         <tr><td>9</td><td>Außenansicht an / aus (Maus: Kamera drehen, Mausrad: Abstand)</td></tr>
         <tr><td>B / V / T</td><td>Befehle an die Lanze: folgen · Position halten · aufgeschaltetes (oder anvisiertes) Ziel angreifen</td></tr>
         <tr><td>Rechte Maustaste</td><td>halten = Zoom · in einer Panel-Ansicht: zurück nach vorne</td></tr>
         <tr><td>Esc</td><td>aus der Panel-Ansicht zurück</td></tr>
         <tr><td>C</td><td>Blick zentrieren</td></tr>
-        <tr><td>M</td><td>Ton an / aus</td></tr>
-        <tr><td>F1 / Tab</td><td>diese Hilfe</td></tr>
+        <tr><td>P / Esc</td><td>Pause-Menü: Einstellungen (Grafik, Sichtfeld, Maus, Kopfbewegung, Lautstärke, Untertitel), Erfolge, Neustart</td></tr>
+        <tr><td>F1 / ?</td><td>diese Hilfe</td></tr>
         <tr><td>Leertaste</td><td>Einstiegssequenz überspringen</td></tr>
       </table>
       <p>Waffen: Overhead-Panel WEAPONS ARM (Schutzkappe), MAIN GUN, MISSILE. Brand an Bord: FIRE SUPPR auf der Mittelkonsole.</p>
