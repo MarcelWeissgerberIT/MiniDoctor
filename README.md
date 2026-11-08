@@ -20,7 +20,21 @@ Das Titelmenü zeigt alle Missionen mit Typ, Schwierigkeit, Lanzengröße und �
 
 ## Funk mit Gesicht
 
-Wer funkt, erscheint als Videoverbindung auf dem linken Display: der Ausbilder aus dem Kommandobunker, Hammer 2 und Hammer 3 aus ihren Cockpits – mit Kanalanzeige, LIVE-Marke, Pegel und kurzem Bildaufbau mit Störstreifen. Die Porträts sind mit GPT Image 2.6 erzeugt, die sprechenden Clips mit **Higgsfield Intone** (lippensynchron zu echten Funksprüchen aus dem Spiel). Ohne Hauptstrom bleibt das Display dunkel.
+Wer funkt, erscheint als Videoverbindung auf dem linken Display: der Ausbilder aus dem Kommandobunker, Hammer 2 und Hammer 3 aus ihren Cockpits. Dazu gehören Kanalanzeige, LIVE-Marke, Pegel und ein kurzer Bildaufbau mit Störstreifen. Ohne Hauptstrom bleibt das Display dunkel.
+
+**Lippensynchron:** Die Lippen folgen der Stimme, die gerade wirklich läuft.
+- Ein Analyser am Funkkanal misst in jedem Bild Lautstärke und Klangfarbe.
+- Daraus wird eine von vier Mundstellungen: geschlossen, halb offen, offen (a/e) oder gerundet (o/u, dunkler Klang).
+- Die Lautstärke ist auf jeden Sprecher normiert, eine kurze Haltezeit verhindert Flackern.
+- Dazu blinzeln die Sprecher alle paar Sekunden, der Kopf bewegt sich leicht und nickt bei betonten Silben.
+- Gemessen liegt die Korrelation zwischen Mundöffnung und tatsächlicher Lautstärke bei 0,83 bis 0,93.
+- Das gilt für jeden Funkspruch, auch für künftige, ohne eigenes Video pro Zeile.
+
+**Bilder:** Die Porträts sind mit GPT Image 2.6 erzeugt. Mundstellungen und geschlossene Augen sind Bildbearbeitungen davon. `tools/lipsync-faces.py` übernimmt daraus nur den Mund- bzw. Augenbereich:
+- pixelgenau ausgerichtet, farblich angeglichen
+- als transparente Ebene gespeichert, je etwa 10 KB
+
+Der Rest des Gesichts bleibt dadurch dasselbe Bild, nichts flimmert beim Sprechen.
 
 ## Deckung und Sichtlinien
 
