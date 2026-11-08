@@ -45,7 +45,7 @@ export const ENEMY_TYPES = {
   tank: { hp: 100, speed: 7, engage: 560, reload: [6, 9], shellSpeed: 800, damage: [10, 17], burst: 1, radius: 3.4, height: 2.6, traverse: 0.7, skill: 1 },
   // static supply depot targets (fuel, generators, ammunition)
   depot: { hp: 70, speed: 0, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.6, height: 2.2, static: true },
-  apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4, traverse: 1.4, skill: 0.8 },
+  apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4, traverse: 1.4, skill: 0.7 },
 };
 
 export const PARTS = ['head', 'torso', 'larm', 'rarm', 'lleg', 'rleg'];
@@ -351,7 +351,8 @@ export function gunnerAim(shooter, target, shellSpeed, skill = 1, rand = Math.ra
   const lead = 1 + (rand() - 0.5) * 0.8; // estimates the target speed within +-40 %
   // tracking a walking (bobbing, weaving) mech spreads the shots: moving is the best armour
   const run = Math.hypot(target.vx || 0, target.vz || 0) * t;
-  const sigma = (0.5 + d / 240) / skill;
+  // even at short range a gun on a moving hull and a sweating gunner do not place every shot
+  const sigma = (0.9 + d / 260) / skill;
   const sh = sigma + (run * 0.55) / skill;
   return {
     x: target.x + (target.vx || 0) * t * lead + gauss(rand) * sh,

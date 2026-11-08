@@ -161,78 +161,103 @@ export function drawBoot(mfd, t) {
 export function drawStatus(mfd, s) {
   const g = mfd.begin();
   frame(g, 'MECH STATUS', s.time);
-  const parts = [
-    ['HEAD', s.parts.head],
-    ['TORSO', s.parts.torso],
-    ['L.ARM', s.parts.larm],
-    ['R.ARM', s.parts.rarm],
-    ['L.LEG', s.parts.lleg],
-    ['R.LEG', s.parts.rleg],
-  ];
   const col = (v) => (v > 0.7 ? G : v > 0.4 ? AMBER : RED);
-  parts.forEach(([n, v], i) => {
-    text(g, n.padEnd(6), 22, 70 + i * 30, { size: 22, weight: 'bold' });
-    text(g, String(Math.round(v * 100)).padStart(3) + '%', 196, 70 + i * 30, { size: 22, color: col(v), align: 'right', weight: 'bold' });
+  // structure per part: name, bar, percent
+  const parts = [
+    ['KOPF', 'head'],
+    ['TORSO', 'torso'],
+    ['L.ARM', 'larm'],
+    ['R.ARM', 'rarm'],
+    ['L.BEIN', 'lleg'],
+    ['R.BEIN', 'rleg'],
+  ];
+  parts.forEach(([n, k], i) => {
+    const v = s.parts[k];
+    const y = 62 + i * 25;
+    text(g, n, 18, y, { size: 18, weight: 'bold' });
+    bar(g, 96, y - 8, 86, 16, v, col(v));
+    text(g, String(Math.round(v * 100)).padStart(3) + '%', 246, y, { size: 18, color: col(v), align: 'right', weight: 'bold' });
   });
-  // wireframe mech silhouette
-  const cx = 360;
-  const cy = 170;
-  g.lineWidth = 3;
+  // wireframe mech silhouette (smaller, right)
+  const cx = 384;
+  const cy = 118;
+  const k = 0.62;
+  g.save();
+  g.translate(cx, cy);
+  g.scale(k, k);
+  g.lineWidth = 4;
   const part = (v, fn) => {
     g.strokeStyle = col(v);
-    g.shadowColor = col(v);
-    g.shadowBlur = 8;
+    g.fillStyle = v <= 0 ? 'rgba(255,74,58,0.35)' : 'rgba(0,0,0,0)';
     g.beginPath();
     fn();
+    g.fill();
     g.stroke();
-    g.shadowBlur = 0;
   };
-  part(s.parts.head, () => g.rect(cx - 18, cy - 92, 36, 26));
+  part(s.parts.head, () => g.rect(-18, -92, 36, 26));
   part(s.parts.torso, () => {
-    g.moveTo(cx - 48, cy - 62);
-    g.lineTo(cx + 48, cy - 62);
-    g.lineTo(cx + 36, cy + 10);
-    g.lineTo(cx - 36, cy + 10);
+    g.moveTo(-48, -62);
+    g.lineTo(48, -62);
+    g.lineTo(36, 10);
+    g.lineTo(-36, 10);
     g.closePath();
   });
-  part(s.parts.larm, () => {
-    g.rect(cx - 82, cy - 60, 26, 62);
-    g.rect(cx - 86, cy + 6, 22, 44);
-  });
-  part(s.parts.rarm, () => {
-    g.rect(cx + 56, cy - 60, 26, 62);
-    g.moveTo(cx + 69, cy + 2);
-    g.lineTo(cx + 69, cy + 66);
-  });
-  part(s.parts.lleg, () => {
-    g.moveTo(cx - 20, cy + 10);
-    g.lineTo(cx - 34, cy + 64);
-    g.lineTo(cx - 24, cy + 118);
-    g.moveTo(cx - 44, cy + 122);
-    g.lineTo(cx - 6, cy + 122);
-  });
-  part(s.parts.rleg, () => {
-    g.moveTo(cx + 20, cy + 10);
-    g.lineTo(cx + 34, cy + 64);
-    g.lineTo(cx + 24, cy + 118);
-    g.moveTo(cx + 6, cy + 122);
-    g.lineTo(cx + 44, cy + 122);
-  });
-  // systems
+  part(s.parts.larm, () => g.rect(-84, -60, 28, 100));
+  part(s.parts.rarm, () => g.rect(56, -60, 28, 100));
+  part(s.parts.lleg, () => g.rect(-38, 16, 26, 108));
+  part(s.parts.rleg, () => g.rect(12, 16, 26, 108));
+  g.restore();
+  text(g, 'FRONT ×0.8  HECK ×1.35', 384, 216, { size: 13, align: 'center', color: GD });
+
   g.strokeStyle = GD;
+  g.lineWidth = 2;
   g.beginPath();
-  g.moveTo(10, 252);
-  g.lineTo(502, 252);
+  g.moveTo(10, 228);
+  g.lineTo(502, 228);
   g.stroke();
-  text(g, 'REACT', 20, 272, { size: 19, weight: 'bold' });
-  bar(g, 100, 262, 170, 20, s.reactor, s.reactor > 0.9 ? AMBER : G);
-  text(g, 'HEAT', 286, 272, { size: 19, weight: 'bold' });
-  bar(g, 346, 262, 146, 20, s.heat, s.heat > 0.75 ? RED : s.heat > 0.55 ? AMBER : G);
-  text(g, 'COOL', 20, 304, { size: 19, weight: 'bold' });
-  bar(g, 100, 294, 170, 20, s.coolant);
-  text(g, 'HYD', 286, 304, { size: 19, weight: 'bold' });
-  bar(g, 346, 294, 146, 20, s.hyd);
-  text(g, s.message, 20, 346, { size: 20, color: s.messageColor || W, weight: 'bold' });
+  // power and fluids: label, bar, value
+  const heatC = Math.round(80 + s.heat * 520);
+  const rows = [
+    ['REAKT', s.reactor, `${Math.round(s.reactor * 100)}%`, s.reactor > 0.9 ? AMBER : G],
+    ['HITZE', s.heat, `${heatC}°C`, s.heat > 0.75 ? RED : s.heat > 0.55 ? AMBER : G],
+    ['KÜHL', s.failed?.includes('KÜHLUNG') ? 0.2 : s.coolantFlow ? s.coolant : 0, s.failed?.includes('KÜHLUNG') ? 'LECK' : s.coolantFlow ? `${Math.round(s.coolant * 140)} l/m` : 'AUS', s.failed?.includes('KÜHLUNG') ? RED : G],
+    ['HYDR', s.hyd, `${Math.round(s.hyd * 3500)} psi`, s.hyd < 0.4 ? RED : G],
+    ['GYRO', s.failed?.includes('GYRO') ? 0 : s.gyro, s.failed?.includes('GYRO') ? 'DEFEKT' : `${Math.round(s.gyro * 100)}%`, s.failed?.includes('GYRO') ? RED : G],
+    ['BATT', s.battBus ? 1 : 0, s.battBus ? (s.mainBus ? '28.1 V' : '24.3 V') : 'AUS', s.battBus ? G : GD],
+  ];
+  rows.forEach(([n, v, val, c], i) => {
+    const x = i % 2 ? 268 : 16;
+    const y = 246 + Math.floor(i / 2) * 25;
+    text(g, n, x, y, { size: 16, weight: 'bold' });
+    bar(g, x + 58, y - 8, 70, 16, v, c);
+    text(g, val, x + 226, y, { size: 16, color: c, align: 'right', weight: 'bold' });
+  });
+  g.strokeStyle = GD;
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.moveTo(256, 236);
+  g.lineTo(256, 308);
+  g.stroke();
+  // systems matrix
+  const sys = [
+    ['OPT', 'OPTIK'],
+    ['SEN', 'SENSOREN'],
+    ['GYR', 'GYRO'],
+    ['KÜH', 'KÜHLUNG'],
+    ['RAK', 'RAKETENWERFER'],
+    ['HYD', 'HYDRAULIK'],
+  ];
+  sys.forEach(([n, k], i) => {
+    const bad = s.failed?.includes(k);
+    const x = 16 + i * 81;
+    g.strokeStyle = bad ? RED : GD;
+    g.fillStyle = bad ? 'rgba(255,74,58,0.35)' : 'rgba(0,0,0,0)';
+    g.fillRect(x, 318, 74, 22);
+    g.strokeRect(x, 318, 74, 22);
+    text(g, `${n} ${bad ? '✕' : 'OK'}`, x + 37, 329, { size: 14, align: 'center', color: bad ? RED : G, weight: 'bold' });
+  });
+  text(g, s.message, 18, 358, { size: 17, color: s.messageColor || W, weight: 'bold' });
+  text(g, `LÖSCH ${s.bottles ?? 3}`, 494, 358, { size: 15, align: 'right', color: (s.bottles ?? 3) ? G : RED });
   mfd.end();
 }
 
@@ -240,6 +265,22 @@ export function drawStatus(mfd, s) {
 
 export function drawCamera(mfd, s) {
   const g = mfd.begin(0);
+  if (s.failed) {
+    // a dead camera: snow and a fault message
+    g.fillStyle = '#0a0503';
+    g.fillRect(0, 0, 512, 384);
+    for (let i = 0; i < 900; i++) {
+      const v = Math.random();
+      g.fillStyle = `rgba(255,${150 + v * 90},${80 + v * 60},${0.15 + v * 0.35})`;
+      g.fillRect(Math.random() * 512, Math.random() * 384, 2 + Math.random() * 6, 2);
+    }
+    g.fillStyle = 'rgba(10,5,3,0.8)';
+    g.fillRect(96, 160, 320, 64);
+    text(g, 'OPTIK AUSGEFALLEN', 256, 182, { size: 22, align: 'center', color: RED, weight: 'bold' });
+    text(g, 'KEIN BILD · ZOOM GESPERRT', 256, 208, { size: 15, align: 'center', color: AMBER });
+    mfd.end();
+    return;
+  }
   // heading tape
   g.strokeStyle = G;
   g.lineWidth = 2;
@@ -294,6 +335,44 @@ export function drawCamera(mfd, s) {
     g.lineTo(x + sx * k, y);
   }
   g.stroke();
+  // target boxes on the picture: tracked vehicles
+  for (const b of s.boxes || []) {
+    const r = Math.max(9, Math.min(60, b.r));
+    g.strokeStyle = b.aiming ? RED : b.primary ? AMBER : G;
+    g.lineWidth = b.primary ? 3 : 2;
+    const q = r * 0.4;
+    g.beginPath();
+    for (const [sx, sy] of [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ]) {
+      g.moveTo(b.x + sx * r, b.y + sy * (r - q));
+      g.lineTo(b.x + sx * r, b.y + sy * r);
+      g.lineTo(b.x + sx * (r - q), b.y + sy * r);
+    }
+    g.stroke();
+    text(g, `${b.label} ${Math.round(b.dist)}`, b.x, b.y - r - 10, { size: 14, align: 'center', color: g.strokeStyle, weight: 'bold' });
+  }
+  // camera attitude (upper left) and contact count (upper right)
+  text(g, `AZ ${String(Math.round(((-s.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}  EL ${(s.el ?? -1.5).toFixed(1)}`, 34, 308, { size: 15, color: G });
+  text(g, 'FOV 13°  STAB', 34, 326, { size: 15, color: G });
+  if (s.count != null) {
+    text(g, `ZIELE ${s.count}`, 476, 84, { size: 15, align: 'right', color: s.count ? AMBER : G });
+    if (s.threats) text(g, `BEDROHT ${s.threats}`, 476, 102, { size: 15, align: 'right', color: RED, weight: 'bold' });
+  }
+  // target data (lower right)
+  const t = s.target;
+  if (t) {
+    g.fillStyle = 'rgba(10,5,3,0.55)';
+    g.fillRect(300, 246, 196, 86);
+    text(g, `${t.label} · ${t.name}`, 488, 260, { size: 14, align: 'right', color: t.aiming ? RED : AMBER, weight: 'bold' });
+    text(g, `${String(Math.round(t.dist)).padStart(4, '0')} m  ${t.clock} UHR`, 488, 279, { size: 15, align: 'right', color: W });
+    text(g, `${t.face ? t.face + ' · ' : ''}${t.state}`, 488, 298, { size: 14, align: 'right', color: G });
+    const n = Math.round(t.hp * 8);
+    text(g, `${'▰'.repeat(n)}${'▱'.repeat(8 - n)} ${Math.round(t.hp * 100)}%`, 488, 317, { size: 14, align: 'right', color: G });
+  }
   text(g, `RNG ${s.range ? String(Math.round(s.range)).padStart(4, '0') + ' m' : '----'}`, 26, 356, { size: 22, weight: 'bold', color: W });
   text(g, s.nv ? 'NV' : 'OPT', 256, 356, { size: 22, align: 'center', color: s.nv ? AMBER : G, weight: 'bold' });
   text(g, `x${s.zoom}`, 486, 356, { size: 22, align: 'right', weight: 'bold' });
@@ -315,6 +394,7 @@ export function drawTactical(mfd, s) {
     g.beginPath();
     g.arc(cx, cy, (R * i) / 3, 0, Math.PI * 2);
     g.stroke();
+    if (i < 3) text(g, String(Math.round((s.range * i) / 3)), cx + ((R * i) / 3) * 0.72 + 3, cy - ((R * i) / 3) * 0.72 - 6, { size: 11, color: GD });
   }
   g.beginPath();
   g.moveTo(cx - R, cy);
@@ -341,59 +421,127 @@ export function drawTactical(mfd, s) {
     g.arc(cx, cy, R, 0, Math.PI * 2);
     g.fill();
   }
-  // contacts (heading-up)
+  // heading-up: rotate world offsets into the mech frame (forward -Z is up)
   const cos = Math.cos(s.heading);
   const sin = Math.sin(s.heading);
-  for (const c of s.contacts) {
-    if (c.hidden) continue;
-    const dx = c.x - s.x;
-    const dz = c.z - s.z;
-    // rotate into mech frame: forward (-Z) is up on the scope
+  const toScope = (x, z) => {
+    const dx = x - s.x;
+    const dz = z - s.z;
     const rx = dx * cos - dz * sin;
     const rz = dx * sin + dz * cos;
-    const d = Math.hypot(rx, rz);
-    if (d > s.range) continue;
-    const px = cx + (rx / s.range) * R;
-    const py = cy + (rz / s.range) * R;
+    return { px: cx + (rx / s.range) * R, py: cy + (rz / s.range) * R, d: Math.hypot(rx, rz), rx, rz };
+  };
+  const dirOf = (a) => {
+    const wx = -Math.sin(a);
+    const wz = -Math.cos(a);
+    return [wx * cos - wz * sin, wx * sin + wz * cos];
+  };
+  // north on the outer ring
+  text(g, 'N', cx + Math.sin(s.heading) * (R - 12), cy - Math.cos(s.heading) * (R - 12), { size: 15, align: 'center', color: W, weight: 'bold' });
+  // smoke screens
+  for (const sm of s.smoke || []) {
+    const p = toScope(sm.x, sm.z);
+    if (p.d > s.range) continue;
+    g.fillStyle = 'rgba(255,230,200,0.22)';
+    g.beginPath();
+    g.arc(p.px, p.py, Math.max(4, (sm.r / s.range) * R), 0, Math.PI * 2);
+    g.fill();
+  }
+  // route to the active waypoint
+  if (s.wp) {
+    const p = toScope(s.wp.x, s.wp.z);
+    const k = p.d > s.range ? s.range / p.d : 1;
+    const ex = cx + (p.px - cx) * k;
+    const ey = cy + (p.py - cy) * k;
+    g.strokeStyle = W;
+    g.setLineDash([5, 5]);
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(ex, ey);
+    g.stroke();
+    g.setLineDash([]);
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(ex, ey - 8);
+    g.lineTo(ex + 8, ey);
+    g.lineTo(ex, ey + 8);
+    g.lineTo(ex - 8, ey);
+    g.closePath();
+    g.stroke();
+    text(g, s.wp.label, ex + 10, ey - 10, { size: 12, color: W });
+  }
+  for (const c of s.contacts) {
+    if (c.hidden || c.type === 'wp') continue;
+    if (s.enemies && c.enemy) continue; // drawn with their data below
+    if (s.allies && c.lance) continue;
+    const p = toScope(c.x, c.z);
+    if (p.d > s.range) continue;
     // fade with time since sweep passed
-    const ang = (Math.atan2(rx, -rz) + Math.PI * 2) % (Math.PI * 2);
+    const ang = (Math.atan2(p.rx, -p.rz) + Math.PI * 2) % (Math.PI * 2);
     const since = (sw - ang + Math.PI * 4) % (Math.PI * 2);
     const a = Math.max(0.25, 1 - since / 5);
     if (c.type === 'hostile') {
       g.fillStyle = `rgba(255,74,58,${a})`;
       g.beginPath();
-      g.moveTo(px, py - 7);
-      g.lineTo(px + 6, py + 5);
-      g.lineTo(px - 6, py + 5);
+      g.moveTo(p.px, p.py - 7);
+      g.lineTo(p.px + 6, p.py + 5);
+      g.lineTo(p.px - 6, p.py + 5);
       g.closePath();
       g.fill();
-    } else if (c.type === 'wp') {
-      g.strokeStyle = '#ffe6c8';
-      g.lineWidth = 2;
-      g.beginPath();
-      g.moveTo(px, py - 8);
-      g.lineTo(px + 8, py);
-      g.lineTo(px, py + 8);
-      g.lineTo(px - 8, py);
-      g.closePath();
-      g.stroke();
     } else if (c.type === 'ally') {
       g.fillStyle = '#9fe8ff';
       g.beginPath();
-      g.moveTo(px, py - 8);
-      g.lineTo(px + 6, py + 6);
-      g.lineTo(px, py + 2);
-      g.lineTo(px - 6, py + 6);
-      g.closePath();
+      g.arc(p.px, p.py, 5, 0, Math.PI * 2);
       g.fill();
     } else if (c.type === 'fire') {
       g.fillStyle = `rgba(255,179,71,${a})`;
-      g.fillRect(px - 3, py - 3, 6, 6);
+      g.fillRect(p.px - 3, p.py - 3, 6, 6);
     } else {
-      g.fillStyle = `rgba(255,160,64,${a * 0.7})`;
-      g.fillRect(px - 2.5, py - 2.5, 5, 5);
+      g.fillStyle = `rgba(255,160,64,${a * 0.6})`;
+      g.fillRect(p.px - 2.5, p.py - 2.5, 5, 5);
     }
   }
+  // the lance: chevrons with call signs
+  for (const w of s.allies || []) {
+    const p = toScope(w.x, w.z);
+    if (p.d > s.range) continue;
+    const [fx, fy] = dirOf(w.heading);
+    g.fillStyle = w.dead ? GD : '#9fe8ff';
+    g.beginPath();
+    g.moveTo(p.px + fx * 9, p.py + fy * 9);
+    g.lineTo(p.px - fy * 6 - fx * 5, p.py + fx * 6 - fy * 5);
+    g.lineTo(p.px + fy * 6 - fx * 5, p.py - fx * 6 - fy * 5);
+    g.closePath();
+    g.fill();
+    text(g, w.call, p.px + 9, p.py + 10, { size: 12, color: '#9fe8ff' });
+  }
+  // known vehicles: diamond, gun line, label
+  (s.enemies || []).forEach((t, i) => {
+    const p = toScope(t.x, t.z);
+    if (p.d > s.range) return;
+    const col = t.aiming ? RED : t.primary ? AMBER : 'rgba(255,74,58,0.85)';
+    g.fillStyle = col;
+    g.strokeStyle = col;
+    g.beginPath();
+    g.moveTo(p.px, p.py - 7);
+    g.lineTo(p.px + 7, p.py);
+    g.lineTo(p.px, p.py + 7);
+    g.lineTo(p.px - 7, p.py);
+    g.closePath();
+    if (t.type === 'depot') g.stroke();
+    else g.fill();
+    if (t.type !== 'depot') {
+      const [gx, gy] = dirOf(t.gun);
+      g.lineWidth = t.aiming ? 3 : 1.5;
+      g.beginPath();
+      g.moveTo(p.px, p.py);
+      g.lineTo(p.px + gx * (t.aiming ? 22 : 14), p.py + gy * (t.aiming ? 22 : 14));
+      g.stroke();
+    }
+    // only the primary and the closest get a label: a cluster would be unreadable
+    if (i === 0 || t.primary) text(g, `${t.label} ${Math.round(t.dist)}`, p.px + 9, p.py - 9, { size: 12, color: col });
+  });
   // own mech
   g.fillStyle = G;
   g.beginPath();
@@ -403,16 +551,33 @@ export function drawTactical(mfd, s) {
   g.lineTo(cx - 7, cy + 7);
   g.closePath();
   g.fill();
-  // legend
-  const lx = 350;
-  text(g, '■ STRUCT', lx, 78, { size: 18 });
-  text(g, '■ FIRE', lx, 104, { size: 18, color: AMBER });
-  text(g, '▲ HOSTILE', lx, 130, { size: 18, color: RED });
-  text(g, `HDG ${String(Math.round(((-s.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}`, lx, 178, { size: 21, weight: 'bold', color: W });
-  text(g, `SPD ${String(Math.round(Math.abs(s.speed) * 3.6)).padStart(3)}`, lx, 208, { size: 21, weight: 'bold', color: W });
-  text(g, `THR ${String(Math.round(s.throttle * 100)).padStart(4)}%`, lx, 238, { size: 21, weight: 'bold', color: W });
-  text(g, `${s.grid}`, lx, 268, { size: 18 });
-  text(g, `HOSTILE ${s.hostiles}`, lx, 330, { size: 21, weight: 'bold', color: s.hostiles ? RED : G });
+  // data column
+  const lx = 348;
+  const rows = [
+    [`HDG ${String(Math.round(((-s.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}`, W, 16, 'bold'],
+    [`SPD ${String(Math.round(Math.abs(s.speed) * 3.6)).padStart(3)} km/h`, W, 15, 'bold'],
+    [`THR ${String(Math.round(s.throttle * 100)).padStart(4)}%`, W, 15, 'bold'],
+    [s.grid, G, 14],
+    null,
+    s.wp ? [`${s.wp.label} ${Math.round(s.wp.dist)} m`, W, 16, 'bold'] : ['KEINE WEGMARKE', GD, 15],
+    s.wp ? [`ETA ${s.wp.eta != null ? `${Math.floor(s.wp.eta / 60)}:${String(Math.floor(s.wp.eta % 60)).padStart(2, '0')}` : '--:--'}`, G, 15] : null,
+    null,
+    [`FEIND ${s.hostiles}`, s.hostiles ? RED : G, 16, 'bold'],
+    s.nearest ? [`${s.nearest.label} ${Math.round(s.nearest.dist)} m ${s.nearest.clock}h`, RED, 15] : null,
+    s.threats ? [`BEDROHT ${s.threats}`, RED, 16, 'bold'] : null,
+    s.allies?.length ? [`${s.allies.map((w) => `${w.call} ${w.dead ? '✕' : Math.round(w.hp * 100) + '%'}`).join(' ')}`, '#9fe8ff', 14] : null,
+    s.kills != null ? [`ABSCH ${s.kills}/${s.total}`, G, 15] : null,
+    s.sensorsDown ? ['SENSOR DEFEKT', RED, 15, 'bold'] : null,
+  ];
+  let y = 66;
+  for (const r of rows) {
+    if (!r) {
+      y += 8;
+      continue;
+    }
+    text(g, r[0], lx, y, { size: r[2], color: r[1], weight: r[3] || 'normal' });
+    y += r[2] + 5;
+  }
   mfd.end();
 }
 

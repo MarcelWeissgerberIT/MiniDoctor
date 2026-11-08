@@ -102,11 +102,235 @@ export class HUD {
 
     this.drawCompass(s, q);
     this.drawHorizon(s, q);
+    this.drawLadder(s, q);
     this.drawReticle(b);
+    this.drawBank(s, b);
     this.drawArcs(s, b);
     this.drawWaypoint(s, q);
+    g.shadowBlur = 4;
+    this.drawThreats(s, b);
+    this.drawNav(s);
+    this.drawSystems(s);
+    this.drawTarget(s);
+    this.drawWeapons(s);
+    this.drawMission(s);
     this.drawStatus(s, b);
+    g.shadowBlur = 8;
     this.tex.needsUpdate = true;
+  }
+
+  /** a block of lines; each line [text, color] (or a string) */
+  block(x, y, lines, align = 'left', size = 28) {
+    let yy = y;
+    for (const l of lines) {
+      if (l == null) continue;
+      const [t, c, sz] = typeof l === 'string' ? [l, C] : l;
+      this.text(t, x, yy, sz || size, c || C, align);
+      yy += (sz || size) * 1.22;
+    }
+  }
+
+  /** pitch ladder: +-5 deg lines in the walking direction, they pitch and roll with the cabin */
+  drawLadder(s, q) {
+    const g = this.g;
+    g.lineWidth = 2.5;
+    for (const p of [-5, 5]) {
+      const cp = Math.cos(p * DEG);
+      const sp = Math.sin(p * DEG);
+      for (const side of [-1, 1]) {
+        const a1 = s.heading + side * 3.2 * DEG;
+        const a2 = s.heading + side * 6.5 * DEG;
+        const p1 = this.projectWorld(-Math.sin(a1) * cp, sp, -Math.cos(a1) * cp, q);
+        const p2 = this.projectWorld(-Math.sin(a2) * cp, sp, -Math.cos(a2) * cp, q);
+        if (!p1 || !p2) continue;
+        g.strokeStyle = DIM;
+        if (p < 0) g.setLineDash([10, 8]);
+        g.beginPath();
+        g.moveTo(p1.x, p1.y);
+        g.lineTo(p2.x, p2.y);
+        // end tick towards the horizon
+        g.lineTo(p2.x, p2.y + (p > 0 ? 12 : -12));
+        g.stroke();
+        g.setLineDash([]);
+      }
+    }
+    g.strokeStyle = C;
+    g.lineWidth = 3;
+  }
+
+  /** bank scale under the reticle: the cabin's roll as the legs carry it */
+  drawBank(s, b) {
+    const g = this.g;
+    const R = 165;
+    const k = 3; // 1 deg of roll = 3 deg on the scale
+    g.strokeStyle = DIM;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(b.x, b.y, R, Math.PI / 2 - 0.55, Math.PI / 2 + 0.55);
+    g.stroke();
+    for (const r of [-10, -5, 0, 5, 10]) {
+      const a = Math.PI / 2 + r * DEG * k;
+      const l = r === 0 ? 18 : 10;
+      g.beginPath();
+      g.moveTo(b.x + Math.cos(a) * R, b.y + Math.sin(a) * R);
+      g.lineTo(b.x + Math.cos(a) * (R + l), b.y + Math.sin(a) * (R + l));
+      g.stroke();
+    }
+    const roll = Math.max(-12, Math.min(12, (s.roll || 0) / DEG));
+    const a = Math.PI / 2 - roll * DEG * k;
+    const px = b.x + Math.cos(a) * (R - 6);
+    const py = b.y + Math.sin(a) * (R - 6);
+    g.fillStyle = C;
+    g.beginPath();
+    g.moveTo(px + Math.cos(a) * 4, py + Math.sin(a) * 4);
+    g.lineTo(px - Math.cos(a) * 14 + Math.sin(a) * 8, py - Math.sin(a) * 14 - Math.cos(a) * 8);
+    g.lineTo(px - Math.cos(a) * 14 - Math.sin(a) * 8, py - Math.sin(a) * 14 + Math.cos(a) * 8);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = C;
+    g.lineWidth = 3;
+  }
+
+  /** threat ring: every known vehicle as a tick at its bearing; red when its gun is on us */
+  drawThreats(s, b) {
+    const it = s.intel;
+    if (!it) return;
+    const g = this.g;
+    const R = 250;
+    g.fillStyle = DIM;
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6;
+      g.beginPath();
+      g.arc(b.x + Math.cos(a) * R, b.y + Math.sin(a) * R, 2.5, 0, Math.PI * 2);
+      g.fill();
+    }
+    for (const t of it.list) {
+      const a = -Math.PI / 2 - t.rel;
+      const near = t.dist < 300 ? 1.4 : t.dist < 600 ? 1.15 : 0.9;
+      const col = t.aiming ? RED : t === it.primary ? WARN : DIM;
+      const x = b.x + Math.cos(a) * R;
+      const y = b.y + Math.sin(a) * R;
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(x + Math.cos(a) * 18 * near, y + Math.sin(a) * 18 * near);
+      g.lineTo(x - Math.sin(a) * 9 * near, y + Math.cos(a) * 9 * near);
+      g.lineTo(x + Math.sin(a) * 9 * near, y - Math.cos(a) * 9 * near);
+      g.closePath();
+      g.fill();
+    }
+    // laser warning receiver and shells on the way
+    if (it.threats.length && Math.floor(s.time * 4) % 2 === 0) {
+      const clocks = [...new Set(it.threats.map((t) => t.clock))].join(' · ');
+      this.text(`ANGEPEILT  ${clocks} UHR`, b.x, b.y - 205, 36, RED);
+    }
+    if (it.incoming) this.text(`GRANATE ×${it.incoming}`, b.x, b.y + 210, 32, RED);
+  }
+
+  /** navigation block (upper left) */
+  drawNav(s) {
+    const deg = (a) => String(Math.round(((-a / DEG) % 360) + 360) % 360).padStart(3, '0');
+    const lk = Math.round(s.look / DEG);
+    const lp = Math.round((s.lookPitch || 0) / DEG);
+    const wp = s.waypoint;
+    const eta = wp?.eta != null ? `${Math.floor(wp.eta / 60)}:${String(Math.floor(wp.eta % 60)).padStart(2, '0')}` : '--:--';
+    const slope = Math.round((s.slope || 0) / DEG);
+    this.block(70, 190, [
+      ['NAV', DIM, 24],
+      `KURS   ${deg(s.heading)}°`,
+      `BLICK  ${lk === 0 ? 'MITTE' : (lk > 0 ? 'L' : 'R') + String(Math.abs(lk)).padStart(3) + '°'} ${lp >= 0 ? '+' : '-'}${Math.abs(lp)}°`,
+      wp ? `${wp.label.padEnd(5)}  ${String(Math.round(wp.dist)).padStart(4)} m ${deg(wp.bearing)}°` : ['KEINE WEGMARKE', DIM],
+      wp ? `ETA    ${eta}` : null,
+      `GELÄNDE ${String(Math.round(s.alt || 0)).padStart(3)} m ${slope >= 0 ? '↗' : '↘'}${Math.abs(slope)}°`,
+      s.range ? `LASER  ${String(Math.round(s.range)).padStart(4, '0')} m` : ['LASER  ----', DIM],
+    ]);
+  }
+
+  /** mech condition (lower left) */
+  drawSystems(s) {
+    const y = s.systems;
+    if (!y) return;
+    const pct = (v) => String(Math.round(v * 100)).padStart(3) + '%';
+    const bars = (v, n = 6) => '▰'.repeat(Math.round(v * n)) + '▱'.repeat(n - Math.round(v * n));
+    const col = (v) => (v > 0.7 ? C : v > 0.4 ? WARN : RED);
+    const lines = [
+      ['SYS', DIM, 24],
+      [`STRUKTUR ${pct(y.integrity)} ${bars(y.integrity)}`, col(y.integrity)],
+      [`REAKTOR  ${pct(y.reactor)}  HITZE ${pct(y.heat)}`, y.heat > 0.75 ? RED : y.heat > 0.6 ? WARN : C],
+      [`HYDR. ${String(Math.round(y.hyd * 3500)).padStart(4)} PSI`, y.hyd < 0.4 ? RED : C],
+    ];
+    if (y.fire) lines.push([`FEUER AN BORD · LÖSCH ${y.bottles}`, RED]);
+    if (y.failed.length) lines.push([`AUSFALL ${y.failed.slice(0, 3).join(' ')}`, RED]);
+    else lines.push(['ALLE SYSTEME OK', DIM]);
+    this.block(70, 600, lines);
+  }
+
+  /** the primary target (upper right) */
+  drawTarget(s) {
+    const it = s.intel;
+    if (!it) return;
+    const x = this.W - 70;
+    const t = it.primary;
+    if (!t) {
+      this.block(x, 190, [['ZIEL', DIM, 24], ['KEIN KONTAKT', DIM]], 'right');
+      return;
+    }
+    const deg = String(Math.round(((-t.brg / DEG) % 360) + 360) % 360).padStart(3, '0');
+    const fac = { FRONT: '×0.5', SEITE: '×1.0', HECK: '×1.6' }[t.face] || '';
+    const hp = Math.round(t.hp * 100);
+    const n = Math.round(t.hp * 6);
+    this.block(
+      x,
+      190,
+      [
+        [`ZIEL ${it.list.indexOf(t) + 1}/${it.list.length}`, DIM, 24],
+        [`${t.label} · ${t.name}`, t.aiming ? RED : WARN],
+        `${String(Math.round(t.dist)).padStart(4)} m  ${deg}°  ${t.clock} UHR`,
+        t.face ? [`ZEIGT ${t.face} ${fac}`, t.face === 'HECK' ? C : t.face === 'FRONT' ? WARN : C] : null,
+        `${t.state} ${Math.round(t.kmh)} km/h`,
+        [`${'▰'.repeat(n)}${'▱'.repeat(6 - n)} ${hp}%`, hp < 40 ? C : WARN],
+        t.aiming ? ['RICHTET AUF DICH', RED] : t.marked ? ['MARKIERT', C] : null,
+      ],
+      'right',
+    );
+  }
+
+  /** weapons (lower right) */
+  drawWeapons(s) {
+    const w = s.weapons;
+    if (!w) return;
+    const x = this.W - 70;
+    if (!w.master) {
+      this.block(x, 600, [['WAFFEN', DIM, 24], ['GESICHERT', DIM]], 'right');
+      return;
+    }
+    const heat = Math.round(w.heat * 6);
+    const lk = Math.round((w.lockT || 0) * 4);
+    const yaw = Math.round((w.gunYaw || 0) / DEG);
+    const pit = Math.round((w.gunPitch || 0) / DEG);
+    this.block(
+      x,
+      600,
+      [
+        ['WAFFEN', DIM, 24],
+        [w.gunDead ? 'KANONE AUSGEFALLEN' : `KAN ${String(w.ammo).padStart(3)} ${'▮'.repeat(heat)}${'▯'.repeat(6 - heat)}`, w.gunDead || w.overheated ? RED : w.gun ? C : DIM],
+        [`MG  ${String(w.mgAmmo).padStart(4)}`, w.mg ? C : DIM],
+        [
+          w.blocked ? 'RAK BLOCKIERT' : `RAK ${String(w.missiles).padStart(2)} ${w.locked ? 'LOCK' : lk ? '▰'.repeat(lk) + '▱'.repeat(4 - lk) : 'SUCHE'}`,
+          w.blocked ? RED : w.locked ? RED : w.missile ? C : DIM,
+        ],
+        w.inLimits ? `ROHR ${yaw === 0 ? 'MITTE' : (yaw > 0 ? 'L' : 'R') + Math.abs(yaw) + '°'} ${pit >= 0 ? '+' : '-'}${Math.abs(pit)}°` : ['AUSSER SCHWENKBEREICH', WARN],
+        w.range ? `ENTF ${String(Math.round(w.range)).padStart(4, '0')} m` : null,
+      ],
+      'right',
+    );
+  }
+
+  /** objective, progress, kills and mission time along the bottom */
+  drawMission(s) {
+    const m = s.mission;
+    if (!m) return;
+    const parts = [m.step ? `AUFTRAG ${m.step}` : 'AUFTRAG', m.objective, m.total != null ? `ABSCHÜSSE ${m.kills}/${m.total}` : null, m.time].filter(Boolean);
+    this.text(parts.join('  ·  '), this.W / 2, this.H - 32, 26, C);
   }
 
   /** heading band along the top of the canopy, ticks placed on the real directions */
@@ -246,7 +470,7 @@ export class HUD {
     const p = this.projectWorld(-Math.sin(a), -0.01, -Math.cos(a), q);
     const inside = p && p.x > 70 && p.x < this.W - 70;
     const x = inside ? p.x : Math.sin(a - s.heading) > 0 ? 80 : this.W - 80;
-    const y = inside ? Math.min(this.H - 120, Math.max(150, p.y)) : 170;
+    const y = inside ? Math.min(this.H - 120, Math.max(150, p.y)) : 470;
     g.strokeStyle = '#e4fff0';
     g.lineWidth = 2.5;
     g.beginPath();
@@ -268,18 +492,10 @@ export class HUD {
     g.strokeStyle = C;
   }
 
-  /** status (left) and weapons (right) above the arcs, warnings over the reticle */
+  /** mode flags under the compass, blinking warnings over the reticle */
   drawStatus(s, b) {
-    const y = Math.max(170, b.y - 262);
     const flags = [s.stab ? 'STAB' : 'STAB AUS', s.nv ? 'NV' : '', s.lights ? '' : 'DUNKEL'].filter(Boolean);
-    this.text(flags.join('   '), b.x, y - 38, 24, DIM);
-    const w = s.weapons;
-    if (!w || !w.master) this.text('WAFFEN SICHER', b.x, y, 28, DIM);
-    else {
-      const heat = Math.round(w.heat * 5);
-      const bars = '▮'.repeat(heat) + '▯'.repeat(5 - heat);
-      this.text(`KAN ${w.ammo} ${bars}   RAK ${w.missiles}${w.locked ? ' LOCK' : ''}`, b.x, y, 28, w.overheated ? RED : w.locked ? RED : C);
-    }
+    this.text(flags.join('   '), b.x, 150, 24, DIM);
     if (s.warning && Math.floor(s.time * 3) % 2 === 0) this.text(s.warning, b.x, b.y - 150, 44, WARN);
   }
 }

@@ -69,6 +69,15 @@ export class HMD {
     g.scale(k, k);
     const w = W_ / k;
     const h = H / k;
+    // in the panel views the corner boxes would cover the displays
+    if (s.panels === false) {
+      g.restore();
+      if (s.targets) this.drawTargets(s, W_, H);
+      this.drawHits(dt, W_, H);
+      this.drawNotes(s, W_, H);
+      g.globalAlpha = 1;
+      return;
+    }
     this.drawThrottle(s, 26, h - 130);
     if (s.weapons) this.drawWeapons(s, w - 26, h - 60);
     if (s.parts) this.drawParts(s.parts, w - 26, h - (s.weapons ? 230 : 100));
@@ -338,6 +347,15 @@ export class HMD {
         if (t.locked) this.text('LOCK', t.x, t.y - r - 12, { size: 14, color: RED, align: 'center' });
         else if (t.marked) this.text('MARKIERT', t.x, t.y - r - 12, { size: 12, color: G, align: 'center' });
         this.text(`${t.label} ${Math.round(t.dist)}`, t.x, t.y + r + 12, { size: 12, color, align: 'center' });
+        // second line: which side it shows us and its condition; its gun on us flashes
+        if (t.face) this.text(`${t.face}${t.hp < 1 ? ' ' + Math.round(t.hp * 100) + '%' : ''}`, t.x, t.y + r + 26, { size: 11, color: DIM, align: 'center', weight: 'normal' });
+        if (t.aiming && Math.floor(performance.now() / 250) % 2 === 0) {
+          g.strokeStyle = RED;
+          g.lineWidth = 2;
+          g.beginPath();
+          g.arc(t.x, t.y, r + 8, 0, Math.PI * 2);
+          g.stroke();
+        }
       } else {
         // off-screen: a pointer at the edge of the visor
         const rx = W_ * 0.42;
@@ -347,7 +365,7 @@ export class HMD {
         g.save();
         g.translate(px, py);
         g.rotate(-t.edge);
-        g.fillStyle = RED;
+        g.fillStyle = t.aiming && Math.floor(performance.now() / 250) % 2 === 0 ? AMBER : RED;
         g.beginPath();
         g.moveTo(12, 0);
         g.lineTo(-6, -8);

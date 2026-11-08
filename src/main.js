@@ -28,11 +28,20 @@ import { Mission, MISSIONS, MISSION_TEXT } from './missions.js';
 import { Allies, LANCE } from './combat/allies.js';
 import { ORDERS } from './logic/allies.js';
 import { MISSILE, PART_NAMES, createParts, mechDestroyed, weaponState, gunInLimits } from './logic/combat.js';
-import { armorFace, MECH_ARMOR, hitPart, applyHitAt, systemHit, SYSTEMS } from './logic/combat.js';
+import { armorFace, MECH_ARMOR, hitPart, applyHitAt, systemHit, SYSTEMS, ENEMY_TYPES } from './logic/combat.js';
 import { fitModel } from './geom.js';
 
 const params = new URLSearchParams(location.search);
 const DEG = Math.PI / 180;
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const TYPE_NAME = { tank: 'KAMPFPANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOT' };
+const TYPE_SHORT = { tank: 'PZ', apc: 'SPZ', depot: 'DEP' };
+const FACE_NAME = { front: 'FRONT', side: 'SEITE', rear: 'HECK' };
+const STATE_NAME = { advance: 'VORRÜCKEN', engage: 'GEFECHT', cover: 'DECKUNG', flank: 'FLANKE', dead: 'ZERSTÖRT' };
+/** compass degrees (clockwise from north) of a heading-convention angle */
+const compass = (a) => Math.round(((-a / DEG) % 360) + 360) % 360;
+/** clock position of a bearing relative to the hull (+ = left), 12 = ahead */
+const clockOf = (rel) => ((Math.round(-rel / (Math.PI / 6)) % 12) + 12) % 12 || 12;
 const LOOK = { yaw: 125 * DEG, up: 62 * DEG, down: 68 * DEG, sens: 0.0022 };
 const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv', 'wpnArm', 'gun', 'missile', 'firesup', 'mg'];
 const newStats = () => ({ kills: 0, hitsTaken: 0, start: 0 });
@@ -630,7 +639,8 @@ class Game {
     this.hmd.notify(`TREFFER ${PART_NAMES[part]}${face === 'rear' ? ' (HECK)' : ''} ${pct}%`, pct < 40 ? '#ff5a48' : '#ffc15e', 2.5);
     if (part === 'rarm' && this.parts.rarm <= 0) this.hmd.notify('KANONE AUSGEFALLEN', '#ff5a48', 3);
     if (this.mech.speed < 2) this.mission?.call('m2_05', 30);
-    if (!this.fire && Math.random() < 0.22) this.startFire(part);
+    // a big shell can set the mech alight, the light cannon of an APC rarely
+    if (!this.fire && Math.random() < 0.22 * Math.min(1, dmg / 12)) this.startFire(part);
     if (mechDestroyed(this.parts)) this.destroyed();
   }
 
@@ -1122,6 +1132,7 @@ class Game {
     const m = this.mech;
     // the walker's torso (= cockpit) pose from the gait, and the pilot's head inside it
     const b = this.body.update(dt, m, this.groundSlope(), stab);
+    this.pose = b;
     const head = this.body.head;
     // extra impulses (leg release, impacts) on a separate spring
     this.headVel.addScaledVector(this.headOff, -90 * dt).multiplyScalar(Math.max(0, 1 - (stab ? 13 : 8) * dt));
@@ -1282,6 +1293,8 @@ class Game {
       drawStatus(c.mfd.status, {
         ...s,
         parts: this.parts,
+        failed: Object.keys(this.failed).map((k) => SYSTEMS[k]),
+        bottles: this.fireCharges,
         time: `${String(clock.getHours()).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}`,
         message: warning || this.statusLine(),
         messageColor: warning ? '#ff4a3a' : this.messageColor,
@@ -1292,8 +1305,14 @@ class Game {
         range: this.range,
         nv: this.sw.nv,
         zoom: 4,
-        contact: this.failed.optics ? 'OPTICS FAIL' : this.sw.optics ? this.cameraContact() : 'OPTICS OFF',
+        failed: !!this.failed.optics,
+        contact: this.sw.optics ? this.cameraContact() : 'OPTICS OFF',
         contactColor: '#ff4a3a',
+        boxes: this.sw.optics ? this.feedBoxes() : [],
+        el: ((this.pose?.pitch ?? 0) / DEG) - 1.5,
+        count: this.intel?.list.length ?? null,
+        threats: this.intel?.threats.length ?? 0,
+        target: this.intel?.primary ?? null,
       });
     if (f % 4 === 2)
       drawTactical(c.mfd.tactical, {
@@ -1303,8 +1322,35 @@ class Game {
         contacts: this.world.contacts,
         look: this.yaw,
         grid: `${String(Math.round(1000 + m.x / 10)).padStart(4, '0')}-${String(Math.round(1000 - m.z / 10)).padStart(4, '0')}`,
-        hostiles: [...this.world.hostiles.filter((h) => !h.hidden), ...this.enemies.alive()].filter((h) => Math.hypot(h.x - m.x, h.z - m.z) < (this.failed.sensors ? 250 : this.radarRange)).length,
+        hostiles: [...this.world.hostiles.filter((h) => !h.hidden), ...(this.intel?.list ?? [])].filter((h) => Math.hypot(h.x - m.x, h.z - m.z) < (this.failed.sensors ? 250 : this.radarRange)).length,
+        enemies: this.intel ? this.intel.list.map((t) => ({ ...t, primary: t === this.intel.primary })) : null,
+        nearest: this.intel?.list[0] ?? null,
+        threats: this.intel?.threats.length ?? 0,
+        allies: this.allies.list.map((w) => ({ call: w.name.replace('HAMMER ', 'H'), x: w.x, z: w.z, heading: w.heading, hp: w.hp / 200, dead: w.dead })),
+        wp: this.hudWaypoint(),
+        smoke: this.world.smokeScreens,
+        kills: this.mission ? this.stats.kills : null,
+        total: this.mission?.def.total ?? null,
+        sensorsDown: !!this.failed.sensors,
       });
+  }
+
+  /** tracked vehicles inside the hull camera's picture (512 x 384 display units) */
+  feedBoxes() {
+    const it = this.intel;
+    if (!it?.list.length) return [];
+    const cam = this.feedCam;
+    const f = 192 / Math.tan((cam.fov * DEG) / 2);
+    const v = new THREE.Vector3();
+    const out = [];
+    for (const t of it.list) {
+      this.enemies.center(t.e, v);
+      const dist = v.distanceTo(cam.position);
+      v.project(cam);
+      if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) continue;
+      out.push({ x: ((v.x + 1) / 2) * 512, y: ((1 - v.y) / 2) * 384, r: (t.e.radius * f) / dist, dist, label: t.label, aiming: t.aiming, primary: t === it.primary });
+    }
+    return out;
   }
 
   /** what the hull camera reports: the locked target */
@@ -1337,7 +1383,8 @@ class Game {
       const p = v.clone().project(cam);
       const onScreen = front && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.92;
       const mine = ms.target === e.id;
-      const t = { dist, label: e.label || (e.type === 'tank' ? 'PZ' : 'SPZ'), marked: e.marked, lock: mine ? ms.lockT / MISSILE.lockTime : 0, locked: mine && ms.locked, onScreen };
+      const it = this.intel?.list.find((x) => x.e === e);
+      const t = { dist, label: e.label || (e.type === 'tank' ? 'PZ' : 'SPZ'), marked: e.marked, face: it?.face, hp: it?.hp ?? 1, aiming: it?.aiming, lock: mine ? ms.lockT / MISSILE.lockTime : 0, locked: mine && ms.locked, onScreen };
       if (onScreen) {
         t.x = ((p.x + 1) / 2) * W;
         t.y = ((1 - p.y) / 2) * H;
@@ -1382,6 +1429,7 @@ class Game {
     const damaged = Object.values(this.parts).some((v) => v < 1);
     this.hmd.draw(dt, {
       visible: this.state === 'cockpit',
+      panels: this.view === 'front' || this.external,
       power: this.sys.battBus ? Math.max(0.6, this.cockpit.power) : 0.4,
       external: this.external,
       throttle: m.throttle,
@@ -1422,6 +1470,13 @@ class Game {
     if (s.reactorState === 'igniting') return `REACTOR IGNITION ${Math.round((s.ignT / 7) * 100)}%`;
     if (this.sw.stab && s.gyro < 1 && s.mainBus) return `GYRO ALIGN ${Math.round(s.gyro * 100)}%`;
     if (s.legsLocked && s.reactorState === 'running') return 'LEGS LOCKED';
+    // a running mech with nothing else to say: the combat picture
+    if (s.reactorState === 'running' && this.message === 'COLD AND DARK') {
+      const it = this.intel;
+      if (it?.threats.length) return `ANGEPEILT VON ${it.threats.length} · ${it.threats.map((t) => t.clock + 'h').join(' ')}`;
+      if (it?.list.length) return `GEFECHT · ${it.list.length} FEIND · ${Math.round(it.list[0].dist)} m`;
+      return 'ALLE SYSTEME BEREIT';
+    }
     return this.message;
   }
 
@@ -1430,7 +1485,92 @@ class Game {
     const b = this.world.beacons[this.waypoint];
     const dx = b.x - this.mech.x;
     const dz = b.z - this.mech.z;
-    return { bearing: Math.atan2(-dx, -dz), dist: Math.hypot(dx, dz), label: b.label };
+    const dist = Math.hypot(dx, dz);
+    const v = Math.max(0, this.mech.speed);
+    return { bearing: Math.atan2(-dx, -dz), dist, label: b.label, x: b.x, z: b.z, eta: v > 0.5 ? dist / v : null };
+  }
+
+  /**
+   * What the sensors know about the enemy, shared by the canopy HUD, the displays and
+   * the helmet display: every vehicle with range, bearing, which side it shows us,
+   * its state, and whether its gun is laid on us (laser warning).
+   */
+  updateIntel() {
+    const m = this.mech;
+    const list = [];
+    const look = m.heading + (this.external ? 0 : this.yaw);
+    for (const e of this.enemies.alive()) {
+      const dx = e.x - m.x;
+      const dz = e.z - m.z;
+      const dist = Math.hypot(dx, dz);
+      // without the sensors only what we see ourselves, and not far
+      if (this.failed.sensors && (dist > 600 || e.losPlayer === false)) continue;
+      const brg = Math.atan2(-dx, -dz);
+      const toUs = Math.atan2(dx, dz);
+      const gun = e.heading + (e.turret || 0);
+      const armed = e.type !== 'depot';
+      const aiming = armed && e.target === this.playerTarget && e.state !== 'advance' && Math.abs(wrapA(gun - toUs)) < 0.12;
+      list.push({
+        e,
+        id: e.id,
+        type: e.type,
+        name: TYPE_NAME[e.type],
+        label: e.label || TYPE_SHORT[e.type],
+        x: e.x,
+        z: e.z,
+        heading: e.heading,
+        gun,
+        dist,
+        brg,
+        rel: wrapA(brg - m.heading),
+        off: Math.abs(wrapA(brg - look)),
+        clock: clockOf(wrapA(brg - m.heading)),
+        face: armed ? FACE_NAME[armorFace(e.heading, e.x, e.z, m.x, m.z)] : '',
+        aiming,
+        hp: e.hp / ENEMY_TYPES[e.type].hp,
+        state: armed ? STATE_NAME[e.state] || e.state.toUpperCase() : 'STATISCH',
+        kmh: Math.abs(e.speed) * 3.6,
+        marked: !!e.marked,
+        seen: e.losPlayer !== false,
+      });
+    }
+    list.sort((a, b) => a.dist - b.dist);
+    // primary target: what the seeker tracks, else what the pilot looks at, else the closest
+    const ms = this.arsenal.w.missiles;
+    let primary = list.find((t) => t.id === ms.target) || null;
+    if (!primary) {
+      const looked = list.filter((t) => t.off < 0.2).sort((a, b) => a.off - b.off)[0];
+      primary = looked || list[0] || null;
+    }
+    // shells that will pass close to us in the next moment
+    const pc = this.playerTarget.center(new THREE.Vector3());
+    let incoming = 0;
+    for (const s of this.enemies.shells) {
+      const rx = pc.x - s.p.x;
+      const ry = pc.y - s.p.y;
+      const rz = pc.z - s.p.z;
+      const v2 = s.v.lengthSq();
+      const t = (rx * s.v.x + ry * s.v.y + rz * s.v.z) / v2;
+      if (t < 0 || t > 1.5) continue;
+      if (Math.hypot(rx - s.v.x * t, ry - s.v.y * t, rz - s.v.z * t) < 25) incoming++;
+    }
+    const threats = list.filter((t) => t.aiming);
+    this.intel = { list, primary, threats, incoming };
+    return this.intel;
+  }
+
+  /** the mission line: objective, progress, kills and time */
+  missionInfo() {
+    const st = this.tutorial.active ? this.tutorial.step : null;
+    const def = this.mission?.def;
+    const t = Math.max(0, this.time - (this.stats.start ?? 0));
+    return {
+      objective: st?.title || (def ? def.name : ''),
+      step: this.tutorial.active ? `${this.tutorial.index + 1}/${this.tutorial.steps.length}` : '',
+      kills: def ? this.stats.kills : null,
+      total: def?.total ?? null,
+      time: `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`,
+    };
   }
 
   update(dt) {
@@ -1471,10 +1611,48 @@ class Game {
     this.cockpit.update(dt, this.time, { throttle: this.mech.throttle, turnInput: this.turnInput || 0, lookPitchRate: 0 }, this.hovered);
     const w = this.arsenal.w;
     const live = this.weaponLive || {};
+    const intel = this.updateIntel();
+    const parts = this.parts;
     this.cockpit.hud.update(dt, {
       q: this.mechObj.quaternion.clone().invert(),
       maxSpeed: MECH.maxForward,
-      weapons: { master: live.master, ammo: w.gun.ammo, heat: w.gun.heat, overheated: w.gun.overheated, missiles: w.missiles.count, locked: w.missiles.locked },
+      weapons: {
+        master: live.master,
+        gun: live.gun,
+        mg: live.mg,
+        missile: live.missile,
+        ammo: w.gun.ammo,
+        mgAmmo: w.mg.ammo,
+        heat: w.gun.heat,
+        overheated: w.gun.overheated,
+        missiles: w.missiles.count,
+        locked: w.missiles.locked,
+        lockT: w.missiles.lockT / MISSILE.lockTime,
+        inLimits: live.inLimits,
+        gunYaw: this.gunRig.yaw,
+        gunPitch: this.gunRig.pitch,
+        range: live.master ? this.aimRange : 0,
+        blocked: !!this.failed.missiles,
+        gunDead: parts.rarm <= 0,
+      },
+      intel: this.mode === 'combat' || intel.list.length ? intel : null,
+      mission: this.mission ? this.missionInfo() : null,
+      systems: {
+        integrity: Math.min(parts.torso, parts.head),
+        parts,
+        reactor: this.sys.reactor,
+        heat: this.sys.heat,
+        hyd: this.sys.hyd,
+        failed: Object.keys(this.failed).map((k) => SYSTEMS[k]),
+        fire: !!this.fire,
+        bottles: this.fireCharges,
+      },
+      pitch: this.pose?.pitch ?? 0,
+      roll: this.pose?.roll ?? 0,
+      lookPitch: this.pitch,
+      alt: this.groundY,
+      slope: this.groundSlope().pitch,
+      range: this.range,
       heading: this.mech.heading,
       speed: this.mech.speed,
       throttle: this.mech.throttle,
@@ -1495,7 +1673,7 @@ class Game {
   render() {
     // the boarding video covers the screen: no need to draw the world behind it
     if (this.state === 'entry' && this.entry.phase === 'video') return;
-    if (this.frame % 2 === 0 && this.sw.optics && this.sys.mainBus && this.state === 'cockpit' && !this.external) {
+    if (this.frame % 2 === 0 && this.sw.optics && !this.failed.optics && this.sys.mainBus && this.state === 'cockpit' && !this.external) {
       renderer.setRenderTarget(this.feedRT);
       renderer.render(this.world.scene, this.feedCam);
       renderer.setRenderTarget(null);
