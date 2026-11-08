@@ -7,7 +7,8 @@ import '@fontsource/barlow-condensed/latin-700.css';
 import './style.css';
 import { Assets } from './assets.js';
 import { Cockpit } from './cockpit/cockpit.js';
-import { drawBoot, drawStatus, drawCamera, drawTactical } from './cockpit/displays.js';
+import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms } from './cockpit/displays.js';
+import { Comms, speakerOf } from './cockpit/comms.js';
 import { World, WORLD } from './world/world.js';
 import { Post } from './post.js';
 import { Input } from './input.js';
@@ -83,6 +84,7 @@ class Game {
     this.radio = new Radio(this.sound, ui);
     this.voiceText = { ...VOICE_TEXT, ...EXTRA_VOICE, ...MISSION_TEXT };
     this.tutorial = new Tutorial(this, ui);
+    this.comms = new Comms();
     this.ray = new THREE.Raycaster();
     this.assets = assets;
 
@@ -249,6 +251,8 @@ class Game {
   say(key, text) {
     const dur = this.radio.say(key, text ?? this.voiceText[key]);
     this.radioBusyUntil = this.time + (dur || 3) + 0.5;
+    // the speaker's face on the left display (needs main power)
+    this.comms.start(speakerOf(key), dur || 3, this.time);
   }
 
   /* ------------------------------------------------------- external view */
@@ -377,6 +381,14 @@ class Game {
       }
     }
     const m = this.mech;
+    // who can the pilot actually see (seeker lock needs it); a few vehicles per frame
+    const vis = this.enemies.alive();
+    for (let k = 0; k < Math.min(3, vis.length); k++) {
+      const e = vis[(this.frame * 3 + k) % vis.length];
+      const top = this.enemies.center(e, new THREE.Vector3());
+      top.y += e.height * 0.35;
+      e.losPlayer = this.world.lineOfSight(cam.position, top);
+    }
     // recon: whatever the seeker locks gets marked
     if (ms.locked && this.mission) {
       const e = this.enemies.list.find((x) => x.id === ms.target);
@@ -545,7 +557,7 @@ class Game {
   }
 
   onPlayerHit(shell) {
-    if (this.dead) return;
+    if (this.dead || this.mission?.ended) return;
     const part = applyHit(this.parts, shell.dmg);
     this.stats.hitsTaken++;
     const strength = clamp(shell.dmg / 15, 0.3, 1.3);
@@ -645,7 +657,7 @@ class Game {
         sub: win ? def?.winText : 'BB-07 ist ausgefallen. Mission fehlgeschlagen.',
         rows: [
           ['Abschüsse', `${this.stats.kills - (this.stats.lanceKills ?? 0)}${lance.length ? ` (+${this.stats.lanceKills ?? 0} Lanze)` : ''} / ${def?.total ?? '-'}`],
-          ...(lance.length ? [['Lanze', lance.map((x) => `${x.name.replace('HAMMER', 'H')} ${x.dead ? '✕' : Math.round((x.hp / 160) * 100) + '%'}`).join(' · ')]] : []),
+          ...(lance.length ? [['Lanze', lance.map((x) => `${x.name.replace('HAMMER', 'H')} ${x.dead ? '✕' : Math.round((x.hp / 200) * 100) + '%'}`).join(' · ')]] : []),
           ['Kanone', `${w.gun.hits} Treffer · ${w.gun.shots} Schuss`],
           ['Raketen', `${w.missiles.hits} Treffer · ${w.missiles.fired} gestartet`],
           ['Erlittene Treffer', String(this.stats.hitsTaken)],
@@ -718,7 +730,7 @@ class Game {
   complainNoPower() {
     if (this.time - this.nag < 12) return;
     this.nag = this.time;
-    this.radio.say('v21', this.voiceText.v21);
+    this.say('v21');
   }
 
   /**
@@ -828,7 +840,7 @@ class Game {
         c.switches.reactor.set(false);
         s.prev.reactor = false;
         this.sound.beep(400, 0.25, 0.1);
-        this.radio.say('v18', this.voiceText.v18);
+        this.say('v18');
       }
       if (e === 'scram') {
         c.switches.reactor.set(false);
@@ -872,7 +884,7 @@ class Game {
       this.sound.alarm();
       if (this.state === 'cockpit' && this.time - this.nag > 10) {
         this.nag = this.time;
-        this.radio.say('v19', this.voiceText.v19);
+        this.say('v19');
       }
     }
     this.caution.active = caution;
@@ -961,7 +973,7 @@ class Game {
       m.turn = 0;
       if (playing && (thr !== 0 || turn !== 0) && this.sys.legsLocked && this.time - this.nag > 15) {
         this.nag = this.time;
-        if (this.sys.battBus) this.radio.say('v20', this.voiceText.v20);
+        if (this.sys.battBus) this.say('v20');
         else this.complainNoPower();
       }
     } else {
@@ -1185,7 +1197,10 @@ class Game {
     const s = this.sys;
     const clock = new Date();
     const warning = this.fire ? 'FIRE ON BOARD' : s.warnings[0];
-    if (f % 4 === 0)
+    const link = this.comms.state(this.time);
+    if (link) {
+      if (f % 2 === 0) drawComms(c.mfd.status, link, this.time);
+    } else if (f % 4 === 0)
       drawStatus(c.mfd.status, {
         ...s,
         parts: this.parts,
@@ -1268,7 +1283,7 @@ class Game {
       const on = front && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.92 && dist > 8;
       return {
         name: w.name,
-        hp: w.hp / 160,
+        hp: w.hp / 200,
         dead: w.dead,
         order: w.order,
         dist,

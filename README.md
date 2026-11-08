@@ -18,6 +18,14 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 Das Titelmenü zeigt alle Missionen mit Typ, Schwierigkeit, Lanzengröße und – nach einem Sieg – einem Haken mit der besten Zeit (im Browser gespeichert).
 
+## Funk mit Gesicht
+
+Wer funkt, erscheint als Videoverbindung auf dem linken Display: der Ausbilder aus dem Kommandobunker, Hammer 2 und Hammer 3 aus ihren Cockpits – mit Kanalanzeige, LIVE-Marke, Pegel und kurzem Bildaufbau mit Störstreifen. Die Porträts sind mit GPT Image 2.6 erzeugt, die sprechenden Clips mit **Higgsfield Intone** (lippensynchron zu echten Funksprüchen aus dem Spiel). Ohne Hauptstrom bleibt das Display dunkel.
+
+## Deckung und Sichtlinien
+
+Geschossen wird nur bei freier Sicht: Gebäuderuinen und Geländekuppen blockieren (Sandsäcke, Panzersperren und Fässer nicht). Panzer ohne Sicht auf ihr Ziel fahren um das Hindernis herum zu einer neuen Schussposition, Flügelmänner treten aus der Deckung, und auch der Raketensucher schaltet nur auf, was der Pilot sehen kann. Nach erfülltem Auftrag stellt der Feind das Feuer ein.
+
 ## Die Lanze: verbündete Mechs
 
 In den Lanzen-Missionen laufen **Hammer 2** und **Hammer 3** neben dir: dieselben 5-m-Mechs (geriggtes Meshy-Modell mit eigener Gehanimation, leicht anders lackiert), mit grüner IFF-Leuchte, 30-mm-Kanone und Raketen. Sie suchen sich selbst Ziele in Reichweite, melden sich mit eigenen Funkstimmen („Kontakt“, „Ziel zerstört“, „Ich werde getroffen“) und können ausfallen.
@@ -154,6 +162,7 @@ Alle Grafiken, Modelle und Sounds wurden für dieses Projekt generiert:
 | Feuerball, Mündungsfeuer, Glasbruch | Higgsfield (GPT Image 2.6) | `public/assets/fx/` |
 | Kanone, Raketenstart, Explosion, Panzertreffer, Funken, Panzerkanone, vorbeipfeifende Granate, Feuerlöscher | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
 | 12 Funksprüche für Mission 2 | Higgsfield (Text-to-Speech, ElevenLabs „Barrett“) | `public/assets/voice/m2_*.mp3` |
+| Gesichter für die Videoverbindung (Ausbilder, Hammer 2, Hammer 3) | Higgsfield: Porträts GPT Image 2.6, sprechende Clips Higgsfield Intone | `public/assets/faces/`, `public/assets/video/face_*` |
 | 17 Funksprüche für die Missionen 3–5, je 8 für Hammer 2 und Hammer 3 | Higgsfield (Text-to-Speech, ElevenLabs „Barrett“, „Knox“ und „Vera“; per Spracherkennung geprüft) | `public/assets/voice/m3_* … w3_*.mp3` |
 
 `tools/process-assets.mjs` macht daraus spielfertige Dateien: Normal-Maps und gepackte ORM-Maps (Ambient Occlusion, Rauheit, Metallanteil) werden aus den Farbtexturen abgeleitet (Rost = rau und nicht-metallisch, blanker Stahl = metallisch), Texturen werden nahtlos gemacht, das Panorama wird horizontal nahtlos überblendet, die Decals ausgeschnitten und die GLBs mit WebP-Texturen und Meshopt komprimiert. Die Rohdateien liegen in `assets-src/` (nicht im Repo).
@@ -177,6 +186,7 @@ src/
   tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken (auch Ablaufsteuerung für Mission 2)
   missions.js          Missionskatalog: Definitionen, Wellen, Ziele, Funksprüche, Ablauf
   combat/allies.js     Verbündete Mechs: Modelle, Gehanimation, Waffen, Treffer, Wracks
+  cockpit/comms.js     Videoverbindung: wer spricht, Clip abspielen
   logic/allies.js      Flügelmann-Logik: Befehle, Formation, Bewegung, Feuer (getestet)
   combat/arsenal.js    Kanone, Leuchtspur, Lenkraketen, Einschläge
   combat/enemies.js    Panzer/Schützenpanzer im Gelände, Granaten, Wracks

@@ -21,7 +21,7 @@ import sharp from 'sharp';
 const SRC = 'assets-src';
 const OUT = 'public/assets';
 const steps = process.argv.slice(2);
-const KNOWN = ['tex', 'fx', 'decals', 'pano', 'ui', 'glb', 'audio'];
+const KNOWN = ['tex', 'fx', 'decals', 'pano', 'ui', 'glb', 'audio', 'faces'];
 const want = (s) => !steps.some((x) => KNOWN.includes(x)) || steps.includes(s);
 const mk = (d) => fs.mkdirSync(d, { recursive: true });
 
@@ -329,7 +329,7 @@ async function processGlb() {
   // battlefield props are instanced many times and seen from afar: fewer triangles
   const SIMPLIFY = { hedgehog: 0.25, ruin: 0.4, tank: 0.4, sandbags: 0.5, mech_rigged: 0.35, enemy_tank: 0.35, enemy_apc: 0.35 };
   // `glb name1 name2` limits the run to those models
-  const only = steps.filter((s) => !['tex', 'fx', 'decals', 'pano', 'ui', 'glb', 'audio'].includes(s));
+  const only = steps.filter((s) => !KNOWN.includes(s));
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
   const srcDir = path.join(SRC, 'glb');
   const dir = path.join(OUT, 'models');
@@ -354,6 +354,29 @@ async function processGlb() {
   }
 }
 
+/* ------------------------------------------------------------------ faces */
+
+// radio video link: portrait stills (WebP) and the talking clips (WebM + MP4, no sound,
+// the game plays the voice separately)
+async function processFaces() {
+  const src = path.join(SRC, 'faces');
+  const still = path.join(OUT, 'faces');
+  const vid = path.join(OUT, 'video');
+  mk(still);
+  mk(vid);
+  for (const f of fs.readdirSync(src)) {
+    const id = f.replace(/\.[^.]+$/, '');
+    if (f.endsWith('.png')) await sharp(path.join(src, f)).resize(512, 384, { fit: 'cover' }).webp({ quality: 80 }).toFile(path.join(still, `${id}.webp`));
+    if (f.endsWith('.mp4')) {
+      const vf = 'scale=512:384:force_original_aspect_ratio=increase,crop=512:384,fps=24';
+      const { execFileSync } = await import('node:child_process');
+      execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', path.join(src, f), '-an', '-vf', vf, '-c:v', 'libx264', '-crf', '28', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', path.join(vid, `face_${id}.mp4`)]);
+      execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', path.join(src, f), '-an', '-vf', vf, '-c:v', 'libvpx-vp9', '-crf', '38', '-b:v', '0', '-row-mt', '1', path.join(vid, `face_${id}.webm`)]);
+    }
+  }
+  console.log('faces');
+}
+
 /* ------------------------------------------------------------------ audio */
 
 function processAudio() {
@@ -374,3 +397,4 @@ if (want('pano')) await processPano();
 if (want('ui')) await processUi();
 if (want('glb') && fs.existsSync(path.join(SRC, 'glb'))) await processGlb();
 if (want('audio')) processAudio();
+if (want('faces') && fs.existsSync(path.join(SRC, 'faces'))) await processFaces();

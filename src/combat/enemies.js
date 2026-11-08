@@ -184,7 +184,19 @@ export class Enemies {
           this.fx.spawnDust(bx + (rand() - 0.5) * 3, this.world.heightAt(bx, bz) + 0.4, bz + (rand() - 0.5) * 3, 2.2, 3 + rand() * 2, 0.8, 0.35);
         }
       }
-      for (const f of ev) if (f.kind === 'fire') this.fire(e, f.dist, tgt);
+      for (const f of ev) {
+        if (f.kind !== 'fire' || this.g.mission?.ended) continue;
+        // the gunner needs to see the target: ruins and ridges give cover
+        const muzzle = _v.set(e.x, this.world.heightAt(e.x, e.z) + e.height * 0.8, e.z);
+        if (!this.world.lineOfSight(muzzle, tgt.center(new THREE.Vector3()).add(_s.set(0, 1.2, 0)))) {
+          e.noLos = true;
+          e.reload = 1.2 + Math.random();
+          e.burstLeft = 0;
+          continue;
+        }
+        e.noLos = false;
+        this.fire(e, f.dist, tgt);
+      }
     }
     this.updateShells(dt, ctx);
   }

@@ -90,6 +90,7 @@ export class Arsenal {
     // lock-on: the enemy closest to the line of sight inside the seeker cone
     const cands = [];
     for (const e of this.g.enemies.alive()) {
+      if (e.losPlayer === false) continue; // the seeker needs a clear view
       const c = this.g.enemies.center(e, _c).sub(ctx.origin);
       const dist = c.length();
       cands.push({ id: e.id, angle: c.divideScalar(dist).angleTo(ctx.dir), dist });

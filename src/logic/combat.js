@@ -229,7 +229,12 @@ export function stepEnemy(e, dt, ctx) {
     tx = px;
     tz = pz;
   }
-  let desired = Math.atan2(-(tx - e.x), -(tz - e.z));
+  // no line of sight to the target: drive round the obstacle to a new firing position
+  if (e.state === 'engage' && e.noLos) {
+    want = T.speed * 0.6;
+    e.flank ??= Math.random() < 0.5 ? -0.7 : 0.7;
+  }
+  let desired = Math.atan2(-(tx - e.x), -(tz - e.z)) + (e.state === 'engage' && e.noLos ? e.flank : 0);
   // keep clear of obstacles ahead
   for (const c of ctx.colliders || []) {
     const dx = c.x - e.x;
