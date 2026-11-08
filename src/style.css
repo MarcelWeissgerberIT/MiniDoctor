@@ -1263,3 +1263,22 @@ body.touchmode #lockhint {
     display: none;
   }
 }
+
+/* flying the drone by hand on a touch screen: lever = speed, pad = turn, buttons = height */
+.t-alt {
+  position: absolute;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(64px * var(--ts) + 8px);
+  display: none;
+  flex-direction: column;
+  gap: calc(12px * var(--ts));
+}
+#touch.drone .t-left {
+  display: flex;
+}
+#touch.drone .t-alt {
+  display: flex;
+}
+#touch.drone .t-alt > * {
+  pointer-events: auto;
+}

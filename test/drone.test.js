@@ -68,3 +68,47 @@ describe('recon drone', () => {
     expect(d.x).toBeCloseTo(home.x, 1);
   });
 });
+
+import { setDroneMode } from '../src/logic/drone.js';
+
+describe('drone modes', () => {
+  it('escort keeps circling over a walking mech', () => {
+    const d = createDrone();
+    const home = { x: 0, y: 5, z: 0 };
+    setDroneMode(d, 'escort');
+    launchDrone(d, [0, -300], home);
+    for (let t = 0; t < 40; t += 0.1) {
+      home.z -= 0.6; // walking north at 6 m/s
+      stepDrone(d, 0.1, { home, ground, heading: 0 });
+    }
+    expect(Math.hypot(d.x - home.x, d.z - home.z)).toBeLessThan(DRONE.escortR * 1.6);
+  });
+
+  it('scouts ahead of the mech', () => {
+    const d = createDrone();
+    const home = { x: 0, y: 5, z: 0 };
+    setDroneMode(d, 'ahead');
+    launchDrone(d, [0, -10], home);
+    run(d, { home, ground, heading: Math.PI / 2 }, 40); // facing west
+    expect(d.x).toBeLessThan(-DRONE.aheadDist + DRONE.orbitR * 1.5);
+  });
+
+  it("flies under the pilot's hand within its limits", () => {
+    const d = createDrone();
+    const home = { x: 0, y: 5, z: 0 };
+    setDroneMode(d, 'manual');
+    launchDrone(d, [0, -10], home);
+    run(d, { home, ground, control: {} }, 4);
+    expect(d.state).toBe('manual');
+    const z0 = d.z;
+    run(d, { home, ground, control: { fwd: 1 } }, 5);
+    expect(d.z).toBeLessThan(z0 - 80); // flew north
+    run(d, { home, ground, control: { climb: -1 } }, 20);
+    expect(d.y).toBeCloseTo(DRONE.minAlt, 0);
+    run(d, { home, ground, control: { turn: 1 } }, Math.PI / 2 / DRONE.turnRate);
+    expect(d.heading).toBeCloseTo(Math.PI / 2, 0);
+    // recall from manual
+    expect(recallDrone(d)).toBe(true);
+    expect(d.state).toBe('return');
+  });
+});

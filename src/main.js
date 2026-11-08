@@ -7,7 +7,7 @@ import '@fontsource/barlow-condensed/latin-700.css';
 import './style.css';
 import { Assets } from './assets.js';
 import { Cockpit } from './cockpit/cockpit.js';
-import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms, drawTargetList, drawDrone } from './cockpit/displays.js';
+import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms, drawTargetList, drawDrone, drawComputer } from './cockpit/displays.js';
 import { Drone } from './combat/drone.js';
 import { MechWalker } from './world/mechwalk.js';
 import { Comms, speakerOf } from './cockpit/comms.js';
@@ -22,6 +22,8 @@ import { Tutorial, VOICE_TEXT, TRAINING_TEXT } from './tutorial.js';
 import { Range } from './training.js';
 import { loadSettings, Achievements, Menu } from './menu.js';
 import { TouchControls, isTouchDevice } from './touch.js';
+import { FIRE_CONTROL, pickTarget, leadPoint } from './logic/firecontrol.js';
+import { GUN } from './logic/combat.js';
 import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
 import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
@@ -153,6 +155,12 @@ class Game {
     };
     this.failed = {}; // knocked-out systems (optics, sensors, gyro, cooling, missiles, hydraulics)
     this.drone = new Drone(this);
+    // fire-control computer settings (kept between sessions)
+    this.fc = { ...FIRE_CONTROL };
+    try {
+      Object.assign(this.fc, JSON.parse(localStorage.getItem('battlebot-fc') || '{}'));
+    } catch {}
+    this.autoT = 0;
     // interactive displays: page per display, the cursor in the target list, what is open
     this.pages = { status: 'status', camera: 'camera' };
     this.selected = null;
@@ -406,20 +414,48 @@ class Game {
     live.missile = live.missile && !this.dead;
     const cam = this.worldCam;
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const toTorso = this.mechObj.quaternion.clone().invert();
+    const limitsOf = (d) => {
+      const l = d.clone().applyQuaternion(toTorso);
+      return gunInLimits(Math.atan2(-l.x, -l.z), Math.asin(clamp(l.y, -1, 1)));
+    };
     // the gun is slaved to the helmet within its traverse (measured in the torso frame)
-    const local = dir.clone().applyQuaternion(this.mechObj.quaternion.clone().invert());
-    const inLimits = gunInLimits(Math.atan2(-local.x, -local.z), Math.asin(clamp(local.y, -1, 1)));
+    let inLimits = limitsOf(dir);
     const touch = this.touch?.on;
     const aiming = this.view === 'front' && (!this.hovered || touch) && !this.dead && (this.input.locked || this.external || touch);
     // the visible arm swings towards where the pilot looks
     if (!this.aimPt || this.frame % 2 === 0) this.aimPt = this.arsenal.aimPoint(cam.position, dir, this.aimPt || new THREE.Vector3());
+    // fire-control computer: auto target, lead for moving targets, the barrel laying itself
+    this.updateFireControl(dt, live);
+    this.leadPt = null;
+    this.gunAuto = false;
+    const ms0 = this.arsenal.w.missiles;
+    const tgt = ms0.designated != null ? this.enemies.list.find((e) => e.id === ms0.designated && e.state !== 'dead') : null;
+    if (tgt && this.fc.gunAim !== 'manual' && live.master && tgt.losPlayer !== false) {
+      const c = this.enemies.center(tgt, new THREE.Vector3());
+      const v = { x: -Math.sin(tgt.heading) * tgt.speed, z: -Math.cos(tgt.heading) * tgt.speed };
+      const muzzle = this.gunRig.muzzle(new THREE.Vector3());
+      const lp = leadPoint(muzzle, c, v, GUN.speed);
+      this.leadPt = new THREE.Vector3(lp.x, lp.y, lp.z);
+      if (this.fc.gunAim === 'auto') {
+        const d = this.leadPt.clone().sub(cam.position).normalize();
+        if (limitsOf(d)) {
+          // the computer lays the barrel; the pilot only pulls the trigger
+          this.aimPt = this.leadPt.clone();
+          inLimits = true;
+          this.gunAuto = true;
+        }
+      }
+    }
     this.gunRig.update(dt, { mechObj: this.mechObj, aim: this.aimPt, heat: this.arsenal.w.gun.heat, show: !this.external });
+    const flying = this.droneHands();
     this.arsenal.update(dt, {
       live,
       rig: this.gunRig,
+      fc: this.fc,
       triggerMG: aiming && this.input.down('KeyE'),
-      trigger: aiming && this.input.lmb,
-      launch: !this.dead && this.input.hit('KeyF'),
+      trigger: (aiming || (this.gunAuto && this.view === 'front' && !this.hovered && !this.dead)) && this.input.lmb,
+      launch: !this.dead && !flying && this.input.hit('KeyF'),
       inLimits,
       origin: cam.position.clone(),
       dir,
@@ -462,6 +498,7 @@ class Game {
         if (this.world.lineOfSight(this.allies.center(w, new THREE.Vector3()).add(new THREE.Vector3(0, 1.5, 0)), top)) observe(e, this.time);
       }
     }
+    this.firingRange.update(dt);
     this.drone.update(dt);
     // a designated vehicle that died or vanished is released
     const des = ms.designated;
@@ -1187,13 +1224,18 @@ class Game {
     const playing = this.state === 'cockpit' && !this.dead;
     let thr = playing ? (I.down('KeyW', 'ArrowUp') ? 1 : I.down('KeyS', 'ArrowDown') ? -1 : 0) : 0;
     let turn = playing ? (I.down('KeyA', 'ArrowLeft') ? 1 : I.down('KeyD', 'ArrowRight') ? -1 : 0) : 0;
+    // flying the drone: the sticks belong to it, the mech keeps walking as set
+    if (this.droneHands()) {
+      thr = 0;
+      turn = 0;
+    }
     // touch lever: move towards the set value; touch pad: proportional turning
-    if (playing && !thr && I.throttleTarget != null) {
+    else if (playing && !thr && I.throttleTarget != null) {
       const d = I.throttleTarget - this.mech.throttle;
       thr = Math.abs(d) > 0.01 ? clamp(d * 6, -1, 1) : 0;
     }
     if (playing && I.down('KeyW', 'ArrowUp', 'KeyS', 'ArrowDown')) I.throttleTarget = null; // the keys take over
-    if (playing && !turn && I.turnAxis) turn = -I.turnAxis;
+    if (playing && !turn && I.turnAxis && !this.droneHands()) turn = -I.turnAxis;
     const stop = playing && (I.down('KeyX', 'Space') || I.hit('KeyX') || I.hit('Space'));
     this.turnInput = turn;
     if (!this.sys.canWalk) {
@@ -1411,7 +1453,8 @@ class Game {
     const I = this.input;
     const sw = this.cockpit.switches;
     const map = { KeyL: 'lights', KeyH: 'hud', KeyN: 'nv', KeyR: 'radar', KeyG: 'stab', KeyO: 'optics' };
-    for (const [code, key] of Object.entries(map)) if (I.hit(code)) sw[key].toggle();
+    const flying = this.droneHands();
+    for (const [code, key] of Object.entries(map)) if (I.hit(code) && !(flying && code === 'KeyR')) sw[key].toggle();
     if (I.hit('Digit9') || I.hit('Numpad9')) this.setExternal(!this.external);
     if (I.hit('Backspace') && this.caution.active) this.cockpit.lamps.lock.toggle();
     if (I.hit('F1') || I.hit('Slash')) ui.toggleHelp();
@@ -1526,12 +1569,22 @@ class Game {
         const wx = mp.x + rx * c + rz * s;
         const wz = mp.z - rx * s + rz * c;
         if (this.droneMode) {
+          if (this.drone.d.mode !== 'orbit') this.drone.setMode('orbit');
           if (this.drone.launch([wx, wz])) this.droneMode = false;
         } else this.selected = null;
         break;
       }
       case 'droneTo':
-        if (sel) this.drone.launch([sel.x, sel.z]);
+        if (sel) {
+          if (this.drone.d.mode !== 'orbit') this.drone.setMode('orbit');
+          this.drone.launch([sel.x, sel.z]);
+        }
+        break;
+      case 'fc':
+        this.setFC(a.key, a.value);
+        break;
+      case 'droneMode':
+        this.drone.setMode(a.mode);
         break;
       case 'launch':
         this.drone.launch(this.droneGoal());
@@ -1542,16 +1595,61 @@ class Game {
     }
   }
 
-  /** hand a vehicle to the missile seeker */
-  designate(id) {
+  /** hand a vehicle to the missile seeker (auto: chosen by the computer, said quietly) */
+  designate(id, auto = false) {
     const ms = this.arsenal.w.missiles;
     const t = this.intel?.list.find((x) => x.id === id);
     if (!t) return;
     ms.designated = id;
     this.selected = id;
-    this.sound.beep(1300, 0.05, 0.05);
-    this.hmd.notify(`ZIEL ${t.label} ${Math.round(t.dist)} m ZUGEWIESEN${t.visible || t.marked ? '' : ' · KEINE SICHT'}`, '#ffc15e', 2);
+    this.sound.beep(auto ? 1700 : 1300, 0.04, auto ? 0.035 : 0.05);
+    this.hmd.notify(`${auto ? 'AUTO-ZIEL' : 'ZIEL'} ${t.label} ${Math.round(t.dist)} m${auto ? '' : ' ZUGEWIESEN'}${t.visible || t.marked ? '' : ' · KEINE SICHT'}`, '#ffc15e', auto ? 1.4 : 2);
     this.onDesignated?.(t);
+  }
+
+  /** the computer picks the target: a better one (a gun on us) replaces the current one */
+  updateFireControl(dt, live) {
+    if (!this.fc.autoTarget || !live.master || !this.intel) return;
+    this.autoT -= dt;
+    if (this.autoT > 0) return;
+    this.autoT = 0.5;
+    const list = this.intel.list;
+    const ms = this.arsenal.w.missiles;
+    const cur = list.find((t) => t.id === ms.designated);
+    const best = pickTarget(list, this.fc.priority);
+    if (!best || best.id === cur?.id) return;
+    const weak = !cur || cur.stale || (!cur.visible && !cur.marked);
+    const worse = this.fc.priority === 'threat' && best.aiming && !cur?.aiming;
+    if (weak || worse) this.designate(best.id, true);
+  }
+
+  /** change a fire-control setting (from the COMP page) and keep it */
+  setFC(key, value) {
+    this.fc[key] = value;
+    try {
+      localStorage.setItem('battlebot-fc', JSON.stringify(this.fc));
+    } catch {}
+    const names = { autoTarget: value ? 'AUTO-ZIEL AN' : 'AUTO-ZIEL AUS' };
+    this.hmd.notify(names[key] || 'FEUERLEITRECHNER', '#a6ffb8', 1.2);
+    if (key === 'autoTarget' && value) this.autoT = 0;
+    this.onFC?.(key, value);
+  }
+
+  /** stick inputs for a drone under manual control: W/S speed, A/D turn, R/F height (touch: lever and pad) */
+  droneControl() {
+    if (!this.droneHands()) return { fwd: 0, turn: 0, climb: 0 };
+    const I = this.input;
+    let fwd = I.down('KeyW', 'ArrowUp') ? 1 : I.down('KeyS', 'ArrowDown') ? -0.5 : 0;
+    let turn = I.down('KeyA', 'ArrowLeft') ? 1 : I.down('KeyD', 'ArrowRight') ? -1 : 0;
+    const climb = I.down('KeyR', 'PageUp') ? 1 : I.down('KeyF', 'PageDown') ? -1 : 0;
+    if (!fwd && I.droneFwd) fwd = I.droneFwd;
+    if (!turn && I.turnAxis) turn = -I.turnAxis;
+    return { fwd, turn, climb };
+  }
+
+  /** the pilot flies the drone: manual mode with the drone page open */
+  droneHands() {
+    return this.drone.d.mode === 'manual' && this.drone.state === 'manual' && this.openMfd === 'camera' && this.pages.camera === 'drone';
   }
 
   /** Tab: the next known vehicle (by range) goes to the seeker */
@@ -1624,6 +1722,15 @@ class Game {
     const ms = this.arsenal.w.missiles;
     if (link && this.pages.status === 'status' && this.openMfd !== 'status') {
       if (f % 2 === 0) drawComms(c.mfd.status, link, this.time);
+    } else if (this.pages.status === 'comp') {
+      if (due('status', 0))
+        drawComputer(c.mfd.status, {
+          fc: this.fc,
+          drone: this.drone.info(),
+          target: this.intel?.list.find((t) => t.id === ms.designated) ?? null,
+          locked: ms.locked && ms.target === ms.designated,
+          gunAuto: this.gunAuto,
+        });
     } else if (this.pages.status === 'targets') {
       if (due('status', 0))
         drawTargetList(c.mfd.status, {
@@ -1794,10 +1901,20 @@ class Game {
     const live = this.weaponLive || {};
     const cam = this.worldCam;
     const damaged = Object.values(this.parts).some((v) => v < 1);
+    // fire-control marks: where to aim at a moving target, where the computer laid the barrel
+    const toScreen = (p) => {
+      if (!p) return null;
+      const v = p.clone().project(cam);
+      if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return null;
+      return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight };
+    };
     this.hmd.draw(dt, {
       visible: this.state === 'cockpit',
       panels: this.view === 'front' || this.external,
       touch: !!this.touch?.on,
+      lead: this.fc.gunAim === 'lead' ? toScreen(this.leadPt) : null,
+      gunCross: this.gunAuto ? toScreen(this.leadPt) : null,
+      autoTarget: this.fc.autoTarget,
       power: this.sys.battBus ? Math.max(0.6, this.cockpit.power) : 0.4,
       external: this.external,
       throttle: m.throttle,
@@ -2014,6 +2131,8 @@ class Game {
         gunDead: parts.rarm <= 0,
       },
       intel: this.mode === 'combat' || intel.list.length ? intel : null,
+      fc: this.fc,
+      gunAuto: this.gunAuto,
       mission: this.mission ? this.missionInfo() : null,
       systems: {
         integrity: Math.min(parts.torso, parts.head),

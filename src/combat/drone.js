@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DRONE, createDrone, launchDrone, recallDrone, retaskDrone, stepDrone, inSensor, airborne } from '../logic/drone.js';
+import { DRONE, DRONE_MODES, createDrone, launchDrone, recallDrone, retaskDrone, stepDrone, inSensor, airborne, setDroneMode } from '../logic/drone.js';
 import { observe } from '../logic/combat.js';
 
 // dock on the mech's back, relative to the pilot's eye (mech body frame, -Z forward)
@@ -79,8 +79,18 @@ export class Drone {
     return g;
   }
 
+  /** what the drone does once it is up (KREISEN, BEGLEITEN, VORAUS, MANUELL) */
+  setMode(mode) {
+    const was = this.d.mode;
+    if (!setDroneMode(this.d, mode)) return;
+    this.mode = mode;
+    if (was !== mode) this.g.droneSay(`DROHNE: ${DRONE_MODES[mode]}`, '#9fe8ff');
+  }
+
   reset() {
+    const mode = this.d?.mode ?? 'orbit';
     this.d = createDrone();
+    this.d.mode = mode;
     this.spares = 1;
     this.lostT = 0;
     this.falling = null;
@@ -150,7 +160,7 @@ export class Drone {
     const d = this.d;
     const g = this.g;
     const h = this.home(_v);
-    const ev = stepDrone(d, dt, { home: h, ground: (x, z) => this.world.heightAt(x, z) });
+    const ev = stepDrone(d, dt, { home: h, ground: (x, z) => this.world.heightAt(x, z), heading: g.mech.heading, control: g.droneControl?.() });
     for (const e of ev) {
       if (e === 'airborne') g.droneSay('DROHNE IN DER LUFT', '#a6ffb8');
       if (e === 'arrived') g.droneSay('DROHNE ÜBER ZIELGEBIET · SUCHE', '#a6ffb8');
@@ -193,7 +203,9 @@ export class Drone {
       this.lostT += dt;
       if (this.spares > 0 && this.lostT > 45) {
         this.spares--;
+        const mode = this.d.mode;
         this.d = createDrone();
+        this.d.mode = mode;
         this.d.battery = 0.5;
         this.mesh.visible = true;
         this.mesh.rotation.set(0, 0, 0);
@@ -223,7 +235,9 @@ export class Drone {
     // the camera looks down at the circle's centre (or ahead while flying out)
     if (airborne(d)) {
       this.cam.position.set(d.x, d.y - 0.3, d.z);
-      const c = d.goal && d.state !== 'return' ? d.goal : [d.x - Math.sin(d.heading) * 80, d.z - Math.cos(d.heading) * 80];
+      // in the pilot's hand it looks ahead and down, otherwise at what it circles
+      const ahead = d.state === 'manual' || d.state === 'return' || !d.goal;
+      const c = ahead ? [d.x - Math.sin(d.heading) * 90, d.z - Math.cos(d.heading) * 90] : d.goal;
       this.cam.lookAt(c[0], this.world.heightAt(c[0], c[1]), c[1]);
       this.cam.updateMatrixWorld(true);
     }
@@ -280,6 +294,8 @@ export class Drone {
       marks: d.marks,
       spares: this.spares,
       jammed: this.jammed,
+      mode: d.mode,
+      speed: d.speed,
     };
   }
 }

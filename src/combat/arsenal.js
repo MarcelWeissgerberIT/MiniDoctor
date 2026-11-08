@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GUN, MG, MISSILE, createWeapons, stepWeapons, fireGun, fireMG, stepLock, fireMissile, steer, segmentHitsSphere } from '../logic/combat.js';
+import { triggerWants, triggerShot } from '../logic/firecontrol.js';
 
 // missile pod on the left shoulder, relative to the pilot's eye (mech body frame, -Z forward);
 // far enough forward that the pilot sees the missiles leave
@@ -23,6 +24,9 @@ export class Arsenal {
     this.world = game.world;
     this.fx = game.world.effects;
     this.w = createWeapons();
+    this.trig = { held: false, burstLeft: 0 }; // single / burst / continuous fire
+    this.salvoLeft = 0;
+    this.salvoT = 0;
     this.rounds = [];
     this.missiles = [];
     const geo = new THREE.BoxGeometry(0.14, 0.14, 1);
@@ -45,6 +49,8 @@ export class Arsenal {
 
   reset() {
     this.w = createWeapons();
+    this.trig = { held: false, burstLeft: 0 };
+    this.salvoLeft = 0;
     this.rounds = [];
     for (const m of this.missiles) this.world.scene.remove(m.mesh);
     this.missiles = [];
@@ -108,9 +114,14 @@ export class Arsenal {
     stepLock(w, cands, dt, ctx.live.missile);
 
     const failed = this.g.failed ?? {};
-    if (ctx.trigger && ctx.inLimits) {
+    // the trigger as the fire-control computer sets it: one round, a burst, or as long as held
+    const fc = ctx.fc || {};
+    if (triggerWants(this.trig, !!(ctx.trigger && ctx.inLimits), fc.gunMode || 'auto', fc.burst || 3) && ctx.inLimits) {
       const wasHot = w.gun.overheated;
-      if (fireGun(w, ctx.live.gun)) this.shoot(ctx);
+      if (fireGun(w, ctx.live.gun)) {
+        this.shoot(ctx);
+        triggerShot(this.trig);
+      } else if (w.gun.overheated || !ctx.live.gun) this.trig.burstLeft = 0;
       if (w.gun.overheated && !wasHot) this.g.onGunOverheat?.();
     }
     if (ctx.triggerMG && ctx.inLimits && fireMG(w, ctx.live.mg)) this.shoot(ctx, true);
@@ -119,8 +130,24 @@ export class Arsenal {
       this.g.hmd?.notify('RAKETENWERFER BLOCKIERT', '#ff5a48', 1.5);
     } else if (ctx.launch) {
       const m = fireMissile(w, ctx.live.missile);
-      if (m) this.launch(m.target, ctx);
-      else if (ctx.live.missile) this.g.sound.beep(300, 0.12, 0.06);
+      if (m) {
+        this.launch(m.target, ctx);
+        // a salvo: the second rail fires a moment later on the same target
+        if ((fc.salvo || 1) > 1) {
+          this.salvoLeft = fc.salvo - 1;
+          this.salvoT = 0.3;
+        }
+      } else if (ctx.live.missile) this.g.sound.beep(300, 0.12, 0.06);
+    }
+    if (this.salvoLeft > 0) {
+      this.salvoT -= dt;
+      if (this.salvoT <= 0) {
+        w.missiles.cooldown = 0;
+        const m = fireMissile(w, ctx.live.missile && !failed.missiles);
+        if (m) this.launch(m.target, ctx);
+        this.salvoLeft = m ? this.salvoLeft - 1 : 0;
+        this.salvoT = 0.3;
+      }
     }
     this.updateRounds(dt);
     this.updateMissiles(dt);
@@ -232,8 +259,19 @@ export class Arsenal {
 
   launch(targetId, ctx) {
     const p = ctx.mechObj.localToWorld(POD.clone());
-    // the pod fires along the hull, slightly up; the seeker steers from there
+    const tg = targetId != null ? this.g.enemies.list.find((e) => e.id === targetId) : null;
+    // the pod fires along the hull, slightly up, slewed toward a target within its gimbal,
+    // so the missile does not swing wide past cover on its way round; the seeker steers on
     const dir = new THREE.Vector3(0, 0.12, -1).applyQuaternion(ctx.mechObj.quaternion);
+    if (tg) {
+      const fh = Math.atan2(-dir.x, -dir.z);
+      const th = Math.atan2(-(tg.x - p.x), -(tg.z - p.z));
+      const off = Math.atan2(Math.sin(th - fh), Math.cos(th - fh));
+      const h = fh + Math.max(-MISSILE.gimbal, Math.min(MISSILE.gimbal, off));
+      const l = Math.hypot(dir.x, dir.z);
+      dir.x = -Math.sin(h) * l;
+      dir.z = -Math.cos(h) * l;
+    }
     dir.y = Math.max(dir.y, 0.08);
     dir.normalize();
     const mesh = new THREE.Group();
@@ -244,8 +282,9 @@ export class Arsenal {
     mesh.position.copy(p);
     this.world.scene.add(mesh);
     // no line of sight but a drone mark: a top attack over the cover onto the thin roof
-    const tg = this.g.enemies.list.find((e) => e.id === targetId);
-    const top = !!tg && tg.losPlayer === false && (tg.droneMark ?? 0) > this.g.time;
+    // flight profile from the computer: direct, steep (top attack), or steep only without sight
+    const prof = this.g.fc?.missileProfile || 'auto';
+    const top = !!tg && (prof === 'top' || (prof === 'auto' && tg.losPlayer === false && (tg.droneMark ?? 0) > this.g.time));
     if (top) {
       dir.y = Math.max(dir.y, 0.55);
       dir.normalize();
@@ -287,6 +326,10 @@ export class Arsenal {
             const above = m.p.y - _b.y;
             if (!m.terminal && above > 8 && hd < above * 1.4) m.terminal = true;
             if (!m.terminal) m.aim.y = _b.y + MISSILE.loft;
+          } else {
+            // direct: a few metres over the line of sight until close, clear of the ground
+            const hd = Math.hypot(_b.x - m.p.x, _b.z - m.p.z);
+            m.aim.y += Math.max(0, Math.min(6, (hd - 60) * 0.03));
           }
         }
       }

@@ -15,12 +15,30 @@ export const DRONE = {
   sensor: 320, // m horizontal sensor reach from the drone
   markTime: 30, // s a mark stays after the drone last saw the vehicle
   maxRange: 1500, // m furthest goal from the mech
+  escortR: 70, // m circle around the mech when escorting
+  aheadDist: 380, // m in front of the mech when scouting ahead
+  manualSpeed: 30, // m/s top speed under the pilot's hand
+  turnRate: 1.2, // rad/s
+  minAlt: 12,
+  maxAlt: 160,
 };
+
+// what the drone does once it is up: circle a point, stay over the mech, scout ahead
+// of it, or fly under the pilot's hand
+export const DRONE_MODES = { orbit: 'KREISEN', escort: 'BEGLEITEN', ahead: 'VORAUS', manual: 'MANUELL' };
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 export function createDrone() {
-  return { state: 'docked', x: 0, y: 0, z: 0, heading: 0, battery: 1, goal: null, orbitA: 0, t: 0, marks: 0 };
+  return { state: 'docked', mode: 'orbit', x: 0, y: 0, z: 0, heading: 0, speed: 0, battery: 1, goal: null, orbitA: 0, t: 0, marks: 0 };
+}
+
+/** switch what the drone does; an airborne drone takes it up at once */
+export function setDroneMode(d, mode) {
+  if (!DRONE_MODES[mode]) return false;
+  d.mode = mode;
+  if (d.state === 'transit' || d.state === 'orbit' || d.state === 'manual') d.state = mode === 'manual' ? 'manual' : 'transit';
+  return true;
 }
 
 export const airborne = (d) => d.state !== 'docked' && d.state !== 'lost';
@@ -51,18 +69,30 @@ export function retaskDrone(d, goal, home) {
 }
 
 export function recallDrone(d) {
+  if (d.state === 'manual') {
+    d.state = 'return';
+    return true;
+  }
   if (!airborne(d) || d.state === 'land' || d.state === 'return') return false;
   d.state = 'return';
   return true;
 }
 
 /**
- * ctx: { home: {x, y, z} dock position on the mech, ground(x, z) -> height }
+ * ctx: { home: {x, y, z} dock position on the mech, ground(x, z) -> height,
+ *        heading: the mech's, control: { fwd, turn, climb } -1..1 in manual mode }
  * returns events: 'airborne', 'arrived', 'lowBattery', 'docked', 'crashed'
  */
 export function stepDrone(d, dt, ctx) {
   const ev = [];
   const { home, ground } = ctx;
+  // the moving goals: over the mech, or a stretch ahead of it
+  if (d.mode === 'escort' && (d.state === 'transit' || d.state === 'orbit')) d.goal = [home.x, home.z];
+  if (d.mode === 'ahead' && (d.state === 'transit' || d.state === 'orbit')) {
+    const h = ctx.heading ?? 0;
+    d.goal = [home.x - Math.sin(h) * DRONE.aheadDist, home.z - Math.cos(h) * DRONE.aheadDist];
+  }
+  const R = d.mode === 'escort' ? DRONE.escortR : DRONE.orbitR;
   if (d.state === 'docked') {
     d.x = home.x;
     d.y = home.y;
@@ -78,7 +108,7 @@ export function stepDrone(d, dt, ctx) {
     ev.push('crashed');
     return ev;
   }
-  if (d.battery < DRONE.returnAt && (d.state === 'transit' || d.state === 'orbit')) {
+  if (d.battery < DRONE.returnAt && (d.state === 'transit' || d.state === 'orbit' || d.state === 'manual')) {
     d.state = 'return';
     ev.push('lowBattery');
   }
@@ -104,22 +134,41 @@ export function stepDrone(d, dt, ctx) {
     d.x = home.x;
     d.z = home.z;
     if (d.y >= home.y + 17.5) {
-      d.state = 'transit';
+      d.state = d.mode === 'manual' ? 'manual' : 'transit';
+      d.goal ??= [home.x, home.z];
       ev.push('airborne');
+    }
+  } else if (d.state === 'manual') {
+    // under the pilot's hand: speed, turn and climb, kept between the floor and the ceiling
+    const c = ctx.control || {};
+    d.heading += (c.turn || 0) * DRONE.turnRate * dt;
+    const want = (c.fwd || 0) * DRONE.manualSpeed;
+    d.speed += Math.max(-12 * dt, Math.min(12 * dt, want - d.speed));
+    d.x -= Math.sin(d.heading) * d.speed * dt;
+    d.z -= Math.cos(d.heading) * d.speed * dt;
+    const g = ground(d.x, d.z);
+    d.y = clamp(d.y + (c.climb || 0) * DRONE.climb * 1.5 * dt, g + DRONE.minAlt, g + DRONE.maxAlt);
+    // it will not fly out of radio range
+    const far = Math.hypot(d.x - home.x, d.z - home.z);
+    if (far > DRONE.maxRange) {
+      d.x = home.x + ((d.x - home.x) / far) * DRONE.maxRange;
+      d.z = home.z + ((d.z - home.z) / far) * DRONE.maxRange;
     }
   } else if (d.state === 'transit') {
     const l = toward(d.goal[0], d.goal[1], DRONE.speed);
     climbTo(cruise());
-    if (l < DRONE.orbitR) {
+    if (l < R) {
       d.state = 'orbit';
       d.orbitA = Math.atan2(d.z - d.goal[1], d.x - d.goal[0]);
       ev.push('arrived');
     }
   } else if (d.state === 'orbit') {
-    d.orbitA += (DRONE.orbitSpeed / DRONE.orbitR) * dt;
-    const tx = d.goal[0] + Math.cos(d.orbitA) * DRONE.orbitR;
-    const tz = d.goal[1] + Math.sin(d.orbitA) * DRONE.orbitR;
-    toward(tx, tz, DRONE.speed);
+    d.orbitA += (DRONE.orbitSpeed / R) * dt;
+    const tx = d.goal[0] + Math.cos(d.orbitA) * R;
+    const tz = d.goal[1] + Math.sin(d.orbitA) * R;
+    // a moving circle (escort, ahead) needs more speed to keep up
+    toward(tx, tz, DRONE.speed * (d.mode === 'orbit' ? 1 : 1.4));
+    if (Math.hypot(d.x - tx, d.z - tz) > R * 1.5) d.state = 'transit';
     climbTo(cruise());
   } else if (d.state === 'return') {
     const l = toward(home.x, home.z, DRONE.speed * 1.1);

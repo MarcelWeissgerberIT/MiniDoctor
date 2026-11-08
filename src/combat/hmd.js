@@ -31,6 +31,44 @@ export class HMD {
     this.hits.push({ angle, t: 0 });
   }
 
+  /** lead mark (where to aim at a moving target) and the barrel laid by the computer */
+  drawFireControl(s) {
+    const g = this.g;
+    if (s.lead) {
+      const { x, y } = s.lead;
+      g.strokeStyle = AMBER;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(x, y - 9);
+      g.lineTo(x + 9, y);
+      g.lineTo(x, y + 9);
+      g.lineTo(x - 9, y);
+      g.closePath();
+      g.stroke();
+      g.fillStyle = AMBER;
+      g.fillRect(x - 1.5, y - 1.5, 3, 3);
+      this.text('VORHALT', x, y + 20, { size: 11, color: AMBER, align: 'center', weight: 'normal' });
+    }
+    if (s.gunCross) {
+      const { x, y } = s.gunCross;
+      g.strokeStyle = G;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.arc(x, y, 11, 0, Math.PI * 2);
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]) {
+        g.moveTo(x + dx * 7, y + dy * 7);
+        g.lineTo(x + dx * 17, y + dy * 17);
+      }
+      g.stroke();
+      this.text('ROHR AUTO', x, y + 26, { size: 11, color: G, align: 'center' });
+    }
+  }
+
   /** where our round struck the armour (next to the pipper) */
   armorHit(text, color) {
     this.armor = { text, color, t: 0 };
@@ -87,6 +125,7 @@ export class HMD {
     g.restore();
     if (s.allies) this.drawAllyMarkers(s.allies);
     if (s.weapons) this.drawSight(s, W_ / 2, H / 2);
+    this.drawFireControl(s);
     if (this.armor) {
       this.armor.t += dt;
       if (this.armor.t > 1.3) this.armor = null;
@@ -227,10 +266,10 @@ export class HMD {
     let lock = w.missile ? 'SUCHE' : 'MISSILE AUS';
     let col = w.missile ? DIM : AMBER;
     if (w.locked) {
-      lock = 'LOCK  ·  F = FEUER';
+      lock = 'LOCK  ·  F';
       col = RED;
     } else if (w.lockT > 0) {
-      lock = `AUFSCHALTEN ${Math.round(w.lockT * 100)}%`;
+      lock = `AUFSCHALT. ${Math.round(w.lockT * 100)}%`;
       col = AMBER;
     }
     this.text(lock, x - 200, y - 40, { size: 14, color: col });
