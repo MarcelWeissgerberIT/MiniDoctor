@@ -188,6 +188,11 @@ export class UI {
     }
   }
 
+  /** an open display: the checklist steps back and the subtitles get smaller */
+  mfdOpen(on) {
+    document.body.classList.toggle('mfdopen', on);
+  }
+
   setView(name) {
     this.viewsEl.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.view === name));
     document.body.classList.toggle('focusview', name !== 'front');

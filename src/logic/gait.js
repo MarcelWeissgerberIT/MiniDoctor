@@ -65,7 +65,14 @@ export class BodyDynamics {
    * stab: gyro stabiliser on (damps the sway)
    */
   update(dt, s, slope = { pitch: 0, roll: 0 }, stab = true) {
-    if (dt <= 0) return this.pose;
+    if (!(dt > 0)) return this.pose;
+    // the stiff springs (cabin height, head) go unstable with long frames: integrate in
+    // short sub-steps so a slow device (or a stutter) cannot blow the camera up
+    if (dt > 0.02) {
+      const n = Math.ceil(dt / 0.02);
+      for (let i = 0; i < n; i++) this.update(dt / n, s, slope, stab);
+      return this.pose;
+    }
     const g = gaitPose(s);
     const k = stab ? 0.7 : 1;
     const run = clamp(Math.abs(s.speed) / MECH.maxForward, 0, 1);

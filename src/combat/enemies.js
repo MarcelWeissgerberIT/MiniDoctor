@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ENEMY_TYPES, createEnemy, stepEnemy, damageEnemy, chooseTarget, gunnerAim, armorFace, ARMOR } from '../logic/combat.js';
+import { ENEMY_TYPES, createEnemy, stepEnemy, damageEnemy, chooseTarget, gunnerAim, armorFace, ARMOR, observe } from '../logic/combat.js';
 import { fitModel } from '../geom.js';
 
 // model fitting: the Meshy vehicles lie along X with the front at -X; turn them to face -Z.
@@ -185,6 +185,8 @@ export class Enemies {
     e.roll = 0;
     e.dustAcc = 0;
     e.contact = { x, z, type: 'hostile', enemy: true };
+    // HQ reports new contacts: they show up at their spawn point until we see them ourselves
+    observe(e, this.g.time);
     this.world.contacts.push(e.contact);
     this.world.scene.add(e.obj);
     this.list.push(e);
@@ -224,7 +226,10 @@ export class Enemies {
    */
   damage(e, dmg, from = null, at = null, kind = 'gun') {
     if (e.state === 'dead') return false;
-    if (from && e.type !== 'depot') {
+    if (kind === 'top' && e.type !== 'depot') {
+      dmg *= 1.5;
+      this.g.onArmorHit?.(e, 'top', 1.5, kind);
+    } else if (from && e.type !== 'depot') {
       let face = armorFace(e.heading, e.x, e.z, from.x, from.z);
       const turretHit = at && e.turretObj && at.y > this.world.heightAt(e.x, e.z) + MODEL[e.type].turretCut + 0.1;
       if (turretHit && armorFace(e.heading + (e.turret || 0), e.x, e.z, from.x, from.z) === 'front') face = 'turret';
@@ -268,6 +273,11 @@ export class Enemies {
     this.world.updateSmokeScreens(dt);
     for (const e of this.list) {
       if (e.state === 'dead' || ENEMY_TYPES[e.type].static) continue;
+      // training targets (old hulls on the range) stand still and never shoot
+      if (e.frozen) {
+        e.speed = 0;
+        continue;
+      }
       // only the obstacles close by matter to the driver
       const near = this.world.colliders.filter((c) => Math.abs(c.x - e.x) < 40 && Math.abs(c.z - e.z) < 40);
       const tgt = chooseTarget(e, ctx.targets, dt, rand);

@@ -115,6 +115,7 @@ export class Sound {
     }
     for (const k of ['cockpit_hum', 'battle_far', 'base_ambience']) if (this.buf[k]) this.buf[k] = this.seamless(this.buf[k], 2.5);
     if (this.buf.walk_gravel) this.buf.walk_gravel = this.seamless(this.buf.walk_gravel, 0.5);
+    if (this.buf.drone_loop) this.buf.drone_loop = this.seamless(this.buf.drone_loop, 0.8);
     if (this.buf.servo) this.buf.servoLoop = this.seamless(this.buf.servo, 0.6);
     this.noise = this.makeNoise(2);
     if (c.state === 'suspended') await c.resume();

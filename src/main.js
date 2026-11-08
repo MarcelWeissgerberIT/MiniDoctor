@@ -7,7 +7,8 @@ import '@fontsource/barlow-condensed/latin-700.css';
 import './style.css';
 import { Assets } from './assets.js';
 import { Cockpit } from './cockpit/cockpit.js';
-import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms } from './cockpit/displays.js';
+import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms, drawTargetList, drawDrone } from './cockpit/displays.js';
+import { Drone } from './combat/drone.js';
 import { Comms, speakerOf } from './cockpit/comms.js';
 import { World, WORLD } from './world/world.js';
 import { Post } from './post.js';
@@ -16,7 +17,8 @@ import { Sound, Radio } from './audio.js';
 import { createMechState, stepMech, MECH, clamp, stepLength } from './logic/mech.js';
 import { BodyDynamics } from './logic/gait.js';
 import { createSystems, stepSystems, hotSwitches } from './logic/systems.js';
-import { Tutorial, VOICE_TEXT } from './tutorial.js';
+import { Tutorial, VOICE_TEXT, TRAINING_TEXT } from './tutorial.js';
+import { Range } from './training.js';
 import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
 import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
@@ -28,7 +30,7 @@ import { Mission, MISSIONS, MISSION_TEXT } from './missions.js';
 import { Allies, LANCE } from './combat/allies.js';
 import { ORDERS } from './logic/allies.js';
 import { MISSILE, PART_NAMES, createParts, mechDestroyed, weaponState, gunInLimits } from './logic/combat.js';
-import { armorFace, MECH_ARMOR, hitPart, applyHitAt, systemHit, SYSTEMS, ENEMY_TYPES } from './logic/combat.js';
+import { armorFace, MECH_ARMOR, hitPart, applyHitAt, systemHit, SYSTEMS, ENEMY_TYPES, observe, isKnown } from './logic/combat.js';
 import { fitModel } from './geom.js';
 
 const params = new URLSearchParams(location.search);
@@ -93,7 +95,8 @@ class Game {
     this.input = new Input(canvas);
     this.sound = new Sound(assets.audio);
     this.radio = new Radio(this.sound, ui);
-    this.voiceText = { ...VOICE_TEXT, ...EXTRA_VOICE, ...MISSION_TEXT };
+    this.voiceText = { ...VOICE_TEXT, ...TRAINING_TEXT, ...EXTRA_VOICE, ...MISSION_TEXT };
+    this.firingRange = new Range(this);
     this.tutorial = new Tutorial(this, ui);
     this.comms = new Comms();
     this.ray = new THREE.Raycaster();
@@ -125,6 +128,14 @@ class Game {
       onHit: (s, at) => this.onPlayerHit(s, at),
     };
     this.failed = {}; // knocked-out systems (optics, sensors, gyro, cooling, missiles, hydraulics)
+    this.drone = new Drone(this);
+    // interactive displays: page per display, the cursor in the target list, what is open
+    this.pages = { status: 'status', camera: 'camera' };
+    this.selected = null;
+    this.listFilter = 'all';
+    this.listScroll = 0;
+    this.droneMode = false;
+    this.openMfd = null;
     this.hmd = new HMD(document.getElementById('hmd'));
     this.parts = createParts();
     this.fire = null;
@@ -251,6 +262,9 @@ class Game {
     if (name === 'external') return this.setExternal(!this.external);
     if (this.external) this.setExternal(false);
     if (name === this.view && name !== 'front') name = 'front';
+    this.openMfd = null;
+    this.droneMode = false;
+    ui.mfdOpen(false);
     const v = VIEWS[name];
     if (!v) return;
     if (name !== 'front') {
@@ -312,6 +326,7 @@ class Game {
   setExternal(on) {
     if (on === this.external || this.state !== 'cockpit') return;
     this.external = on;
+    if (on) this.extSeen = true;
     if (on && this.view !== 'front') {
       this.view = 'front';
       this.viewBlend = 0;
@@ -417,6 +432,30 @@ class Game {
       const top = this.enemies.center(e, new THREE.Vector3());
       top.y += e.height * 0.35;
       e.losPlayer = this.world.lineOfSight(cam.position, top);
+      // what we see goes on the displays (and stays there for a while as a track)
+      if (e.losPlayer && Math.hypot(e.x - this.mech.x, e.z - this.mech.z) < 2200) observe(e, this.time);
+      else if (e.droneMark > this.time) observe(e, this.time);
+    }
+    // the lance shares what its mechs see over the datalink (one pair per frame)
+    const wl = this.allies.list.filter((w) => !w.dead);
+    if (wl.length && vis.length && !this.failed.sensors) {
+      const w = wl[this.frame % wl.length];
+      const e = vis[(this.frame >> 1) % vis.length];
+      if (Math.hypot(e.x - w.x, e.z - w.z) < 900) {
+        const top = this.enemies.center(e, new THREE.Vector3());
+        top.y += e.height * 0.35;
+        if (this.world.lineOfSight(this.allies.center(w, new THREE.Vector3()).add(new THREE.Vector3(0, 1.5, 0)), top)) observe(e, this.time);
+      }
+    }
+    this.drone.update(dt);
+    // a designated vehicle that died or vanished is released
+    const des = ms.designated;
+    if (des != null) {
+      const e = this.enemies.list.find((x) => x.id === des);
+      if (!e || e.state === 'dead' || !isKnown(e, this.time)) {
+        ms.designated = null;
+        if (this.selected === des) this.selected = null;
+      }
     }
     // recon: whatever the seeker locks gets marked
     if (ms.locked && this.mission) {
@@ -496,6 +535,7 @@ class Game {
     if (!order) return;
     const who = this.allies.order(order, target?.id ?? null);
     if (!who) return;
+    this.lastLanceOrder = order;
     this.sound.beep(1200, 0.05, 0.05);
     this.hmd.notify(`LANZE: ${ORDERS[order]}${target ? ' ' + (target.label || '') : ''}`, '#a6ffb8', 1.6);
     // one of them acknowledges, taking turns
@@ -659,15 +699,27 @@ class Game {
   /** our round struck an enemy's armour: show where (front plates shrug it off) */
   onArmorHit(e, face, f, kind) {
     if (kind === 'mg' && face !== 'rear') return;
-    const name = { front: 'FRONT', side: 'SEITE', rear: 'HECK', turret: 'TURM' }[face];
+    const name = { front: 'FRONT', side: 'SEITE', rear: 'HECK', turret: 'TURM', top: 'DACH' }[face];
     this.hmd.armorHit(`${name} ×${f.toFixed(1)}`, f >= 1.3 ? '#a6ffb8' : f >= 0.9 ? '#effff2' : '#ffc15e');
   }
 
-  startFire(part) {
-    this.fire = { part, t: 0 };
+  /** drill: the training fire (the instructor is already talking, it does no real harm) */
+  startFire(part, drill = false) {
+    this.fire = { part, t: 0, drill };
     this.sound.alarm();
+    if (drill) return;
     if (this.mission) this.mission.call('m2_06', 5);
     else this.say('m2_06');
+  }
+
+  /** basic training: the two wingmen walk up next to the trainee */
+  spawnTrainingLance() {
+    if (this.allies.list.length) return;
+    const m = this.mech;
+    const back = [Math.sin(m.heading) * 30, Math.cos(m.heading) * 30];
+    this.allies.spawn('h2', m.x + back[0] - Math.cos(m.heading) * 18, m.z + back[1] + Math.sin(m.heading) * 18, m.heading);
+    this.allies.spawn('h3', m.x + back[0] + Math.cos(m.heading) * 18, m.z + back[1] - Math.sin(m.heading) * 18, m.heading);
+    this.lastLanceOrder = null;
   }
 
   updateFire(dt) {
@@ -678,6 +730,7 @@ class Game {
     ui.smoke(f ? Math.min(0.5, 0.12 + f.t * 0.02) : 0);
     if (!f) return;
     f.t += dt;
+    if (f.drill) return; // smoke and alarm, no real damage
     this.parts[f.part] = Math.max(0, this.parts[f.part] - 0.006 * dt);
     this.parts.torso = Math.max(0, this.parts.torso - 0.003 * dt);
     this.sys.heat = Math.min(0.95, this.sys.heat + 0.025 * dt);
@@ -701,9 +754,10 @@ class Game {
     this.message = `FIRE SUPPR DISCHARGED - ${this.fireCharges} LEFT`;
     this.messageColor = null;
     if (this.fire) {
+      const drill = this.fire.drill;
       this.fire = null;
       this.hmd.notify('BRAND GELÖSCHT', '#a6ffb8', 2.5);
-      setTimeout(() => this.say('m2_11'), 1400);
+      if (!drill) setTimeout(() => this.say('m2_11'), 1400);
     }
   }
 
@@ -729,7 +783,7 @@ class Game {
 
   showResult(win) {
     const w = this.arsenal.w;
-    const def = this.mission?.def;
+    const def = this.mission?.def ?? (this.mode === 'mission' ? MISSIONS[0] : null);
     const t = Math.max(0, this.time - this.stats.start);
     const lance = this.allies.list;
     if (win && def) saveProgress(def.id, t);
@@ -748,7 +802,7 @@ class Game {
           ['Einsatzzeit', `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`],
         ],
       },
-      () => this.restartMission(),
+      () => (this.mission ? this.restartMission() : location.reload()),
       () => location.reload(),
     );
     this.input.unlock();
@@ -762,6 +816,10 @@ class Game {
     this.gunRig.reset();
     this.parts = createParts();
     this.failed = {};
+    this.drone.reset();
+    this.selected = null;
+    this.droneMode = false;
+    this.arsenal.w.missiles.designated = null;
     this.world.smokeScreens.length = 0;
     this.world.effects.clearScreens();
     this.fire = null;
@@ -856,6 +914,8 @@ class Game {
     this.mode = 'mission';
     this.state = 'entry';
     this.entry = new EntrySequence(this);
+    this.stats.start = this.time;
+    this.onTutorialDone = () => setTimeout(() => this.showResult(true), 2500);
     ui.skipHint(true);
   }
 
@@ -1039,7 +1099,10 @@ class Game {
       this.pitch = -5 * DEG;
     }
     for (const name of VIEW_ORDER) if (this.input.hit(VIEWS[name].key)) this.setView(name);
-    if (!free && (this.input.hit('Escape') || inp.rmbClicked)) this.setView('front');
+    if (!free && (this.input.hit('Escape') || inp.rmbClicked)) {
+      if (this.openMfd) this.closeDisplay();
+      else this.setView('front');
+    }
     const rate = Math.hypot(dyaw, dpitch) / Math.max(dt, 1e-3);
     this.lookRate += (rate - this.lookRate) * Math.min(1, dt * 8);
   }
@@ -1235,7 +1298,22 @@ class Game {
     const center = this.input.locked && !this.input.cursorMode;
     this.ray.setFromCamera(center ? new THREE.Vector2(0, 0) : new THREE.Vector2(this.input.mouse.x, this.input.mouse.y), this.cockpitCam);
     this.ray.far = 2.2;
-    const hits = this.ray.intersectObjects(this.cockpit.hitTargets, false);
+    const screens = Object.entries(this.cockpit.mfd).map(([slot, m]) => ((m.mesh.userData.mfdSlot = slot), m.mesh));
+    const hits = this.ray.intersectObjects([...this.cockpit.hitTargets, ...screens], false);
+    const scr = hits.length ? hits[0].object.userData.mfdSlot : null;
+    if (scr && !center) {
+      // the displays: click to open, and once open, the soft keys and contents
+      this.hovered = null;
+      if (this.openMfd === scr) {
+        const h = this.cockpit.mfd[scr].hitAt(hits[0].uv.x * 512, (1 - hits[0].uv.y) * 384);
+        ui.hover(h ? null : null, false, this.input.mouse);
+        if (inp.clicked) this.mfdClick(scr, hits[0].uv);
+      } else {
+        ui.hover('Display öffnen', false, this.input.mouse);
+        if (inp.clicked && this.sys.mainBus) this.openDisplay(scr);
+      }
+      return;
+    }
     const ctl = hits.length ? hits[0].object.userData.control : null;
     this.hovered = ctl;
     const hint = ctl && KEY_HINTS[ctl.label];
@@ -1248,10 +1326,175 @@ class Game {
     const sw = this.cockpit.switches;
     const map = { KeyL: 'lights', KeyH: 'hud', KeyN: 'nv', KeyR: 'radar', KeyG: 'stab', KeyO: 'optics' };
     for (const [code, key] of Object.entries(map)) if (I.hit(code)) sw[key].toggle();
-    if (I.hit('KeyM')) this.sound.setMuted(!this.sound.muted);
     if (I.hit('Digit9') || I.hit('Numpad9')) this.setExternal(!this.external);
-    if (I.hit('KeyQ') && this.caution.active) this.cockpit.lamps.lock.toggle();
-    if (I.hit('F1') || I.hit('Tab') || I.hit('Slash')) ui.toggleHelp();
+    if (I.hit('Backspace') && this.caution.active) this.cockpit.lamps.lock.toggle();
+    if (I.hit('F1') || I.hit('Slash')) ui.toggleHelp();
+    // displays, targets and the drone
+    if (I.hit('KeyM')) this.toggleDisplay('tactical');
+    if (I.hit('Tab')) this.nextTarget();
+    if (I.hit('KeyQ')) this.drone.toggle(this.droneGoal());
+  }
+
+  /* ------------------------------------------------ displays you can open */
+
+  toggleDisplay(slot) {
+    if (this.openMfd === slot) this.closeDisplay();
+    else this.openDisplay(slot);
+  }
+
+  /** lean in until one display fills the view; its soft keys and contents are clickable */
+  openDisplay(slot) {
+    if (this.state !== 'cockpit' || this.dead) return;
+    if (!this.sys.mainBus) return this.complainNoPower();
+    if (this.external) this.setExternal(false);
+    const mesh = this.cockpit.mfd[slot]?.mesh;
+    if (!mesh) return;
+    mesh.updateMatrixWorld(true);
+    const c = mesh.getWorldPosition(new THREE.Vector3());
+    const q = mesh.getWorldQuaternion(new THREE.Quaternion());
+    const n = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+    // far enough that the whole bezel shows, a little above centre so the subtitles stay clear
+    const eye = c.clone().addScaledVector(n, 0.39);
+    const look = c.clone().addScaledVector(up, -0.012);
+    this.focusPose.pos.copy(eye);
+    this.focusPose.q.setFromRotationMatrix(new THREE.Matrix4().lookAt(eye, look, up));
+    this.focusPose.fov = 46;
+    if (this.view !== 'mfd') this.mfdReturn = this.view;
+    this.view = 'mfd';
+    this.openMfd = slot;
+    this.input.cursorMode = true;
+    this.input.unlock();
+    ui.setView('displays');
+    ui.mfdOpen(true);
+    ui.lockHint(false);
+    this.sound.click('button');
+    this.onDisplayOpened?.(slot);
+  }
+
+  closeDisplay() {
+    const back = this.mfdReturn && this.mfdReturn !== 'mfd' ? this.mfdReturn : 'front';
+    this.openMfd = null;
+    this.droneMode = false;
+    this.view = 'mfd-closing';
+    this.setView(back);
+  }
+
+  /** a click on a display: its soft keys, tabs, list rows, map */
+  mfdClick(slot, uv) {
+    const mfd = this.cockpit.mfd[slot];
+    const x = uv.x * 512;
+    const y = (1 - uv.y) * 384;
+    const h = mfd.hitAt(x, y);
+    if (!h) return;
+    this.sound.click('button');
+    this.mfdAction(slot, h.action, x, y);
+  }
+
+  mfdAction(slot, a, x, y) {
+    const ms = this.arsenal.w.missiles;
+    const list = this.intel?.list ?? [];
+    const sel = list.find((t) => t.id === this.selected);
+    switch (a.type) {
+      case 'page':
+        if (slot === 'status' || slot === 'camera') this.pages[slot] = a.page;
+        break;
+      case 'select':
+        this.selected = a.id;
+        if (slot === 'camera') this.designate(a.id); // on the picture a click is enough
+        break;
+      case 'designate':
+        if (sel) this.designate(sel.id);
+        break;
+      case 'release':
+        ms.designated = null;
+        this.hmd.notify('SUCHER FREI', '#a6ffb8', 1.5);
+        break;
+      case 'next':
+        this.nextTarget();
+        break;
+      case 'filter':
+        this.listFilter = a.filter;
+        this.listScroll = 0;
+        break;
+      case 'scroll':
+        this.listScroll = Math.max(0, this.listScroll + a.d * 4);
+        break;
+      case 'zoom': {
+        const ranges = [250, 500, 1000, 2000];
+        const i = clamp(ranges.indexOf(this.radarRange) + a.d, 0, ranges.length - 1);
+        this.radarRange = ranges[i];
+        break;
+      }
+      case 'droneMode':
+        this.droneMode = !this.droneMode;
+        break;
+      case 'map': {
+        // a click on the map: the drone goes there when asked to, else the nearest vehicle is picked
+        const mp = this.cockpit.mfd[slot].map;
+        const rx = ((x - mp.cx) / mp.R) * mp.range;
+        const rz = ((y - mp.cy) / mp.R) * mp.range;
+        const c = Math.cos(mp.heading);
+        const s = Math.sin(mp.heading);
+        const wx = mp.x + rx * c + rz * s;
+        const wz = mp.z - rx * s + rz * c;
+        if (this.droneMode) {
+          if (this.drone.launch([wx, wz])) this.droneMode = false;
+        } else this.selected = null;
+        break;
+      }
+      case 'droneTo':
+        if (sel) this.drone.launch([sel.x, sel.z]);
+        break;
+      case 'launch':
+        this.drone.launch(this.droneGoal());
+        break;
+      case 'recall':
+        this.drone.recall();
+        break;
+    }
+  }
+
+  /** hand a vehicle to the missile seeker */
+  designate(id) {
+    const ms = this.arsenal.w.missiles;
+    const t = this.intel?.list.find((x) => x.id === id);
+    if (!t) return;
+    ms.designated = id;
+    this.selected = id;
+    this.sound.beep(1300, 0.05, 0.05);
+    this.hmd.notify(`ZIEL ${t.label} ${Math.round(t.dist)} m ZUGEWIESEN${t.visible || t.marked ? '' : ' · KEINE SICHT'}`, '#ffc15e', 2);
+    this.onDesignated?.(t);
+  }
+
+  /** Tab: the next known vehicle (by range) goes to the seeker */
+  nextTarget() {
+    const list = (this.intel?.list ?? []).filter((t) => !t.stale);
+    if (!list.length) return this.hmd.notify('KEIN BEKANNTES ZIEL', '#ffc15e', 1.5);
+    const i = list.findIndex((t) => t.id === this.arsenal.w.missiles.designated);
+    this.designate(list[(i + 1) % list.length].id);
+  }
+
+  /** where Q sends the drone: the point the pilot looks at, within reason */
+  droneGoal() {
+    const cam = this.worldCam;
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const p = this.arsenal.aimPoint(cam.position, dir, new THREE.Vector3());
+    const d = p.distanceTo(cam.position);
+    const dist = clamp(Number.isFinite(d) ? d : 450, 250, 1200);
+    const l = Math.hypot(dir.x, dir.z) || 1;
+    return [this.mech.x + (dir.x / l) * dist, this.mech.z + (dir.z / l) * dist];
+  }
+
+  droneSay(text, color = '#a6ffb8') {
+    this.hmd.notify(text, color, 2.5);
+    this.message = text;
+    this.messageColor = color === '#ff5a48' ? '#ff4a3a' : null;
+  }
+
+  onDroneMark(e) {
+    this.sound.beep(1900, 0.04, 0.05);
+    this.hmd.notify(`DROHNE: ${e.label || (e.type === 'tank' ? 'PZ' : 'SPZ')} MARKIERT`, '#9fe8ff', 1.8);
   }
 
   /** tutorial target: pulsing marker on the control + arrow when it is off screen */
@@ -1287,9 +1530,24 @@ class Game {
     const clock = new Date();
     const warning = this.fire ? 'FIRE ON BOARD' : s.warnings[0];
     const link = this.comms.state(this.time);
-    if (link) {
+    // an open display is redrawn every frame so clicks answer at once
+    const due = (slot, k) => this.openMfd === slot || f % 4 === k;
+    const ms = this.arsenal.w.missiles;
+    if (link && this.pages.status === 'status' && this.openMfd !== 'status') {
       if (f % 2 === 0) drawComms(c.mfd.status, link, this.time);
-    } else if (f % 4 === 0)
+    } else if (this.pages.status === 'targets') {
+      if (due('status', 0))
+        drawTargetList(c.mfd.status, {
+          list: this.intel?.list ?? [],
+          selected: this.selected,
+          designated: ms.designated,
+          locked: ms.locked && ms.target === ms.designated,
+          lockT: ms.lockT / MISSILE.lockTime,
+          filter: this.listFilter,
+          scroll: this.listScroll,
+          droneDisabled: this.drone.jammed || this.drone.state === 'lost',
+        });
+    } else if (due('status', 0))
       drawStatus(c.mfd.status, {
         ...s,
         parts: this.parts,
@@ -1299,7 +1557,9 @@ class Game {
         message: warning || this.statusLine(),
         messageColor: warning ? '#ff4a3a' : this.messageColor,
       });
-    if (f % 4 === 1)
+    if (this.pages.camera === 'drone') {
+      if (due('camera', 1)) drawDrone(c.mfd.camera, { drone: this.drone.info(), feed: this.drone.airborne, boxes: this.drone.airborne ? this.feedBoxes(this.drone.cam) : [], selected: this.selected });
+    } else if (due('camera', 1))
       drawCamera(c.mfd.camera, {
         heading: m.heading,
         range: this.range,
@@ -1314,7 +1574,7 @@ class Game {
         threats: this.intel?.threats.length ?? 0,
         target: this.intel?.primary ?? null,
       });
-    if (f % 4 === 2)
+    if (due('tactical', 2))
       drawTactical(c.mfd.tactical, {
         ...m,
         time: this.time,
@@ -1332,23 +1592,28 @@ class Game {
         kills: this.mission ? this.stats.kills : null,
         total: this.mission?.def.total ?? null,
         sensorsDown: !!this.failed.sensors,
+        selected: this.selected,
+        designated: ms.designated,
+        locked: ms.locked && ms.target === ms.designated,
+        drone: this.drone.info(),
+        droneMode: this.droneMode,
       });
   }
 
   /** tracked vehicles inside the hull camera's picture (512 x 384 display units) */
-  feedBoxes() {
+  feedBoxes(cam = this.feedCam) {
     const it = this.intel;
     if (!it?.list.length) return [];
-    const cam = this.feedCam;
     const f = 192 / Math.tan((cam.fov * DEG) / 2);
     const v = new THREE.Vector3();
     const out = [];
     for (const t of it.list) {
+      if (t.stale) continue;
       this.enemies.center(t.e, v);
       const dist = v.distanceTo(cam.position);
       v.project(cam);
       if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) continue;
-      out.push({ x: ((v.x + 1) / 2) * 512, y: ((1 - v.y) / 2) * 384, r: (t.e.radius * f) / dist, dist, label: t.label, aiming: t.aiming, primary: t === it.primary });
+      out.push({ id: t.id, x: ((v.x + 1) / 2) * 512, y: ((1 - v.y) / 2) * 384, r: (t.e.radius * f) / dist, dist, label: t.label, aiming: t.aiming, primary: t === it.primary, marked: t.marked, selected: t.id === this.selected });
     }
     return out;
   }
@@ -1373,18 +1638,31 @@ class Game {
     const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
     const f = H / 2 / Math.tan((cam.fov * DEG) / 2);
     const v = new THREE.Vector3();
-    for (const e of this.enemies.alive()) {
+    // only known vehicles (seen by us, the lance or the drone); lost ones at their last position
+    for (const it of this.intel?.list ?? []) {
+      const e = it.e;
       this.enemies.center(e, v);
+      if (it.stale) v.set(it.x, this.world.heightAt(it.x, it.z) + e.height * 0.5, it.z);
       const dist = v.distanceTo(cam.position);
       if (dist > 2400) continue;
-      // no datalink: only what our own eyes see, and not far
-      if (this.failed.sensors && (dist > 600 || e.losPlayer === false)) continue;
       const front = v.clone().sub(cam.position).dot(camDir) > 0;
       const p = v.clone().project(cam);
       const onScreen = front && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.92;
       const mine = ms.target === e.id;
-      const it = this.intel?.list.find((x) => x.e === e);
-      const t = { dist, label: e.label || (e.type === 'tank' ? 'PZ' : 'SPZ'), marked: e.marked, face: it?.face, hp: it?.hp ?? 1, aiming: it?.aiming, lock: mine ? ms.lockT / MISSILE.lockTime : 0, locked: mine && ms.locked, onScreen };
+      const t = {
+        dist,
+        label: `${e.label || (e.type === 'tank' ? 'PZ' : 'SPZ')}${it.stale ? '?' : ''}`,
+        marked: e.marked,
+        droneMarked: it.marked,
+        stale: it.stale,
+        designated: ms.designated === e.id,
+        face: it.stale ? '' : it.face,
+        hp: it.hp,
+        aiming: it.aiming,
+        lock: mine ? ms.lockT / MISSILE.lockTime : 0,
+        locked: mine && ms.locked,
+        onScreen,
+      };
       if (onScreen) {
         t.x = ((p.x + 1) / 2) * W;
         t.y = ((1 - p.y) / 2) * H;
@@ -1499,25 +1777,36 @@ class Game {
     const m = this.mech;
     const list = [];
     const look = m.heading + (this.external ? 0 : this.yaw);
+    const threats = [];
     for (const e of this.enemies.alive()) {
-      const dx = e.x - m.x;
-      const dz = e.z - m.z;
+      const armed = e.type !== 'depot';
+      // laser warning: a gun laid on us is felt even when we cannot see who it is
+      const toUsTrue = Math.atan2(e.x - m.x, e.z - m.z);
+      const aiming = armed && e.target === this.playerTarget && e.state !== 'advance' && Math.abs(wrapA(e.heading + (e.turret || 0) - toUsTrue)) < 0.12;
+      if (aiming) threats.push({ clock: clockOf(wrapA(Math.atan2(-(e.x - m.x), -(e.z - m.z)) - m.heading)) });
+      // only what our side has seen; a lost contact stays at its last known position
+      if (!isKnown(e, this.time)) continue;
+      const stale = this.time - e.seenT > 1.5;
+      const ex = stale ? e.kx : e.x;
+      const ez = stale ? e.kz : e.z;
+      const dx = ex - m.x;
+      const dz = ez - m.z;
       const dist = Math.hypot(dx, dz);
       // without the sensors only what we see ourselves, and not far
       if (this.failed.sensors && (dist > 600 || e.losPlayer === false)) continue;
       const brg = Math.atan2(-dx, -dz);
-      const toUs = Math.atan2(dx, dz);
       const gun = e.heading + (e.turret || 0);
-      const armed = e.type !== 'depot';
-      const aiming = armed && e.target === this.playerTarget && e.state !== 'advance' && Math.abs(wrapA(gun - toUs)) < 0.12;
       list.push({
+        stale,
+        visible: e.losPlayer !== false && !stale,
+        marked: (e.droneMark ?? 0) > this.time,
         e,
         id: e.id,
         type: e.type,
         name: TYPE_NAME[e.type],
         label: e.label || TYPE_SHORT[e.type],
-        x: e.x,
-        z: e.z,
+        x: ex,
+        z: ez,
         heading: e.heading,
         gun,
         dist,
@@ -1530,14 +1819,13 @@ class Game {
         hp: e.hp / ENEMY_TYPES[e.type].hp,
         state: armed ? STATE_NAME[e.state] || e.state.toUpperCase() : 'STATISCH',
         kmh: Math.abs(e.speed) * 3.6,
-        marked: !!e.marked,
-        seen: e.losPlayer !== false,
+        missionMarked: !!e.marked,
       });
     }
     list.sort((a, b) => a.dist - b.dist);
-    // primary target: what the seeker tracks, else what the pilot looks at, else the closest
+    // primary target: the designated one, what the seeker tracks, what the pilot looks at, the closest
     const ms = this.arsenal.w.missiles;
-    let primary = list.find((t) => t.id === ms.target) || null;
+    let primary = list.find((t) => t.id === ms.designated) || list.find((t) => t.id === ms.target) || null;
     if (!primary) {
       const looked = list.filter((t) => t.off < 0.2).sort((a, b) => a.off - b.off)[0];
       primary = looked || list[0] || null;
@@ -1554,7 +1842,6 @@ class Game {
       if (t < 0 || t > 1.5) continue;
       if (Math.hypot(rx - s.v.x * t, ry - s.v.y * t, rz - s.v.z * t) < 25) incoming++;
     }
-    const threats = list.filter((t) => t.aiming);
     this.intel = { list, primary, threats, incoming };
     return this.intel;
   }
@@ -1673,9 +1960,10 @@ class Game {
   render() {
     // the boarding video covers the screen: no need to draw the world behind it
     if (this.state === 'entry' && this.entry.phase === 'video') return;
-    if (this.frame % 2 === 0 && this.sw.optics && !this.failed.optics && this.sys.mainBus && this.state === 'cockpit' && !this.external) {
+    const droneFeed = this.pages.camera === 'drone' && this.drone.airborne;
+    if (this.frame % 2 === 0 && this.sys.mainBus && this.state === 'cockpit' && !this.external && (droneFeed || (this.sw.optics && !this.failed.optics))) {
       renderer.setRenderTarget(this.feedRT);
-      renderer.render(this.world.scene, this.feedCam);
+      renderer.render(this.world.scene, droneFeed ? this.drone.cam : this.feedCam);
       renderer.setRenderTarget(null);
     }
     this.post.render(this.time, this.shock);

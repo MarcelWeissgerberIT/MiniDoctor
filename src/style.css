@@ -813,3 +813,17 @@ body.hovering #scene {
     margin-left: 0;
   }
 }
+
+/* an open display fills the view: the checklist and subtitles step back */
+body.mfdopen #checklist {
+  opacity: 0.35;
+  transition: opacity 0.2s;
+}
+body.mfdopen #checklist:hover {
+  opacity: 1;
+}
+body.mfdopen #subtitle {
+  bottom: 44px;
+  font-size: 13px;
+  max-width: min(560px, calc(100vw - 32px));
+}

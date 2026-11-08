@@ -89,11 +89,21 @@ export class Arsenal {
     stepWeapons(w, dt);
     // lock-on: the enemy closest to the line of sight inside the seeker cone
     const cands = [];
+    const h = ctx.mechObj ? this.g.mech.heading : 0;
+    const time = this.g.time;
     for (const e of this.g.enemies.alive()) {
-      if (e.losPlayer === false) continue; // the seeker needs a clear view
       const c = this.g.enemies.center(e, _c).sub(ctx.origin);
       const dist = c.length();
-      cands.push({ id: e.id, angle: c.divideScalar(dist).angleTo(ctx.dir), dist });
+      // gimbal: how far off the hull axis a designated target lies
+      const gimbal = Math.abs(Math.atan2(Math.sin(Math.atan2(-c.x, -c.z) - h), Math.cos(Math.atan2(-c.x, -c.z) - h)));
+      cands.push({
+        id: e.id,
+        angle: c.divideScalar(dist).angleTo(ctx.dir),
+        dist,
+        gimbal,
+        visible: e.losPlayer !== false, // the seeker needs a clear view ...
+        marked: (e.droneMark ?? 0) > time, // ... or the drone's laser on it
+      });
     }
     stepLock(w, cands, dt, ctx.live.missile);
 
@@ -222,8 +232,9 @@ export class Arsenal {
 
   launch(targetId, ctx) {
     const p = ctx.mechObj.localToWorld(POD.clone());
-    const dir = ctx.dir.clone();
-    dir.y += 0.05;
+    // the pod fires along the hull, slightly up; the seeker steers from there
+    const dir = new THREE.Vector3(0, 0.12, -1).applyQuaternion(ctx.mechObj.quaternion);
+    dir.y = Math.max(dir.y, 0.08);
     dir.normalize();
     const mesh = new THREE.Group();
     mesh.add(new THREE.Mesh(this.missileBody, this.missileMat));
@@ -232,9 +243,17 @@ export class Arsenal {
     mesh.add(glow);
     mesh.position.copy(p);
     this.world.scene.add(mesh);
+    // no line of sight but a drone mark: a top attack over the cover onto the thin roof
+    const tg = this.g.enemies.list.find((e) => e.id === targetId);
+    const top = !!tg && tg.losPlayer === false && (tg.droneMark ?? 0) > this.g.time;
+    if (top) {
+      dir.y = Math.max(dir.y, 0.55);
+      dir.normalize();
+    }
     this.missiles.push({
       mesh,
       p,
+      top,
       dir: dir.toArray(),
       speed: MISSILE.speed0,
       target: targetId,
@@ -256,13 +275,25 @@ export class Arsenal {
       const tgt = m.target != null ? enemies.list.find((e) => e.id === m.target) : null;
       if (tgt && tgt.state !== 'dead') {
         enemies.center(tgt, _b).y += 0.3;
-        // a smoke screen between seeker and target breaks the track: it flies on blind
-        if (this.world.smokeScreens.length && this.world.smokeBlocks(m.p, _b)) m.target = null;
-        else m.aim.copy(_b);
+        const lased = (tgt.droneMark ?? 0) > this.g.time;
+        // a smoke screen between seeker and target breaks the track (unless the drone lases it)
+        if (!lased && this.world.smokeScreens.length && this.world.smokeBlocks(m.p, _b)) m.target = null;
+        else {
+          m.aim.copy(_b);
+          // top attack: climb over the cover first, then dive steeply
+          if (m.top) {
+            // head for a point high above the target, dive once it lies steeply below
+            const hd = Math.hypot(_b.x - m.p.x, _b.z - m.p.z);
+            const above = m.p.y - _b.y;
+            if (!m.terminal && above > 8 && hd < above * 1.4) m.terminal = true;
+            if (!m.terminal) m.aim.y = _b.y + MISSILE.loft;
+          }
+        }
       }
       if (m.age > 0.2) {
         const to = _a.copy(m.aim).sub(m.p).normalize().toArray();
-        m.dir = steer(m.dir, to, MISSILE.turn * dt * (m.age < 0.6 ? 2 : 1));
+        // fins bite harder in the steep terminal dive of a top attack
+        m.dir = steer(m.dir, to, MISSILE.turn * dt * (m.age < 0.6 ? 2 : m.terminal ? 2.4 : 1));
       }
       const prev = m.p.clone();
       m.p.x += m.dir[0] * m.speed * dt;
@@ -287,7 +318,21 @@ export class Arsenal {
         }
       }
       const ground = m.p.y < this.world.heightAt(m.p.x, m.p.z);
-      if (hitEnemy || ground || m.age > MISSILE.life) {
+      // ruins stop missiles too
+      let wall = false;
+      if (!hitEnemy && !ground) {
+        const gy = this.world.heightAt(m.p.x, m.p.z);
+        for (const c of this.world.colliders) {
+          if (c.r < 2.5) continue;
+          const dx = m.p.x - c.x;
+          const dz = m.p.z - c.z;
+          if (dx * dx + dz * dz < c.r * c.r * 0.8 && m.p.y < gy + (c.h ?? 8)) {
+            wall = true;
+            break;
+          }
+        }
+      }
+      if (hitEnemy || ground || wall || m.age > MISSILE.life) {
         this.explode(m, hitEnemy);
         this.world.scene.remove(m.mesh);
         this.missiles.splice(i, 1);
@@ -304,7 +349,8 @@ export class Arsenal {
       this.w.missiles.hits++;
       // the side it strikes follows from where it came in
       const from = new THREE.Vector3(p.x - m.dir[0] * 20, p.y, p.z - m.dir[2] * 20);
-      enemies.damage(direct, MISSILE.damage, from, p, 'missile');
+      // diving onto the roof: the thinnest armour there is
+      enemies.damage(direct, MISSILE.damage, from, p, m.top && m.dir[1] < -0.3 ? 'top' : 'missile');
     }
     for (const e of enemies.alive()) {
       if (e === direct) continue;

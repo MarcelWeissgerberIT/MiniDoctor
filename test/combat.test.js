@@ -209,3 +209,48 @@ describe('enemy tactics', () => {
     expect(Math.hypot(p[0], p[1])).toBeCloseTo(300);
   });
 });
+
+import { observe, isKnown, TRACK } from '../src/logic/combat.js';
+
+describe('designated targets and tracks', () => {
+  it('locks a designated target off the line of sight within the gimbal', () => {
+    const w = createWeapons();
+    w.missiles.designated = 7;
+    const c = [
+      { id: 3, angle: 0.01, dist: 300 }, // straight ahead, but not the one we picked
+      { id: 7, angle: 0.9, gimbal: 0.6, dist: 700, visible: true },
+    ];
+    for (let i = 0; i < 30; i++) stepLock(w, c, 0.05, true);
+    expect(w.missiles.target).toBe(7);
+    expect(w.missiles.locked).toBe(true);
+  });
+
+  it('needs sight or a drone mark, and the gimbal', () => {
+    const w = createWeapons();
+    w.missiles.designated = 7;
+    for (let i = 0; i < 30; i++) stepLock(w, [{ id: 7, angle: 0.5, gimbal: 0.3, dist: 500, visible: false }], 0.05, true);
+    expect(w.missiles.locked).toBe(false);
+    for (let i = 0; i < 30; i++) stepLock(w, [{ id: 7, angle: 0.5, gimbal: 0.3, dist: 500, visible: false, marked: true }], 0.05, true);
+    expect(w.missiles.locked).toBe(true);
+    const w2 = createWeapons();
+    w2.missiles.designated = 7;
+    for (let i = 0; i < 30; i++) stepLock(w2, [{ id: 7, angle: 2, gimbal: 2, dist: 500, visible: true }], 0.05, true);
+    expect(w2.missiles.locked).toBe(false); // behind us
+  });
+
+  it('the cone lock skips what we cannot see', () => {
+    const w = createWeapons();
+    for (let i = 0; i < 30; i++) stepLock(w, [{ id: 2, angle: 0.01, dist: 300, visible: false }], 0.05, true);
+    expect(w.missiles.locked).toBe(false);
+  });
+
+  it('a lost contact is remembered for a while at its last position', () => {
+    const e = { x: 10, z: 20 };
+    expect(isKnown(e, 0)).toBe(false);
+    observe(e, 5);
+    e.x = 99;
+    expect(e.kx).toBe(10);
+    expect(isKnown(e, 5 + TRACK.memory - 1)).toBe(true);
+    expect(isKnown(e, 5 + TRACK.memory + 1)).toBe(false);
+  });
+});

@@ -286,7 +286,7 @@ export class HUD {
         [`${t.label} · ${t.name}`, t.aiming ? RED : WARN],
         `${String(Math.round(t.dist)).padStart(4)} m  ${deg}°  ${t.clock} UHR`,
         t.face ? [`ZEIGT ${t.face} ${fac}`, t.face === 'HECK' ? C : t.face === 'FRONT' ? WARN : C] : null,
-        `${t.state} ${Math.round(t.kmh)} km/h`,
+        t.stale ? ['LETZTE POSITION', WARN] : `${t.state} ${Math.round(t.kmh)} km/h`,
         [`${'▰'.repeat(n)}${'▱'.repeat(6 - n)} ${hp}%`, hp < 40 ? C : WARN],
         t.aiming ? ['RICHTET AUF DICH', RED] : t.marked ? ['MARKIERT', C] : null,
       ],

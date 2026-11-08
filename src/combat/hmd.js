@@ -72,7 +72,6 @@ export class HMD {
     // in the panel views the corner boxes would cover the displays
     if (s.panels === false) {
       g.restore();
-      if (s.targets) this.drawTargets(s, W_, H);
       this.drawHits(dt, W_, H);
       this.drawNotes(s, W_, H);
       g.globalAlpha = 1;
@@ -315,7 +314,7 @@ export class HMD {
     const g = this.g;
     for (const t of s.targets) {
       const locking = t.lock > 0;
-      const color = t.locked ? RED : locking ? AMBER : RED;
+      const color = t.stale ? DIM : t.locked ? RED : locking ? AMBER : RED;
       if (t.onScreen) {
         const r = Math.max(12, Math.min(60, t.r));
         g.strokeStyle = color;
@@ -344,7 +343,14 @@ export class HMD {
           g.closePath();
           g.stroke();
         }
+        if (t.droneMarked) {
+          g.fillStyle = '#9fe8ff';
+          g.beginPath();
+          g.arc(t.x + r + 6, t.y - r - 6, 4, 0, Math.PI * 2);
+          g.fill();
+        }
         if (t.locked) this.text('LOCK', t.x, t.y - r - 12, { size: 14, color: RED, align: 'center' });
+        else if (t.designated) this.text('ZUGEWIESEN', t.x, t.y - r - 12, { size: 12, color: AMBER, align: 'center' });
         else if (t.marked) this.text('MARKIERT', t.x, t.y - r - 12, { size: 12, color: G, align: 'center' });
         this.text(`${t.label} ${Math.round(t.dist)}`, t.x, t.y + r + 12, { size: 12, color, align: 'center' });
         // second line: which side it shows us and its condition; its gun on us flashes
@@ -402,7 +408,10 @@ export class HMD {
   drawNotes(s, W_, H) {
     const now = performance.now();
     this.notes = this.notes.filter((n) => n.until > now);
-    this.notes.forEach((n, i) => this.text(n.text, W_ / 2, H * 0.28 + i * 26, { size: 18, color: n.color, align: 'center' }));
+    // in the panel views the notes move to the top edge, clear of the displays
+    const ny = s.panels === false ? 16 : H * 0.28;
+    const ns = s.panels === false ? 14 : 18;
+    this.notes.forEach((n, i) => this.text(n.text, W_ / 2, ny + i * (ns + 6), { size: ns, color: n.color, align: 'center' }));
     if (s.fire) {
       const on = Math.floor(now / 350) % 2 === 0;
       if (on) this.text('FEUER AN BORD', W_ / 2, H * 0.16, { size: 26, color: RED, align: 'center' });

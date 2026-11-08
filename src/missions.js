@@ -199,6 +199,7 @@ export const MISSIONS = [
     tag: 'AUFKLÄRUNG',
     diff: 2,
     lance: 0,
+    noDrone: true, // jammed: the pilot has to go and look in person
     desc: 'Allein in die Ruinen im Westen: vier feindliche Fahrzeuge mit dem Raketensucher markieren, ohne entdeckt zu werden. Den Rest erledigt die Artillerie.',
     title: 'AUFKLÄRUNG · SPÄHTRUPP',
     armed: true,
