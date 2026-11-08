@@ -109,12 +109,19 @@ Gebaut nach dem Innenraum aus dem Einstiegsvideo: Rundum-Kanzel aus breiter Fron
 
 - **Panzerhülle** aus olivgrünen, rostigen Stahlplatten, genieteten Spanten, Diamant-Riffelblech am Boden, Hydraulikleitungen und Kabelbäumen.
 - **Sichtschlitz** aus drei verschmutzten Panzerglasscheiben (Kratzer, Staub, Schlieren), getrennt durch Stahlstreben, dazu zwei kleine seitliche Sichtblöcke. Der Kopf lässt sich nur begrenzt drehen (±105° seitlich, 38° hoch, 62° runter).
-- **Drei Glas-Multifunktionsdisplays** (scharf, doppelte Auflösung, große Schrift; Taste 6 zoomt auf die Displays):
-  - *Mech Status*: Schadensbild der Baugruppen, Reaktor, Hitze, Kühlmittel, Hydraulik.
-  - *Kamera*: Live-Bild der Bugkamera mit 4-fach-Zoom, Kompassband, Entfernungsmesser, Nachtsicht.
-  - *Taktik*: Radar mit Sweep, Strukturen, Brände und feindliche Kontakte (500/1000 m).
+- **Drei Glas-Multifunktionsdisplays** (scharf, doppelte Auflösung; Taste 6 zoomt auf die Displays, die Helm-Panels blenden sich dann aus):
+  - *Mech-Status*: Struktur jedes Bauteils mit Balken und Prozent, Drahtgitter-Mech, Reaktor, Hitze in °C, Kühlmittelfluss, Hydraulikdruck in psi, Gyro, Bordspannung, Systemmatrix (Optik, Sensoren, Gyro, Kühlung, Raketenwerfer, Hydraulik: OK/✕), Löschflaschen und eine Statuszeile (im Gefecht: Feindzahl, Entfernung, wer dich anpeilt). Während eines Funkspruchs zeigt dieses Display das Gesicht des Sprechers.
+  - *Kamera*: Live-Bild der Bugkamera mit 4-fach-Zoom, Kompassband, Zielrahmen um jedes erfasste Fahrzeug im Bild (rot = zielt auf dich), Zieldatenblock (Typ, Entfernung, Uhrzeit-Richtung, gezeigte Seite, Verhalten, Zustand), Azimut/Elevation, Entfernungsmesser, Nachtsicht. Bei Optikausfall nur noch Schnee.
+  - *Taktik*: Radar mit Sweep und Entfernungsringen, Nordmarke, Fahrzeuge als Rauten mit Rohrrichtung (rot und lang = Rohr auf dich), Lanze als Pfeile mit Rufzeichen, gestrichelte Route zur Wegmarke, Nebelwände; daneben Kurs, Tempo, Schub, Gitterkoordinate, Wegmarke mit Ankunftszeit, nächster Feind, Zahl der Bedrohungen, Zustand der Lanze und Abschüsse.
 - **Analoge Instrumente** (Reaktor, Hydraulikdruck, Temperatur, Geschwindigkeit) mit gedämpften Zeigern, die bei jedem Schritt zittern.
-- **Holo-Visier statt HUD-Scheibe:** leuchtende Vektorsymbolik direkt auf der Panzerglaskanzel – Kompassband mit Blickrichtungsmarke, Horizontlinien, die mit dem Gang des Mechs wanken und kippen, Fadenkreuz, Bögen für Schub (links) und Geschwindigkeit (rechts), Wegmarke an ihrer echten Richtung im Gelände, Waffenzeile und blinkende Warnungen. Schalter HUD bzw. Taste H.
+- **Holo-Visier statt HUD-Scheibe:** leuchtende Vektorsymbolik direkt auf der Panzerglaskanzel:
+  - Mitte: Kompassband mit Blickrichtungsmarke, Horizontlinien und Nickleiter (±5°), die mit dem Gang des Mechs wanken, Querneigungsanzeige, Fadenkreuz, Bögen für Schub und Geschwindigkeit, Wegmarke an ihrer echten Richtung.
+  - Bedrohungsring um das Fadenkreuz: jedes bekannte Fahrzeug als Spitze in seiner Richtung, rot, wenn sein Rohr auf dich zeigt; dazu Laserwarnung „ANGEPEILT 2 · 11 UHR“ und „GRANATE“, wenn eine Granate knapp an dir vorbeigehen wird.
+  - Oben links **NAV**: Kurs, Blickrichtung, Wegmarke mit Entfernung, Peilung und Ankunftszeit, Geländehöhe und Neigung, Laserentfernung.
+  - Unten links **SYS**: Struktur, Reaktor, Hitze, Hydraulikdruck, ausgefallene Systeme, Feuer an Bord.
+  - Oben rechts **ZIEL**: Typ, Entfernung, Peilung, Uhrzeit-Richtung, welche Seite er dir zeigt (mit Panzerungsfaktor), Verhalten (Vorrücken, Gefecht, Deckung, Flanke), Tempo, Zustand, „RICHTET AUF DICH“.
+  - Unten rechts **WAFFEN**: Kanonenmunition und Rohrhitze, MG, Raketen mit Aufschaltfortschritt, Rohrstellung bzw. „außer Schwenkbereich“, Entfernung zum Zielpunkt.
+  - Unten: Auftrag mit Schritt, Abschüsse und Einsatzzeit. Schalter HUD bzw. Taste H.
 - **Bedienbare Schalter und Knöpfe** (Fadenkreuz + Klick): Kabinenlicht, HUD, Nachtsicht, Optik, Radarreichweite, Gyro-Stabilisator, Kühlmittelpumpe, Hydraulik, Generatoren, Master Caution u. a. Pumpe aus → Überhitzung mit Alarm; Hydraulik aus → der Mech kommt kaum noch vom Fleck; alle Generatoren aus → Cockpit wird dunkel.
 - **Joystick und Schubhebel** bewegen sich mit den Eingaben.
 - **Licht**: Tageslicht fällt mit weichen Schatten durch den Sichtschlitz, warme Deckenleuchte, rote Fußraumbeleuchtung, grünes Display-Streulicht, rote Alarmleuchte mit Drahtkäfig; Artillerieblitze erhellen kurz die Kabine. Staub schwebt in der Luft und wird bei jedem Schritt aufgewirbelt.
@@ -212,7 +219,7 @@ src/
   logic/gait.js        Gang: Gewichtsverlagerung, Nachschwingen, Kopf-Feder, Pendel (getestet)
   cockpit/cockpit.js   Cockpit-Aufbau und Beleuchtung
   cockpit/instruments.js  Rundinstrumente, Kippschalter, Leuchttaster, Alarmleuchte
-  cockpit/displays.js  Glas-Displays (Status, Kamera, Taktik)
+  cockpit/displays.js  Glas-Displays (Status mit Systemmatrix, Zielkamera, Taktik-Lagebild)
   cockpit/hud.js       Head-up-Display
   world/world.js       Gelände, Panorama, Ruinen, Wracks
   world/effects.js     Feuer, Rauch, Asche, Leuchtspur, Artillerie

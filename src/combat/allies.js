@@ -108,7 +108,7 @@ export class Allies {
     iff.position.set(0, MECH.height + 0.05, 0);
     obj.add(iff);
     w.obj = obj;
-    w.contact = { x, z, type: 'ally' };
+    w.contact = { x, z, type: 'ally', lance: true };
     this.world.contacts.push(w.contact);
     this.world.scene.add(obj);
     this.list.push(w);

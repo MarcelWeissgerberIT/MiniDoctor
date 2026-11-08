@@ -184,7 +184,7 @@ export class Enemies {
     e.pitch = 0;
     e.roll = 0;
     e.dustAcc = 0;
-    e.contact = { x, z, type: 'hostile' };
+    e.contact = { x, z, type: 'hostile', enemy: true };
     this.world.contacts.push(e.contact);
     this.world.scene.add(e.obj);
     this.list.push(e);
