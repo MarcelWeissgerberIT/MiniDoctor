@@ -22,7 +22,9 @@ import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
 import { Arsenal } from './combat/arsenal.js';
 import { Enemies } from './combat/enemies.js';
 import { HMD } from './combat/hmd.js';
-import { Mission2, M2_STEPS, M2_TEXT } from './mission2.js';
+import { Mission, MISSIONS, MISSION_TEXT } from './missions.js';
+import { Allies, LANCE } from './combat/allies.js';
+import { ORDERS } from './logic/allies.js';
 import { MISSILE, PART_NAMES, createParts, applyHit, mechDestroyed, weaponState, gunInLimits } from './logic/combat.js';
 import { fitModel } from './geom.js';
 
@@ -79,14 +81,25 @@ class Game {
     this.input = new Input(canvas);
     this.sound = new Sound(assets.audio);
     this.radio = new Radio(this.sound, ui);
-    this.voiceText = { ...VOICE_TEXT, ...EXTRA_VOICE, ...M2_TEXT };
+    this.voiceText = { ...VOICE_TEXT, ...EXTRA_VOICE, ...MISSION_TEXT };
     this.tutorial = new Tutorial(this, ui);
     this.ray = new THREE.Raycaster();
     this.assets = assets;
 
     // combat
     this.enemies = new Enemies(this);
+    this.allies = new Allies(this);
     this.arsenal = new Arsenal(this);
+    // the player as a target for enemy gunners (kept as one object: they remember it)
+    this.playerTarget = {
+      isPlayer: true,
+      x: 0,
+      z: 0,
+      speed: 0,
+      dead: false,
+      center: (out) => out.copy(this.mechObj.position).add(new THREE.Vector3(0, -0.7, 0)),
+      onHit: (s) => this.onPlayerHit(s),
+    };
     this.hmd = new HMD(document.getElementById('hmd'));
     this.parts = createParts();
     this.fire = null;
@@ -364,11 +377,118 @@ class Game {
       }
     }
     const m = this.mech;
-    this.enemies.update(dt, {
-      player: { x: m.x, z: m.z, speed: this.dead ? 0 : m.speed },
-      playerCenter: this.mechObj.position.clone().add(new THREE.Vector3(0, -0.7, 0)),
-    });
+    // recon: whatever the seeker locks gets marked
+    if (ms.locked && this.mission) {
+      const e = this.enemies.list.find((x) => x.id === ms.target);
+      if (e) this.mission.mark(e);
+    }
+    this.lanceOrders();
+    if (this.allies.list.length) this.allies.update(dt, { leader: { x: m.x, z: m.z, heading: m.heading, speed: m.speed }, time: this.time });
+    const pt = this.playerTarget;
+    pt.x = m.x;
+    pt.z = m.z;
+    pt.speed = m.speed;
+    pt.dead = this.dead;
+    const targets = [pt];
+    for (const w of this.allies.list) {
+      w.proxy ??= {
+        isPlayer: false,
+        get x() {
+          return w.x;
+        },
+        get z() {
+          return w.z;
+        },
+        get speed() {
+          return w.speed;
+        },
+        get dead() {
+          return w.dead;
+        },
+        center: (out) => this.allies.center(w, out),
+        onHit: (s) => this.allies.damage(w, s.dmg),
+      };
+      targets.push(w.proxy);
+    }
+    this.enemies.update(dt, { targets, playerCenter: pt.center(new THREE.Vector3()) });
+    this.mission?.update();
     this.updateFire(dt);
+  }
+
+  /** lance commands: B follow, V hold, T attack the locked / sighted target */
+  lanceOrders() {
+    const I = this.input;
+    if (!this.allies.list.length || this.dead) return;
+    let order = null;
+    let target = null;
+    if (I.hit('KeyB')) order = 'follow';
+    else if (I.hit('KeyV')) order = 'hold';
+    else if (I.hit('KeyT')) {
+      const ms = this.arsenal.w.missiles;
+      target = ms.target != null ? this.enemies.list.find((e) => e.id === ms.target && e.state !== 'dead') : null;
+      if (!target) {
+        // the enemy closest to the line of sight
+        const cam = this.worldCam;
+        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+        let best = 0.2;
+        for (const e of this.enemies.alive()) {
+          const a = this.enemies.center(e, new THREE.Vector3()).sub(cam.position).normalize().angleTo(dir);
+          if (a < best) {
+            best = a;
+            target = e;
+          }
+        }
+      }
+      if (!target) {
+        this.hmd.notify('KEIN ZIEL FÜR DIE LANZE', '#ffc15e', 1.5);
+        this.sound.beep(400, 0.12, 0.06);
+        return;
+      }
+      order = 'attack';
+    }
+    if (!order) return;
+    const who = this.allies.order(order, target?.id ?? null);
+    if (!who) return;
+    this.sound.beep(1200, 0.05, 0.05);
+    this.hmd.notify(`LANZE: ${ORDERS[order]}${target ? ' ' + (target.label || '') : ''}`, '#a6ffb8', 1.6);
+    // one of them acknowledges, taking turns
+    this.ackTurn = ((this.ackTurn ?? -1) + 1) % who.length;
+    this.wingCall(who[this.ackTurn], order, 0, true);
+  }
+
+  /** a wingman on the radio (key: follow, hold, attack, contact, kill, hit, down, ff) */
+  wingCall(w, kind, gap = 10, force = false) {
+    const key = `${w.voice}_${kind}`;
+    w.calls ??= {};
+    if (this.time - (w.calls[kind] ?? -1e9) < gap) return;
+    if (!force && kind !== 'down' && this.time < this.radioBusyUntil) return;
+    w.calls[kind] = this.time;
+    this.say(key);
+    if (kind === 'down') this.hmd.notify(`${w.name} AUSGEFALLEN`, '#ff5a48', 3);
+  }
+
+  onAllyKill(w, e) {
+    this.stats.lanceKills = (this.stats.lanceKills ?? 0) + 1;
+    this.onEnemyKilled(e, w);
+    this.wingCall(w, 'kill', 12);
+  }
+
+  allyFootstep(w) {
+    const d = Math.hypot(w.x - this.mech.x, w.z - this.mech.z);
+    if (d > 90) return;
+    const p = new THREE.Vector3(w.x, 0, w.z);
+    this.sound.one('footstep', Math.min(0.35, 9 / (d + 8)), 0.95 + Math.random() * 0.1, this.sound.outside, d / 343, this.panOf(p));
+    if (d < 40) this.shake += 0.08 * (1 - d / 40);
+  }
+
+  allyGun(p) {
+    const d = p.distanceTo(this.mechObj.position);
+    this.sound.one('gun_shot', clamp(30 / (d + 20), 0.03, 0.4), 0.85 + Math.random() * 0.1, this.sound.outside, Math.min(3, d / 343), this.panOf(p));
+  }
+
+  allyMissile(p) {
+    const d = p.distanceTo(this.mechObj.position);
+    this.sound.one('missile_launch', clamp(40 / (d + 20), 0.05, 0.6), 1, this.sound.outside, Math.min(3, d / 343), this.panOf(p));
   }
 
   onGunFired() {
@@ -391,10 +511,11 @@ class Game {
     this.cockpit.jolt(0.3);
   }
 
-  onEnemyKilled(e) {
+  onEnemyKilled(e, by = null) {
     this.stats.kills++;
-    this.hmd.notify(`${e.type === 'tank' ? 'PANZER' : 'SCHÜTZENPANZER'} ZERSTÖRT`, '#a6ffb8', 2.5);
-    this.mission?.call('m2_04', 12);
+    const what = e.type === 'tank' ? 'PANZER' : e.type === 'apc' ? 'SCHÜTZENPANZER' : 'DEPOTZIEL';
+    this.hmd.notify(`${what} ZERSTÖRT${by ? ' · ' + by.name : ''}`, '#a6ffb8', 2.5);
+    if (!by && this.mission?.def.id === 'm2') this.mission.call('m2_04', 12);
   }
 
   /** -1 (left) .. 1 (right) relative to where the pilot looks */
@@ -513,12 +634,18 @@ class Game {
 
   showResult(win) {
     const w = this.arsenal.w;
+    const def = this.mission?.def;
     const t = Math.max(0, this.time - this.stats.start);
+    const lance = this.allies.list;
+    if (win && def) saveProgress(def.id, t);
     ui.result(
       {
         win,
+        tag: def ? `MISSION ${def.num} · ${def.name.toUpperCase()}` : '',
+        sub: win ? def?.winText : 'BB-07 ist ausgefallen. Mission fehlgeschlagen.',
         rows: [
-          ['Abschüsse', `${this.stats.kills} / 6`],
+          ['Abschüsse', `${this.stats.kills - (this.stats.lanceKills ?? 0)}${lance.length ? ` (+${this.stats.lanceKills ?? 0} Lanze)` : ''} / ${def?.total ?? '-'}`],
+          ...(lance.length ? [['Lanze', lance.map((x) => `${x.name.replace('HAMMER', 'H')} ${x.dead ? '✕' : Math.round((x.hp / 160) * 100) + '%'}`).join(' · ')]] : []),
           ['Kanone', `${w.gun.hits} Treffer · ${w.gun.shots} Schuss`],
           ['Raketen', `${w.missiles.hits} Treffer · ${w.missiles.fired} gestartet`],
           ['Erlittene Treffer', String(this.stats.hitsTaken)],
@@ -526,7 +653,7 @@ class Game {
           ['Einsatzzeit', `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`],
         ],
       },
-      () => this.restartMission2(),
+      () => this.restartMission(),
       () => location.reload(),
     );
     this.input.unlock();
@@ -535,6 +662,7 @@ class Game {
   /** clean slate for a new fight */
   resetCombat() {
     this.enemies.clear();
+    this.allies.clear();
     this.arsenal.reset();
     this.parts = createParts();
     this.fire = null;
@@ -546,40 +674,45 @@ class Game {
     ui.smoke(0);
   }
 
-  async startMission2() {
+  async startCombatMission(def) {
     await this.sound.init();
     this.sound.startAmbience();
     this.input.enabled = true;
     this.input.lock();
     ui.hideTitle();
-    this.beginMission2();
+    this.beginMission(def);
   }
 
-  beginMission2() {
-    this.mode = 'mission2';
+  /** a combat mission from the catalogue: mech hot at the base, lance next to it */
+  beginMission(def) {
+    this.mode = 'combat';
     this.goHot();
-    this.setSwitches({ wpnArm: false, gun: false, missile: false, firesup: false });
+    const armed = !!def.armed;
+    this.setSwitches({ wpnArm: armed, gun: armed, missile: armed, firesup: false });
     this.sys.prev = { ...this.switchSnapshot() };
     this.resetCombat();
     this.mech = createMechState(0, 0, 0);
     this.groundY = this.world.heightAt(0, 0);
     this.body = new BodyDynamics();
     for (const h of this.world.hostiles) h.hidden = true;
-    this.mission = new Mission2(this);
-    this.tutorial = new Tutorial(this, ui, M2_STEPS, this.voiceText, 'GEFECHT · FEUERTAUFE');
+    this.world.setWaypoint(null);
+    this.mission = new Mission(this, def);
+    // the lance waits in front of the base gate
+    (def.allies || []).forEach((key, i) => this.allies.spawn(key, (i ? 1 : -1) * 16, -42, 0));
+    this.tutorial = new Tutorial(this, ui, def.steps, this.voiceText, def.title);
     this.onTutorialDone = () => this.showResult(true);
     if (this.external) this.setExternal(false);
     if (this.state !== 'cockpit') this.enterCockpitState();
     else this.tutorial.start();
     ui.fade(1, 0);
     ui.fade(0, 1.2);
-    ui.comms('HQ: BB-07, Feindkolonne im Anmarsch auf Sektor Kilo.');
+    if (def.comms) ui.comms(def.comms);
   }
 
-  restartMission2() {
+  restartMission() {
     ui.hideResult();
     this.input.lock();
-    this.beginMission2();
+    this.beginMission(this.mission.def);
   }
 
   complainNoPower() {
@@ -659,7 +792,7 @@ class Game {
     ui.skipHint(false);
     ui.fade(0, 0.4);
     this.updateMix();
-    if (this.mode === 'mission' || this.mode === 'mission2') this.tutorial.start();
+    if (this.mode === 'mission' || this.mode === 'combat') this.tutorial.start();
   }
 
   setWaypoint(i) {
@@ -1109,7 +1242,7 @@ class Game {
       const p = v.clone().project(cam);
       const onScreen = front && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.92;
       const mine = ms.target === e.id;
-      const t = { dist, label: e.type === 'tank' ? 'PZ' : 'SPZ', lock: mine ? ms.lockT / MISSILE.lockTime : 0, locked: mine && ms.locked, onScreen };
+      const t = { dist, label: e.label || (e.type === 'tank' ? 'PZ' : 'SPZ'), marked: e.marked, lock: mine ? ms.lockT / MISSILE.lockTime : 0, locked: mine && ms.locked, onScreen };
       if (onScreen) {
         t.x = ((p.x + 1) / 2) * W;
         t.y = ((1 - p.y) / 2) * H;
@@ -1118,6 +1251,32 @@ class Game {
       out.push(t);
     }
     return out;
+  }
+
+  /** wingmen for the helmet display: screen markers and the lance panel */
+  hmdAllies() {
+    if (!this.allies.list.length) return null;
+    const cam = this.worldCam;
+    const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const v = new THREE.Vector3();
+    return this.allies.list.map((w) => {
+      this.allies.center(w, v);
+      v.y += 1.6;
+      const dist = v.distanceTo(cam.position);
+      const front = v.clone().sub(cam.position).dot(camDir) > 0;
+      const p = v.clone().project(cam);
+      const on = front && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.92 && dist > 8;
+      return {
+        name: w.name,
+        hp: w.hp / 160,
+        dead: w.dead,
+        order: w.order,
+        dist,
+        onScreen: on,
+        x: ((p.x + 1) / 2) * innerWidth,
+        y: ((1 - p.y) / 2) * innerHeight,
+      };
+    });
   }
 
   drawHMD(dt) {
@@ -1137,7 +1296,7 @@ class Game {
       canWalk: this.sys.canWalk,
       aimRange: live.master ? this.aimRange : 0,
       weapons:
-        this.mode === 'mission2' || this.sw.wpnArm
+        this.mode === 'combat' || this.sw.wpnArm
           ? {
               master: live.master,
               gun: live.gun,
@@ -1153,7 +1312,8 @@ class Game {
               coneR: (innerHeight / 2 / Math.tan((cam.fov * DEG) / 2)) * Math.tan(MISSILE.lockCone),
             }
           : null,
-      parts: this.mode === 'mission2' || damaged ? this.parts : null,
+      parts: this.mode === 'combat' || damaged ? this.parts : null,
+      allies: this.hmdAllies(),
       targets: this.hmdTargets(),
       fire: !!this.fire,
     });
@@ -1245,6 +1405,27 @@ class Game {
   }
 }
 
+/* ------------------------------------------------------------ progress */
+
+const PROGRESS_KEY = 'battlebot-progress';
+function loadProgress() {
+  try {
+    return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+function saveProgress(id, time) {
+  try {
+    const p = loadProgress();
+    const best = p[id]?.best;
+    p[id] = { done: true, best: best ? Math.min(best, time) : time };
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(p));
+  } catch {
+    /* private mode: progress is not kept */
+  }
+}
+
 const KEY_HINTS = {
   'CABIN\nLIGHT': 'L',
   HUD: 'H',
@@ -1295,12 +1476,14 @@ Promise.all([assets.loadAll(), loadFonts()])
       game.input.enabled = true;
       ui.hideTitle();
       game.enterCockpitState();
-    } else if (params.has('m2')) {
-      // test hook: straight into mission 2
+    } else if (params.has('m2') || params.has('m')) {
+      // test hook: straight into a combat mission (?m=3 ...)
+      const def = MISSIONS.find((d) => d.num === +(params.get('m') || 2));
       game.input.enabled = true;
       ui.hideTitle();
-      game.beginMission2();
-    } else ui.ready(() => game.startMission(), () => game.startFree(), () => game.startMission2());
+      game.beginMission(def);
+    } else
+      ui.ready(MISSIONS, loadProgress(), (def) => (def.kind === 'tutorial' ? game.startMission() : game.startCombatMission(def)), () => game.startFree());
     renderer.compile(game.world.scene, game.worldCam);
     renderer.compile(game.cockpit.scene, game.cockpitCam);
     if (params.has('manual')) {

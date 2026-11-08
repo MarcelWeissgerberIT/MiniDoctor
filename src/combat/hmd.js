@@ -66,12 +66,54 @@ export class HMD {
     this.drawThrottle(s, 26, h - 130);
     if (s.weapons) this.drawWeapons(s, w - 26, h - 60);
     if (s.parts) this.drawParts(s.parts, w - 26, h - (s.weapons ? 230 : 100));
+    if (s.allies) this.drawLance(s.allies, 26, h - 400);
     g.restore();
+    if (s.allies) this.drawAllyMarkers(s.allies);
     if (s.weapons) this.drawSight(s, W_ / 2, H / 2);
     if (s.targets) this.drawTargets(s, W_, H);
     this.drawHits(dt, W_, H);
     this.drawNotes(s, W_, H);
     g.globalAlpha = 1;
+  }
+
+  /** lance panel: one line per wingman with health and current order */
+  drawLance(allies, x, y) {
+    const g = this.g;
+    const ORDER = { follow: 'FOLGEN', hold: 'HALTEN', attack: 'ANGRIFF' };
+    g.fillStyle = 'rgba(0,12,6,0.38)';
+    g.fillRect(x - 10, y - 26, 178, 22 + allies.length * 30);
+    this.text('LANZE  B·V·T', x, y - 14, { size: 12, color: DIM });
+    allies.forEach((a, i) => {
+      const yy = y + 8 + i * 30;
+      const col = a.dead ? RED : a.hp > 0.6 ? G : a.hp > 0.3 ? AMBER : RED;
+      this.text(a.name.replace('HAMMER ', 'H'), x, yy, { size: 15, color: col });
+      if (a.dead) {
+        this.text('AUSGEFALLEN', x + 40, yy, { size: 12, color: RED });
+        return;
+      }
+      g.strokeStyle = DIM;
+      g.lineWidth = 1.5;
+      g.strokeRect(x + 40, yy - 6, 54, 10);
+      g.fillStyle = col;
+      g.fillRect(x + 42, yy - 4, 50 * a.hp, 6);
+      this.text(ORDER[a.order] || '', x + 102, yy, { size: 12, color: G });
+    });
+  }
+
+  /** friendly mechs: green chevrons with the call sign, so nobody shoots them */
+  drawAllyMarkers(allies) {
+    const g = this.g;
+    for (const a of allies) {
+      if (!a.onScreen || a.dead) continue;
+      g.strokeStyle = '#7dffb0';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(a.x - 9, a.y - 8);
+      g.lineTo(a.x, a.y);
+      g.lineTo(a.x + 9, a.y - 8);
+      g.stroke();
+      this.text(`${a.name.replace('HAMMER ', 'H')} ${Math.round(a.dist)}`, a.x, a.y - 18, { size: 11, color: '#7dffb0', align: 'center', weight: 'normal' });
+    }
   }
 
   drawThrottle(s, x, y) {
@@ -277,6 +319,7 @@ export class HMD {
           g.stroke();
         }
         if (t.locked) this.text('LOCK', t.x, t.y - r - 12, { size: 14, color: RED, align: 'center' });
+        else if (t.marked) this.text('MARKIERT', t.x, t.y - r - 12, { size: 12, color: G, align: 'center' });
         this.text(`${t.label} ${Math.round(t.dist)}`, t.x, t.y + r + 12, { size: 12, color, align: 'center' });
       } else {
         // off-screen: a pointer at the edge of the visor

@@ -33,6 +33,8 @@ export const MISSILE = {
 
 export const ENEMY_TYPES = {
   tank: { hp: 100, speed: 7, engage: 560, reload: [6, 9], shellSpeed: 900, damage: [10, 17], burst: 1, radius: 3.4, height: 2.6 },
+  // static supply depot targets (fuel, generators, ammunition)
+  depot: { hp: 70, speed: 0, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.6, height: 2.2, static: true },
   apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4 },
 };
 
@@ -205,13 +207,15 @@ export function createEnemy(type, x, z, heading, goal) {
  */
 export function stepEnemy(e, dt, ctx) {
   const ev = [];
-  if (e.state === 'dead') return ev;
+  if (e.state === 'dead' || !ctx.player) return ev;
   const T = ENEMY_TYPES[e.type];
+  if (T.static) return ev;
+  const engage = e.engage ?? T.engage;
   const px = ctx.player.x;
   const pz = ctx.player.z;
   const dist = Math.hypot(px - e.x, pz - e.z);
-  if (e.state === 'advance' && dist <= T.engage) e.state = 'engage';
-  if (e.state === 'engage' && dist > T.engage * 1.35) e.state = 'advance';
+  if (e.state === 'advance' && dist <= engage) e.state = 'engage';
+  if (e.state === 'engage' && dist > engage * 1.35) e.state = 'advance';
 
   // where to drive: the rally point while advancing, slowly closing in while engaging
   let tx = e.goal[0];
@@ -220,7 +224,7 @@ export function stepEnemy(e, dt, ctx) {
   if (e.state === 'engage') {
     tx = px;
     tz = pz;
-    want = dist > T.engage * 0.7 ? T.speed * 0.35 : 0;
+    want = dist > engage * 0.7 ? T.speed * 0.35 : 0;
   } else if (Math.hypot(tx - e.x, tz - e.z) < 15) {
     tx = px;
     tz = pz;
@@ -270,4 +274,27 @@ export function damageEnemy(e, dmg) {
     return true;
   }
   return false;
+}
+
+/**
+ * Which of our mechs an enemy vehicle shoots at: the nearest one (the player counts a
+ * little closer, it is the obvious threat), kept for a while so the gunner does not
+ * swap targets every frame. targets: [{ x, z, dead, isPlayer }]
+ */
+export function chooseTarget(e, targets, dt, rand = Math.random) {
+  e.retarget = (e.retarget ?? 0) - dt;
+  if (e.target && !e.target.dead && e.retarget > 0) return e.target;
+  let best = null;
+  let bd = Infinity;
+  for (const t of targets) {
+    if (t.dead) continue;
+    const d = Math.hypot(t.x - e.x, t.z - e.z) * (t.isPlayer ? 0.85 : 1);
+    if (d < bd) {
+      bd = d;
+      best = t;
+    }
+  }
+  e.target = best;
+  e.retarget = 8 + rand() * 6;
+  return best;
 }
