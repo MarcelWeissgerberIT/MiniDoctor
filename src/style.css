@@ -1018,3 +1018,248 @@ body.mfdopen #subtitle {
   font-size: 15px;
   padding: 14px 16px;
 }
+
+/* touch controls (tablets and phones) */
+#touch {
+  --ts: 1;
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  display: none;
+  font-family: 'Barlow Condensed', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+@media (max-height: 600px) {
+  #touch {
+    --ts: 0.74;
+  }
+}
+@media (max-height: 420px) {
+  #touch {
+    --ts: 0.6;
+  }
+}
+#touch.show {
+  display: block;
+}
+#touch > div > *,
+#touch .t-lance > * {
+  pointer-events: auto;
+}
+#touch.panel .t-left,
+#touch.panel .t-right {
+  display: none;
+}
+body.touchmode #lockhint {
+  display: none !important;
+}
+#touch .t-btn {
+  font: 700 calc(16px * var(--ts)) 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.08em;
+  color: #ece6d6;
+  background: rgba(10, 12, 10, 0.55);
+  border: 1.5px solid rgba(166, 255, 184, 0.55);
+  border-radius: 10px;
+  touch-action: none;
+}
+#touch .t-btn.down {
+  background: rgba(166, 255, 184, 0.45);
+  color: #0d140e;
+}
+.t-left {
+  position: absolute;
+  left: calc(16px + env(safe-area-inset-left));
+  bottom: calc(64px * var(--ts) + 8px);
+  display: flex;
+  gap: calc(14px * var(--ts));
+  align-items: flex-end;
+}
+.t-throttle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  touch-action: none;
+}
+.t-track {
+  position: relative;
+  width: calc(58px * var(--ts));
+  height: calc(240px * var(--ts));
+  background: rgba(10, 12, 10, 0.55);
+  border: 1.5px solid rgba(166, 255, 184, 0.55);
+  border-radius: 10px;
+}
+.t-zero {
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  bottom: 23%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.t-fill {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  background: rgba(166, 255, 184, 0.35);
+}
+.t-fill.rev {
+  background: rgba(255, 193, 94, 0.45);
+}
+.t-knob {
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  height: 28px;
+  background: #d9a441;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.t-val {
+  font: 700 calc(20px * var(--ts)) 'JetBrains Mono', monospace;
+  color: #a6ffb8;
+  text-shadow: 0 1px 3px #000;
+}
+.t-lbl {
+  font-size: calc(12px * var(--ts));
+  letter-spacing: 0.2em;
+  color: rgba(166, 255, 184, 0.75);
+}
+.t-col {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--ts));
+  margin-bottom: calc(46px * var(--ts));
+}
+.t-steer {
+  position: relative;
+  width: calc(210px * var(--ts));
+  height: calc(76px * var(--ts));
+  background: rgba(10, 12, 10, 0.55);
+  border: 1.5px solid rgba(166, 255, 184, 0.55);
+  border-radius: 38px;
+  touch-action: none;
+}
+.t-steer span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(13px * var(--ts));
+  letter-spacing: 0.15em;
+  color: rgba(236, 230, 214, 0.6);
+}
+.t-steer-knob {
+  position: absolute;
+  top: 8%;
+  width: calc(56px * var(--ts));
+  height: 84%;
+  transform: translateX(-50%);
+  background: rgba(217, 164, 65, 0.85);
+  border-radius: 30px;
+  transition: left 0.08s;
+}
+#touch .t-stop {
+  height: calc(52px * var(--ts));
+  border-color: rgba(255, 106, 80, 0.8);
+  color: #ffb7a8;
+}
+.t-right {
+  position: absolute;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(64px * var(--ts) + 8px);
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    'tab mis'
+    'mg fire'
+    'zoom fire';
+  gap: calc(12px * var(--ts));
+  align-items: end;
+  justify-items: center;
+}
+.t-right [data-key='Tab'] {
+  grid-area: tab;
+}
+.t-right [data-key='KeyF'] {
+  grid-area: mis;
+}
+#touch .t-small {
+  width: calc(104px * var(--ts));
+  height: calc(50px * var(--ts));
+}
+#touch .t-mg {
+  grid-area: mg;
+  width: calc(96px * var(--ts));
+  height: calc(96px * var(--ts));
+  border-radius: 50%;
+}
+#touch .t-zoom {
+  grid-area: zoom;
+}
+#touch .t-fire {
+  grid-area: fire;
+  width: calc(136px * var(--ts));
+  height: calc(136px * var(--ts));
+  border-radius: 50%;
+  font-size: calc(22px * var(--ts));
+  border: 2px solid #ff6a50;
+  background: rgba(255, 106, 80, 0.28);
+  position: relative;
+}
+#touch .t-fire::after {
+  content: attr(data-n);
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22%;
+  font: 600 calc(13px * var(--ts)) 'JetBrains Mono', monospace;
+  color: #ffd2c9;
+}
+#touch .t-fire.down {
+  background: rgba(255, 106, 80, 0.75);
+}
+#touch .t-fire.off,
+#touch .t-mg.off {
+  opacity: 0.45;
+}
+.t-util {
+  position: absolute;
+  left: calc(14px + env(safe-area-inset-left));
+  top: calc(14px + env(safe-area-inset-top));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: calc(100vw - 340px);
+}
+#touch .t-u {
+  min-width: calc(64px * var(--ts));
+  height: calc(46px * var(--ts));
+  padding: 0 10px;
+}
+.t-lance {
+  display: none;
+  gap: 8px;
+}
+.t-lance.open {
+  display: flex;
+}
+
+/* small touch screens: the checklist and the radio line make room for the controls */
+@media (max-height: 600px) {
+  body.touchmode #checklist {
+    width: min(220px, 34vw);
+    max-height: 40vh;
+    font-size: 11px;
+  }
+  body.touchmode #checklist header {
+    font-size: 11px;
+  }
+  body.touchmode #comms {
+    display: none;
+  }
+}

@@ -3,6 +3,7 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { createWingman, stepWingman, setOrder, damageWingman, wingmanHitChance, WINGMAN } from '../logic/allies.js';
 import { fitModel } from '../geom.js';
 import { MECH, stepLength } from '../logic/mech.js';
+import { MechWalker } from '../world/mechwalk.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -73,8 +74,9 @@ export class Allies {
     w.hitCalls = 0;
     const src = this.g.assets.models.mech_rigged;
     const obj = new THREE.Group();
+    w.stepPhase = Math.random();
+    w.foot = 1;
     if (src) {
-      const clip = src.animations?.[0];
       const copy = cloneSkinned(src);
       const body = fitModel(copy, { height: MECH.height, rotY: Math.PI });
       body.traverse((o) => {
@@ -88,17 +90,8 @@ export class Allies {
       });
       obj.add(body);
       w.body = body;
-      if (clip) {
-        w.mixer = new THREE.AnimationMixer(copy);
-        w.action = w.mixer.clipAction(clip);
-        w.action.play();
-        w.action.setEffectiveWeight(0);
-        w.dur = clip.duration;
-        copy.traverse((o) => {
-          if (o.isBone && !w.hips && /hips/i.test(o.name)) w.hips = o;
-        });
-        w.hipsBind = w.hips?.position.clone();
-      }
+      obj.updateMatrixWorld(true);
+      w.walker = new MechWalker(body, obj);
     } else {
       obj.add(new THREE.Mesh(new THREE.BoxGeometry(3, 5, 2), new THREE.MeshStandardMaterial({ color: 0x556055 })));
     }
@@ -134,23 +127,20 @@ export class Allies {
     w.obj.rotation.set(w.dead ? 0.12 : 0, w.heading, w.dead ? 0.45 : 0);
     w.contact.x = w.x;
     w.contact.z = w.z;
-    // walk cycle locked to the simulated steps (one clip cycle = two steps)
-    if (w.mixer && !w.dead) {
+    // steps like the player's mech: the walker plants the feet in step with them
+    if (w.walker && !w.dead) {
       const sp = Math.abs(w.speed);
-      const rate = sp > 0.05 ? sp / stepLength(sp) : Math.abs(w.turn) * 1.2;
-      const before = w.phase;
-      w.phase = (w.phase + (dt * rate) / 2) % 1;
-      const wt = Math.min(1, sp / 1.2 + Math.abs(w.turn) * 0.6);
-      w.weight += (wt - w.weight) * Math.min(1, dt * 4);
-      w.action.setEffectiveWeight(w.weight);
-      w.action.time = w.phase * w.dur;
-      w.mixer.update(0);
-      if (w.hips) {
-        w.hips.position.x = w.hipsBind.x;
-        w.hips.position.z = w.hipsBind.z;
+      const stride = sp * dt + Math.abs(w.turn) * dt * 2.2;
+      if (stride > 0.0005) {
+        w.stepPhase += stride / stepLength(sp);
+        while (w.stepPhase >= 1) {
+          w.stepPhase -= 1;
+          w.foot = -w.foot;
+          if (sp > 0.5) this.g.allyFootstep?.(w); // a footfall, heard when close
+        }
       }
-      // a footfall at each half cycle: heard when close
-      if (sp > 0.5 && Math.floor(before * 2) !== Math.floor(w.phase * 2)) this.g.allyFootstep?.(w);
+      w.obj.updateMatrixWorld(true);
+      w.walker.update(dt, w, (x, z) => this.world.heightAt(x, z));
     }
   }
 

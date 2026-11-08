@@ -77,11 +77,13 @@ export class HMD {
       g.globalAlpha = 1;
       return;
     }
-    this.drawThrottle(s, 26, h - 130);
-    if (s.weapons) this.drawWeapons(s, w - 26, h - 60);
-    if (s.parts) this.drawParts(s.parts, w - 26, h - (s.weapons ? 230 : 100));
-    if (s.failed?.length) s.failed.forEach((f, i) => this.text(`✕ ${f}`, w - 26, h - (s.weapons ? 360 : 230) - i * 18, { size: 13, color: RED, align: 'right' }));
-    if (s.allies) this.drawLance(s.allies, 26, h - 400);
+    // with touch controls the lever and the fire buttons sit in the corners instead
+    if (!s.touch) this.drawThrottle(s, 26, h - 130);
+    if (s.weapons && !s.touch) this.drawWeapons(s, w - 26, h - 60);
+    const py = s.touch ? h - 360 : h - (s.weapons ? 230 : 100);
+    if (s.parts) this.drawParts(s.parts, w - 26, py);
+    if (s.failed?.length) s.failed.forEach((f, i) => this.text(`✕ ${f}`, w - 26, py - 130 - i * 18, { size: 13, color: RED, align: 'right' }));
+    if (s.allies) this.drawLance(s.allies, 26, s.touch ? h - 470 : h - 400);
     g.restore();
     if (s.allies) this.drawAllyMarkers(s.allies);
     if (s.weapons) this.drawSight(s, W_ / 2, H / 2);
