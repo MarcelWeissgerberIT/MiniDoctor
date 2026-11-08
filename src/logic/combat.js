@@ -42,10 +42,10 @@ export const MISSILE = {
 };
 
 export const ENEMY_TYPES = {
-  tank: { hp: 100, speed: 7, engage: 560, reload: [6, 9], shellSpeed: 900, damage: [10, 17], burst: 1, radius: 3.4, height: 2.6 },
+  tank: { hp: 100, speed: 7, engage: 560, reload: [6, 9], shellSpeed: 800, damage: [10, 17], burst: 1, radius: 3.4, height: 2.6, traverse: 0.7, skill: 1 },
   // static supply depot targets (fuel, generators, ammunition)
   depot: { hp: 70, speed: 0, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.6, height: 2.2, static: true },
-  apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4 },
+  apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4, traverse: 1.4, skill: 0.8 },
 };
 
 export const PARTS = ['head', 'torso', 'larm', 'rarm', 'lleg', 'rleg'];
@@ -223,21 +223,52 @@ export function createEnemy(type, x, z, heading, goal) {
   };
 }
 
+/** a firing position off to one side of the target, `angle` round from the line to it */
+export function flankPoint(e, target, angle, range) {
+  const a = Math.atan2(e.x - target.x, e.z - target.z) + angle;
+  return [target.x + Math.sin(a) * range, target.z + Math.cos(a) * range];
+}
+
 /**
- * ctx: { player: {x, z, speed}, colliders: [{x,z,r}], rand }
- * returns events: [{ kind: 'fire', id }]
+ * ctx: { player: {x, z, speed}, colliders: [{x,z,r}], rand, findCover(e) -> [x, z] | null }
+ * States: advance -> engage; badly hit: cover (smoke, pull back behind a building) ->
+ * flank (come back from another side) -> engage.
+ * returns events: [{ kind: 'fire' | 'smoke', id }]
  */
 export function stepEnemy(e, dt, ctx) {
   const ev = [];
   if (e.state === 'dead' || !ctx.player) return ev;
   const T = ENEMY_TYPES[e.type];
   if (T.static) return ev;
+  const rand = ctx.rand || Math.random;
   const engage = e.engage ?? T.engage;
   const px = ctx.player.x;
   const pz = ctx.player.z;
   const dist = Math.hypot(px - e.x, pz - e.z);
   if (e.state === 'advance' && dist <= engage) e.state = 'engage';
   if (e.state === 'engage' && dist > engage * 1.35) e.state = 'advance';
+  // badly damaged: smoke and pull back into cover, once
+  if ((e.state === 'engage' || e.state === 'advance') && e.hp < T.hp * 0.5 && !e.coverUsed) {
+    e.coverUsed = true;
+    const c = ctx.findCover?.(e);
+    if (c) {
+      e.state = 'cover';
+      e.coverGoal = c;
+      e.coverT = 0;
+      ev.push({ kind: 'smoke', id: e.id });
+    }
+  }
+  if (e.state === 'cover') {
+    e.coverT += dt;
+    if (e.coverT > 9 + rand() * 4) {
+      e.state = 'flank';
+      e.flankGoal = flankPoint(e, ctx.player, (rand() < 0.5 ? -1 : 1) * 1.2, engage * 0.65);
+      e.flankT = 0;
+    }
+  } else if (e.state === 'flank') {
+    e.flankT += dt;
+    if (Math.hypot(e.flankGoal[0] - e.x, e.flankGoal[1] - e.z) < 12 || e.flankT > 30) e.state = 'engage';
+  }
 
   // where to drive: the rally point while advancing, slowly closing in while engaging
   let tx = e.goal[0];
@@ -247,6 +278,12 @@ export function stepEnemy(e, dt, ctx) {
     tx = px;
     tz = pz;
     want = dist > engage * 0.7 ? T.speed * 0.35 : 0;
+  } else if (e.state === 'cover') {
+    [tx, tz] = e.coverGoal;
+    want = Math.hypot(tx - e.x, tz - e.z) > 5 ? T.speed : 0;
+  } else if (e.state === 'flank') {
+    [tx, tz] = e.flankGoal;
+    want = T.speed * 0.8;
   } else if (Math.hypot(tx - e.x, tz - e.z) < 15) {
     tx = px;
     tz = pz;
@@ -274,10 +311,14 @@ export function stepEnemy(e, dt, ctx) {
   e.x += -Math.sin(e.heading) * e.speed * dt;
   e.z += -Math.cos(e.heading) * e.speed * dt;
 
-  // gunnery
-  if (e.state === 'engage') {
+  // the turret tracks the target on its own; the gun fires once it is laid on
+  e.turret ??= 0;
+  const wantRel = wrap(Math.atan2(-(px - e.x), -(pz - e.z)) - e.heading);
+  const err = wrap(wantRel - e.turret);
+  e.turret = wrap(e.turret + clamp(err, -T.traverse * dt, T.traverse * dt));
+  if (e.state !== 'advance' && dist <= engage * 1.35) {
     e.reload -= dt;
-    const facing = Math.abs(wrap(Math.atan2(-(px - e.x), -(pz - e.z)) - e.heading)) < 0.35;
+    const facing = Math.abs(wrap(wantRel - e.turret)) < 0.04;
     if (e.reload <= 0 && facing) {
       ev.push({ kind: 'fire', id: e.id, dist });
       e.burstLeft = T.burst - 1;
@@ -289,6 +330,86 @@ export function stepEnemy(e, dt, ctx) {
     }
   }
   return ev;
+}
+
+/* ---------------------------------------------------------- ballistics */
+
+const gauss = (rand) => {
+  const u = Math.max(1e-9, rand());
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+};
+
+/**
+ * Where a gunner lays the gun: leads the target by the shell's flight time (misjudging
+ * its speed a little) and scatters with range. A moving target is much harder to hit;
+ * the hit itself is decided by the flying shell, not by a dice roll.
+ * shooter/target: {x, y, z}, target.vx/vz: m/s
+ */
+export function gunnerAim(shooter, target, shellSpeed, skill = 1, rand = Math.random) {
+  const d = Math.hypot(target.x - shooter.x, target.y - shooter.y, target.z - shooter.z);
+  const t = d / shellSpeed;
+  const lead = 1 + (rand() - 0.5) * 0.8; // estimates the target speed within +-40 %
+  // tracking a walking (bobbing, weaving) mech spreads the shots: moving is the best armour
+  const run = Math.hypot(target.vx || 0, target.vz || 0) * t;
+  const sigma = (0.5 + d / 240) / skill;
+  const sh = sigma + (run * 0.55) / skill;
+  return {
+    x: target.x + (target.vx || 0) * t * lead + gauss(rand) * sh,
+    y: target.y + gauss(rand) * (sigma * 0.6 + run * 0.12),
+    z: target.z + (target.vz || 0) * t * lead + gauss(rand) * sh,
+  };
+}
+
+/* -------------------------------------------------------------- armour */
+
+// thick in front, thin at the back; damage factors
+export const ARMOR = { front: 0.5, side: 1, rear: 1.6, turret: 0.6 };
+export const MECH_ARMOR = { front: 0.8, side: 1, rear: 1.35 };
+
+/**
+ * Which face of a hull a shot from (fx, fz) strikes: hull at (x, z) facing `heading`.
+ * returns 'front' | 'side' | 'rear'
+ */
+export function armorFace(heading, x, z, fx, fz) {
+  const a = Math.abs(wrap(Math.atan2(-(fx - x), -(fz - z)) - heading));
+  return a < Math.PI / 4 ? 'front' : a > (3 * Math.PI) / 4 ? 'rear' : 'side';
+}
+
+/**
+ * Part of the 5 m mech a shell struck, from the impact point in the mech's own frame:
+ * lx = metres to the right of the centre line, h = metres above the ground.
+ */
+export function hitPart(lx, h) {
+  if (h > 4.4 && Math.abs(lx) < 0.8) return 'head'; // the small sensor head on top
+  if (h < 2.3) return lx < 0 ? 'lleg' : 'rleg';
+  if (Math.abs(lx) > 1.0) return lx < 0 ? 'larm' : 'rarm';
+  return 'torso';
+}
+
+export function applyHitAt(parts, damage, part) {
+  parts[part] = Math.max(0, parts[part] - damage / 100);
+  return part;
+}
+
+/* ------------------------------------------------------- system damage */
+
+export const SYSTEMS = { optics: 'OPTIK', sensors: 'SENSOREN', gyro: 'GYRO', cooling: 'KÜHLUNG', missiles: 'RAKETENWERFER', hydraulics: 'HYDRAULIK' };
+const SYSTEM_BY_PART = {
+  head: ['optics', 'sensors'],
+  torso: ['cooling', 'gyro'],
+  larm: ['missiles'],
+  rarm: [],
+  lleg: ['hydraulics'],
+  rleg: ['hydraulics'],
+};
+
+/** a hit may knock out a system behind the struck part; returns its key or null */
+export function systemHit(sys, part, damage, rand = Math.random) {
+  const list = SYSTEM_BY_PART[part].filter((k) => !sys[k]);
+  if (!list.length || rand() > 0.05 + damage / 90) return null;
+  const k = list[Math.floor(rand() * list.length)];
+  sys[k] = true;
+  return k;
 }
 
 export function damageEnemy(e, dmg) {

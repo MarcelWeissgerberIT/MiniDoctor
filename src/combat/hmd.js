@@ -15,6 +15,7 @@ export class HMD {
     this.g = canvas.getContext('2d');
     this.hits = [];
     this.notes = [];
+    this.armor = null;
     this.resize();
     addEventListener('resize', () => this.resize());
   }
@@ -28,6 +29,11 @@ export class HMD {
   /** a hit from a direction relative to where the pilot looks (rad, + = right) */
   hitFrom(angle) {
     this.hits.push({ angle, t: 0 });
+  }
+
+  /** where our round struck the armour (next to the pipper) */
+  armorHit(text, color) {
+    this.armor = { text, color, t: 0 };
   }
 
   /** short line of text in the middle of the visor */
@@ -66,10 +72,20 @@ export class HMD {
     this.drawThrottle(s, 26, h - 130);
     if (s.weapons) this.drawWeapons(s, w - 26, h - 60);
     if (s.parts) this.drawParts(s.parts, w - 26, h - (s.weapons ? 230 : 100));
+    if (s.failed?.length) s.failed.forEach((f, i) => this.text(`✕ ${f}`, w - 26, h - (s.weapons ? 360 : 230) - i * 18, { size: 13, color: RED, align: 'right' }));
     if (s.allies) this.drawLance(s.allies, 26, h - 400);
     g.restore();
     if (s.allies) this.drawAllyMarkers(s.allies);
     if (s.weapons) this.drawSight(s, W_ / 2, H / 2);
+    if (this.armor) {
+      this.armor.t += dt;
+      if (this.armor.t > 1.3) this.armor = null;
+      else {
+        g.globalAlpha = (0.35 + 0.65 * s.power) * Math.min(1, (1.3 - this.armor.t) * 3);
+        this.text(this.armor.text, W_ / 2 + 38, H / 2 - 34, { size: 13, color: this.armor.color });
+        g.globalAlpha = 0.35 + 0.65 * s.power;
+      }
+    }
     if (s.targets) this.drawTargets(s, W_, H);
     this.drawHits(dt, W_, H);
     this.drawNotes(s, W_, H);

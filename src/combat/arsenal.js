@@ -97,13 +97,17 @@ export class Arsenal {
     }
     stepLock(w, cands, dt, ctx.live.missile);
 
+    const failed = this.g.failed ?? {};
     if (ctx.trigger && ctx.inLimits) {
       const wasHot = w.gun.overheated;
       if (fireGun(w, ctx.live.gun)) this.shoot(ctx);
       if (w.gun.overheated && !wasHot) this.g.onGunOverheat?.();
     }
     if (ctx.triggerMG && ctx.inLimits && fireMG(w, ctx.live.mg)) this.shoot(ctx, true);
-    if (ctx.launch) {
+    if (ctx.launch && failed.missiles) {
+      this.g.sound.beep(260, 0.18, 0.08);
+      this.g.hmd?.notify('RAKETENWERFER BLOCKIERT', '#ff5a48', 1.5);
+    } else if (ctx.launch) {
       const m = fireMissile(w, ctx.live.missile);
       if (m) this.launch(m.target, ctx);
       else if (ctx.live.missile) this.g.sound.beep(300, 0.12, 0.06);
@@ -116,7 +120,10 @@ export class Arsenal {
   shoot(ctx, mg = false) {
     const muzzle = ctx.rig.muzzle(new THREE.Vector3(), mg);
     const dir = ctx.rig.forward(new THREE.Vector3());
-    const spread = mg ? MG.spread : GUN.spread;
+    // without the gyro the arm shakes with every step
+    const spread = (mg ? MG.spread : GUN.spread) * (this.g.failed?.gyro ? 2.6 : 1);
+    // a holed coolant loop: the barrel heats up much faster
+    if (!mg && this.g.failed?.cooling) this.w.gun.heat = Math.min(1, this.w.gun.heat + GUN.heatPerShot * 0.7);
     dir.x += (Math.random() - 0.5) * 2 * spread;
     dir.y += (Math.random() - 0.5) * 2 * spread;
     dir.z += (Math.random() - 0.5) * 2 * spread;
@@ -129,6 +136,7 @@ export class Arsenal {
       prev: muzzle.clone(),
       mg,
       dmg: mg ? MG.damage : GUN.damage,
+      from: muzzle.clone(),
       tracer: !mg || shot % MG.tracerEvery === 0,
     });
     const f = muzzle.clone().addScaledVector(dir, mg ? 0.3 : 0.5);
@@ -158,7 +166,7 @@ export class Arsenal {
         this.fx.impact(_a.x, _a.y, _a.z, 'metal', r.mg ? 0.5 : 1.2);
         if (e.state !== 'dead') {
           this.w[r.mg ? 'mg' : 'gun'].hits++;
-          enemies.damage(e, r.dmg);
+          enemies.damage(e, r.dmg, r.from, _a, r.mg ? 'mg' : 'gun');
         }
         done = true;
         break;
@@ -246,7 +254,12 @@ export class Arsenal {
       m.age += dt;
       m.speed = Math.min(MISSILE.speedMax, m.speed + MISSILE.accel * dt);
       const tgt = m.target != null ? enemies.list.find((e) => e.id === m.target) : null;
-      if (tgt && tgt.state !== 'dead') enemies.center(tgt, m.aim).y += 0.3;
+      if (tgt && tgt.state !== 'dead') {
+        enemies.center(tgt, _b).y += 0.3;
+        // a smoke screen between seeker and target breaks the track: it flies on blind
+        if (this.world.smokeScreens.length && this.world.smokeBlocks(m.p, _b)) m.target = null;
+        else m.aim.copy(_b);
+      }
       if (m.age > 0.2) {
         const to = _a.copy(m.aim).sub(m.p).normalize().toArray();
         m.dir = steer(m.dir, to, MISSILE.turn * dt * (m.age < 0.6 ? 2 : 1));
@@ -289,7 +302,9 @@ export class Arsenal {
     const enemies = this.g.enemies;
     if (direct && direct.state !== 'dead') {
       this.w.missiles.hits++;
-      enemies.damage(direct, MISSILE.damage);
+      // the side it strikes follows from where it came in
+      const from = new THREE.Vector3(p.x - m.dir[0] * 20, p.y, p.z - m.dir[2] * 20);
+      enemies.damage(direct, MISSILE.damage, from, p, 'missile');
     }
     for (const e of enemies.alive()) {
       if (e === direct) continue;
