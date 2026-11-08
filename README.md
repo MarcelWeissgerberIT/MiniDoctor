@@ -89,7 +89,7 @@ Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung, 
 - **Markieren:** Jedes Fahrzeug, das ihre Kamera sieht (320 m Reichweite, freie Sicht, Nebel blockiert), wird 30 s lang markiert.
 - **Rückkehr:** Bei schwachem Akku oder auf **Q** kommt sie von selbst zurück, landet auf dem Mech und lädt (95 s Flugzeit, 40 s Ladezeit).
 - **Abschuss:** Schützenpanzer in der Nähe können sie abschießen; eine Ersatzdrohne wird nach 45 s montiert.
-- **Steilangriff:** Ein markiertes Ziel ohne eigene Sicht greift die Rakete von oben an. Sie steigt auf 95 m und stürzt auf das dünne Dach (×1,5).
+- **Steilangriff:** Ein markiertes Ziel ohne eigene Sicht greift die Rakete von oben an. Sie steigt erst steil 40 m vom Werfer weg (frei von Ruinen um den Mech), dann auf bis zu 95 m, fliegt langsamer (170 m/s) und stürzt auf das dünne Dach (×1,5). Mit Profil STEIL fliegt sie immer so, außer auf ein sichtbares Ziel näher als 140 m.
 - **Mission 5:** Dort ist die Drohne durch einen Störsender gesperrt.
 
 ## Pause, Einstellungen, Erfolge
