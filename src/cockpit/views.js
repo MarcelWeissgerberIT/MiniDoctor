@@ -37,6 +37,7 @@ export const CONTROL_VIEW = {
   radar: 'center',
   legLock: 'center',
   lock: 'displays',
+  wiper: 'center',
 };
 
 export const ZOOM_FOV = 28;

@@ -7,7 +7,8 @@ import '@fontsource/barlow-condensed/latin-700.css';
 import './style.css';
 import { Assets } from './assets.js';
 import { Cockpit } from './cockpit/cockpit.js';
-import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms, drawTargetList, drawDrone, drawComputer } from './cockpit/displays.js';
+import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms } from './cockpit/displays.js';
+import { drawBoardComputer } from './cockpit/computer.js';
 import { Drone } from './combat/drone.js';
 import { MechWalker } from './world/mechwalk.js';
 import { Comms, speakerOf } from './cockpit/comms.js';
@@ -50,7 +51,7 @@ const compass = (a) => Math.round(((-a / DEG) % 360) + 360) % 360;
 /** clock position of a bearing relative to the hull (+ = left), 12 = ahead */
 const clockOf = (rel) => ((Math.round(-rel / (Math.PI / 6)) % 12) + 12) % 12 || 12;
 const LOOK = { yaw: 125 * DEG, up: 62 * DEG, down: 68 * DEG, sens: 0.0022 };
-const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv', 'wpnArm', 'gun', 'missile', 'firesup', 'mg'];
+const SWITCH_KEYS = ['batt', 'apu', 'gen1', 'gen2', 'hydp', 'pump', 'coolant', 'reactor', 'stab', 'legLock', 'lights', 'hud', 'optics', 'nv', 'wpnArm', 'gun', 'missile', 'firesup', 'mg', 'wiper'];
 const newStats = () => ({ kills: 0, hitsTaken: 0, start: 0 });
 const EXTRA_VOICE = {
   v18: 'Negativ. Ohne Kühlmittelpumpe und Hydraulikdruck zündet der Reaktor nicht. Prüfen Sie Ihre Checkliste.',
@@ -63,6 +64,7 @@ const EXTRA_VOICE = {
 
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.localClippingEnabled = true; // the wipers vanish behind the body at the screen edges
 renderer.setPixelRatio(Math.min(devicePixelRatio, params.has('lowres') ? 1 : 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -81,7 +83,9 @@ class Game {
     this.ui = ui;
     this.world = new World(assets);
     this.feedRT = new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType });
-    this.cockpit = new Cockpit(assets, this.feedRT);
+    // the drone's picture for the board computer
+    this.droneRT = new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType });
+    this.cockpit = new Cockpit(assets, this.feedRT, this.droneRT);
     const env = this.world.makeEnvironment(renderer);
     this.world.scene.environment = env;
     this.cockpit.scene.environment = env;
@@ -163,6 +167,8 @@ class Game {
     this.autoT = 0;
     // interactive displays: page per display, the cursor in the target list, what is open
     this.pages = { status: 'status', camera: 'camera' };
+    this.compPage = 'targets'; // board computer: targets | drone | fc
+    this.dustAcc = 0;
     this.selected = null;
     this.listFilter = 'all';
     this.listScroll = 0;
@@ -302,6 +308,7 @@ class Game {
   setView(name) {
     if (this.state !== 'cockpit') return;
     if (name === 'external') return this.setExternal(!this.external);
+    if (name === 'computer') return this.toggleDisplay('computer');
     if (this.external) this.setExternal(false);
     if (name === this.view && name !== 'front') name = 'front';
     this.openMfd = null;
@@ -690,6 +697,13 @@ class Game {
     if (d < 140) {
       const k = size * (1 - d / 140);
       setTimeout(() => (this.shake += k * 1.4), (d / 343) * 1000);
+    }
+    // close blasts throw mud and grit onto the front screen, most from in front
+    if (d < 75 && this.state === 'cockpit') {
+      const rel = Math.atan2(-(p.x - this.mech.x), -(p.z - this.mech.z)) - this.mech.heading;
+      const front = 0.35 + 0.65 * Math.max(0, Math.cos(rel));
+      const amount = Math.min(1, size * Math.pow(1 - d / 75, 1.5) * front * 1.6);
+      if (amount > 0.03) setTimeout(() => this.cockpit.splatter(amount, -Math.sin(rel)), (d / 343) * 1000 + 120);
     }
   }
 
@@ -1133,6 +1147,7 @@ class Game {
     for (const k in c.mfd) c.mfd[k].on = s.mainBus && !this.dead;
     c.hud.on = s.mainBus && this.sw.hud;
     c.mfd.camera.uniforms.useFeed.value = s.mainBus && this.sw.optics ? 1 : 0;
+    c.mfd.computer.uniforms.useFeed.value = s.mainBus && this.compPage === 'drone' && this.drone.airborne ? 1 : 0;
     c.mfd.camera.uniforms.nv.value = this.sw.nv ? 1 : 0;
 
     // warnings and master caution
@@ -1433,11 +1448,10 @@ class Game {
       // the displays: click to open, and once open, the soft keys and contents
       this.hovered = null;
       if (this.openMfd === scr) {
-        const h = this.cockpit.mfd[scr].hitAt(hits[0].uv.x * 512, (1 - hits[0].uv.y) * 384);
-        ui.hover(h ? null : null, false, this.input.mouse);
+        ui.hover(null, false, this.input.mouse);
         if (inp.clicked) this.mfdClick(scr, hits[0].uv);
       } else {
-        ui.hover('Display öffnen', false, this.input.mouse);
+        ui.hover(scr === 'computer' ? 'Bordcomputer öffnen  [7]' : 'Display öffnen', false, this.input.mouse);
         if (inp.clicked && this.sys.mainBus) this.openDisplay(scr);
       }
       return;
@@ -1452,7 +1466,7 @@ class Game {
   hotkeys() {
     const I = this.input;
     const sw = this.cockpit.switches;
-    const map = { KeyL: 'lights', KeyH: 'hud', KeyN: 'nv', KeyR: 'radar', KeyG: 'stab', KeyO: 'optics' };
+    const map = { KeyL: 'lights', KeyH: 'hud', KeyN: 'nv', KeyR: 'radar', KeyG: 'stab', KeyO: 'optics', KeyK: 'wiper' };
     const flying = this.droneHands();
     for (const [code, key] of Object.entries(map)) if (I.hit(code) && !(flying && code === 'KeyR')) sw[key].toggle();
     if (I.hit('Digit9') || I.hit('Numpad9')) this.setExternal(!this.external);
@@ -1461,6 +1475,7 @@ class Game {
     // displays, targets and the drone
     if (I.hit('KeyP')) this.pause();
     if (I.hit('KeyM')) this.toggleDisplay('tactical');
+    if (I.hit('Digit7') || I.hit('Numpad7')) this.toggleDisplay('computer');
     if (I.hit('Tab')) this.nextTarget();
     if (I.hit('KeyQ')) this.drone.toggle(this.droneGoal());
   }
@@ -1484,9 +1499,20 @@ class Game {
     const q = mesh.getWorldQuaternion(new THREE.Quaternion());
     const n = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
-    // far enough that the whole bezel shows, a little above centre so the subtitles stay clear
-    const eye = c.clone().addScaledVector(n, 0.39);
-    const look = c.clone().addScaledVector(up, -0.012);
+    // far enough that the whole bezel shows, a little above centre so the subtitles stay clear;
+    // the wide board computer is fitted to the window
+    const mfd = this.cockpit.mfd[slot];
+    let dist = 0.39;
+    let lift = -0.012;
+    if (slot === 'computer') {
+      // the band between the checklist (top right) and the view bar: 73 % of the height,
+      // its centre a little below the middle of the window
+      const t = Math.tan((23 * Math.PI) / 180);
+      dist = Math.max((mfd.height + 0.09) / (2 * t * 0.73), (mfd.width + 0.07) / (2 * t * (innerWidth / innerHeight)));
+      lift = 0.15 * dist * t;
+    }
+    const eye = c.clone().addScaledVector(n, dist);
+    const look = c.clone().addScaledVector(up, lift);
     this.focusPose.pos.copy(eye);
     this.focusPose.q.setFromRotationMatrix(new THREE.Matrix4().lookAt(eye, look, up));
     this.focusPose.fov = 46;
@@ -1495,7 +1521,7 @@ class Game {
     this.openMfd = slot;
     this.input.cursorMode = true;
     this.input.unlock();
-    ui.setView('displays');
+    ui.setView(slot === 'computer' ? 'computer' : 'displays');
     ui.mfdOpen(true);
     ui.lockHint(false);
     this.sound.click('button');
@@ -1513,8 +1539,8 @@ class Game {
   /** a click on a display: its soft keys, tabs, list rows, map */
   mfdClick(slot, uv) {
     const mfd = this.cockpit.mfd[slot];
-    const x = uv.x * 512;
-    const y = (1 - uv.y) * 384;
+    const x = uv.x * mfd.w;
+    const y = (1 - uv.y) * mfd.h;
     const h = mfd.hitAt(x, y);
     if (!h) return;
     this.sound.click('button');
@@ -1526,12 +1552,20 @@ class Game {
     const list = this.intel?.list ?? [];
     const sel = list.find((t) => t.id === this.selected);
     switch (a.type) {
+      case 'computer':
+        this.openComputer(a.page);
+        break;
+      case 'close':
+        this.closeDisplay();
+        break;
       case 'page':
-        if (slot === 'status' || slot === 'camera') this.pages[slot] = a.page;
+        if (slot === 'computer') this.compPage = a.page === 'comp' ? 'fc' : a.page;
+        else if (slot === 'status' || slot === 'camera') this.pages[slot] = a.page;
         break;
       case 'select':
         this.selected = a.id;
-        if (slot === 'camera') this.designate(a.id); // on the picture a click is enough
+        // on a picture (hull or drone camera) a click is enough
+        if (slot === 'camera' || (slot === 'computer' && this.compPage === 'drone')) this.designate(a.id);
         break;
       case 'designate':
         if (sel) this.designate(sel.id);
@@ -1647,9 +1681,15 @@ class Game {
     return { fwd, turn, climb };
   }
 
-  /** the pilot flies the drone: manual mode with the drone page open */
+  /** the pilot flies the drone: manual mode with the drone page of the board computer open */
   droneHands() {
-    return this.drone.d.mode === 'manual' && this.drone.state === 'manual' && this.openMfd === 'camera' && this.pages.camera === 'drone';
+    return this.drone.d.mode === 'manual' && this.drone.state === 'manual' && this.openMfd === 'computer' && this.compPage === 'drone';
+  }
+
+  /** the board computer, on a page (targets, drone, fc) or where it was left */
+  openComputer(page) {
+    if (page) this.compPage = page === 'comp' ? 'fc' : page;
+    if (this.openMfd !== 'computer') this.openDisplay('computer');
   }
 
   /** Tab: the next known vehicle (by range) goes to the seeker */
@@ -1720,29 +1760,8 @@ class Game {
     // an open display is redrawn every frame so clicks answer at once
     const due = (slot, k) => this.openMfd === slot || f % 4 === k;
     const ms = this.arsenal.w.missiles;
-    if (link && this.pages.status === 'status' && this.openMfd !== 'status') {
+    if (link && this.openMfd !== 'status') {
       if (f % 2 === 0) drawComms(c.mfd.status, link, this.time);
-    } else if (this.pages.status === 'comp') {
-      if (due('status', 0))
-        drawComputer(c.mfd.status, {
-          fc: this.fc,
-          drone: this.drone.info(),
-          target: this.intel?.list.find((t) => t.id === ms.designated) ?? null,
-          locked: ms.locked && ms.target === ms.designated,
-          gunAuto: this.gunAuto,
-        });
-    } else if (this.pages.status === 'targets') {
-      if (due('status', 0))
-        drawTargetList(c.mfd.status, {
-          list: this.intel?.list ?? [],
-          selected: this.selected,
-          designated: ms.designated,
-          locked: ms.locked && ms.target === ms.designated,
-          lockT: ms.lockT / MISSILE.lockTime,
-          filter: this.listFilter,
-          scroll: this.listScroll,
-          droneDisabled: this.drone.jammed || this.drone.state === 'lost',
-        });
     } else if (due('status', 0))
       drawStatus(c.mfd.status, {
         ...s,
@@ -1753,9 +1772,7 @@ class Game {
         message: warning || this.statusLine(),
         messageColor: warning ? '#ff4a3a' : this.messageColor,
       });
-    if (this.pages.camera === 'drone') {
-      if (due('camera', 1)) drawDrone(c.mfd.camera, { drone: this.drone.info(), feed: this.drone.airborne, boxes: this.drone.airborne ? this.feedBoxes(this.drone.cam) : [], selected: this.selected });
-    } else if (due('camera', 1))
+    if (due('camera', 1))
       drawCamera(c.mfd.camera, {
         heading: m.heading,
         range: this.range,
@@ -1794,6 +1811,68 @@ class Game {
         drone: this.drone.info(),
         droneMode: this.droneMode,
       });
+    if (due('computer', 3)) this.drawComputerScreen(clock);
+  }
+
+  /** dust settles on the front screen while walking; the wipers (main bus) clear it */
+  updateGlass(dt) {
+    if (this.state === 'cockpit') {
+      this.dustAcc += dt * (0.00004 + Math.abs(this.mech.speed) * 0.00004);
+      if (this.dustAcc > 0.004) {
+        this.cockpit.dustGlass(this.dustAcc);
+        this.dustAcc = 0;
+      }
+    }
+    const on = !!this.sw.wiper && this.sys.mainBus && !this.dead;
+    if (this.cockpit.updateWipers(dt, on)) this.sound.one('wiper', 0.55, 0.95 + Math.random() * 0.1);
+  }
+
+  /** the board computer: target list, drone and fire control with a side bar */
+  drawComputerScreen(clock) {
+    const ms = this.arsenal.w.missiles;
+    const w = this.arsenal.w;
+    const list = this.intel?.list ?? [];
+    const des = list.find((t) => t.id === ms.designated) ?? null;
+    const sel = list.find((t) => t.id === this.selected) ?? null;
+    const locked = ms.locked && ms.target === ms.designated;
+    const drone = this.drone.info();
+    const fc = this.fc;
+    const live = this.weaponLive || {};
+    drawBoardComputer(this.cockpit.mfd.computer, {
+      page: this.compPage,
+      time: `${String(clock.getHours()).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}`,
+      targets: {
+        list,
+        selected: this.selected,
+        designated: ms.designated,
+        locked,
+        lockT: ms.lockT / MISSILE.lockTime,
+        filter: this.listFilter,
+        scroll: this.listScroll,
+        droneDisabled: this.drone.jammed || this.drone.state === 'lost',
+      },
+      drone: { drone, feed: this.drone.airborne, boxes: this.compPage === 'drone' && this.drone.airborne ? this.feedBoxes(this.drone.cam) : [], selected: this.selected },
+      fc: { fc, drone, target: des, locked, gunAuto: this.gunAuto },
+      sel,
+      des,
+      desId: ms.designated,
+      locked,
+      lockT: ms.lockT / MISSILE.lockTime,
+      autoTarget: fc.autoTarget,
+      droneDisabled: this.drone.jammed || this.drone.state === 'lost',
+      weapons: {
+        ammo: w.gun.ammo,
+        heat: w.gun.heat,
+        overheated: w.gun.overheated,
+        mg: live.mg ? w.mg.ammo : 'AUS',
+        missiles: w.missiles.count,
+        gunMode: { single: 'EINZEL', burst: 'FEUERSTOSS', auto: 'DAUER' }[fc.gunMode],
+        gunAim: { manual: 'FREI', lead: 'VORHALT', auto: 'AUTO' }[fc.gunAim],
+        profile: { direct: 'DIREKT', auto: 'AUTO', top: 'STEIL' }[fc.missileProfile],
+        salvo: fc.salvo,
+      },
+      threats: list.filter((t) => t.aiming && !t.stale),
+    });
   }
 
   /** tracked vehicles inside the hull camera's picture (512 x 384 display units) */
@@ -2104,6 +2183,7 @@ class Game {
     this.cockpit.setDaylight(0.85 + 0.15 * Math.sin(this.mech.heading * 1.3), fx.flashLevel * (0.25 + inFront), new THREE.Color(1, 0.6, 0.3));
 
     this.cockpit.update(dt, this.time, { throttle: this.mech.throttle, turnInput: this.turnInput || 0, lookPitchRate: 0 }, this.hovered);
+    this.updateGlass(dt);
     const w = this.arsenal.w;
     const live = this.weaponLive || {};
     const intel = this.updateIntel();
@@ -2171,10 +2251,17 @@ class Game {
   render() {
     // the boarding video covers the screen: no need to draw the world behind it
     if (this.state === 'entry' && this.entry.phase === 'video') return;
-    const droneFeed = this.pages.camera === 'drone' && this.drone.airborne;
-    if (this.frame % 2 === 0 && this.sys.mainBus && this.state === 'cockpit' && !this.external && (droneFeed || (this.sw.optics && !this.failed.optics))) {
+    const live = this.sys.mainBus && this.state === 'cockpit' && !this.external;
+    // hull camera on even frames, the drone's picture (board computer) on odd ones
+    if (this.frame % 2 === 0 && live && this.sw.optics && !this.failed.optics) {
       renderer.setRenderTarget(this.feedRT);
-      renderer.render(this.world.scene, droneFeed ? this.drone.cam : this.feedCam);
+      renderer.render(this.world.scene, this.feedCam);
+      renderer.setRenderTarget(null);
+    }
+    const droneFeed = this.compPage === 'drone' && this.drone.airborne && (this.openMfd === 'computer' ? this.frame % 2 === 1 : this.frame % 4 === 1);
+    if (droneFeed && live) {
+      renderer.setRenderTarget(this.droneRT);
+      renderer.render(this.world.scene, this.drone.cam);
       renderer.setRenderTarget(null);
     }
     this.post.render(this.time, this.shock);
@@ -2210,6 +2297,7 @@ const KEY_HINTS = {
   'STAB\nASSIST': 'G',
   OPTICS: 'O',
   'MASTER CAUTION quittieren': 'Q',
+  WIPER: 'K',
 };
 
 /* ----------------------------------------------------------------- boot */

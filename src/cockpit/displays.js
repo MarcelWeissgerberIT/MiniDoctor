@@ -16,6 +16,7 @@ const frag = /* glsl */ `
 uniform sampler2D map;
 uniform sampler2D feed;
 uniform float useFeed;
+uniform vec4 feedRect;
 uniform float nv;
 uniform float time;
 uniform float power;
@@ -31,8 +32,9 @@ void main(){
   uv.x += jolt * 0.015 * step(0.94, fract(uv.y * 7.0 + time * 13.0)) * sin(time * 140.0);
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
   vec3 col = vec3(0.012, 0.006, 0.003);
-  if (useFeed > 0.5) {
-    vec3 f = texture2D(feed, uv).rgb;
+  vec2 fu = (uv - feedRect.xy) / (feedRect.zw - feedRect.xy);
+  if (useFeed > 0.5 && fu.x >= 0.0 && fu.x <= 1.0 && fu.y >= 0.0 && fu.y <= 1.0) {
+    vec3 f = texture2D(feed, fu).rgb;
     float l = dot(f, vec3(0.299, 0.587, 0.114));
     l = pow(max(l * 1.4, 0.0), mix(0.8, 0.55, nv)) * mix(0.95, 1.7, nv);
     l += (hash(uv * 400.0 + time) - 0.5) * mix(0.03, 0.12, nv);
@@ -52,11 +54,16 @@ void main(){
 
 /** One CRT multifunction display: canvas overlay + optional live camera feed. */
 export class MFD {
-  constructor(width, height, { feed = null } = {}) {
-    // drawn in 512 x 384 units on a double-resolution canvas so the symbols stay sharp
+  constructor(width, height, { feed = null, units = [512, 384], feedRect = [0, 0, 1, 1] } = {}) {
+    // drawn in display units (512 x 384 on the small displays) on a double-resolution
+    // canvas so the symbols stay sharp
+    this.w = units[0];
+    this.h = units[1];
+    this.width = width;
+    this.height = height;
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 1024;
-    this.canvas.height = 768;
+    this.canvas.width = this.w * 2;
+    this.canvas.height = this.h * 2;
     this.ctx = this.canvas.getContext('2d');
     this.tex = new THREE.CanvasTexture(this.canvas);
     this.tex.colorSpace = THREE.SRGBColorSpace;
@@ -65,6 +72,7 @@ export class MFD {
       map: { value: this.tex },
       feed: { value: feed ? feed.texture : null },
       useFeed: { value: feed ? 1 : 0 },
+      feedRect: { value: new THREE.Vector4(...feedRect) },
       nv: { value: 0 },
       time: { value: 0 },
       power: { value: 0 },
@@ -101,6 +109,41 @@ export class MFD {
     const g = this.ctx;
     this.hits = [];
     g.setTransform(2, 0, 0, 2, 0, 0);
+    if (clearAlpha < 1) g.clearRect(0, 0, this.w, this.h);
+    else {
+      g.fillStyle = '#0a0503';
+      g.fillRect(0, 0, this.w, this.h);
+    }
+    g.lineJoin = 'round';
+    return g;
+  }
+
+  end() {
+    this.tex.needsUpdate = true;
+  }
+}
+
+/**
+ * A 512 x 384 page drawn into part of a bigger screen (the board computer): the page
+ * functions draw as on a small display, their click regions land in the host's units.
+ */
+export class Region {
+  constructor(host, x, y, s = 1) {
+    this.host = host;
+    this.x = x;
+    this.y = y;
+    this.s = s;
+    this.ctx = host.ctx;
+    this.hits = [];
+    this.embedded = true; // the host draws the page tabs
+    this.w = 512;
+    this.h = 384;
+  }
+
+  begin(clearAlpha = 1) {
+    const g = this.ctx;
+    this.hits = [];
+    g.setTransform(2 * this.s, 0, 0, 2 * this.s, 2 * this.x, 2 * this.y);
     if (clearAlpha < 1) g.clearRect(0, 0, 512, 384);
     else {
       g.fillStyle = '#0a0503';
@@ -111,7 +154,9 @@ export class MFD {
   }
 
   end() {
-    this.tex.needsUpdate = true;
+    const s = this.s;
+    for (const h of this.hits) this.host.hits.push({ ...h, x: this.x + h.x * s, y: this.y + h.y * s, w: h.w * s, h: h.h * s });
+    this.ctx.setTransform(2, 0, 0, 2, 0, 0);
   }
 }
 
@@ -140,6 +185,11 @@ function frame(g, title, right) {
 
 /** page tabs in the title bar; the active one is lit */
 function tabs(mfd, g, items, active, x = 14, y = 14) {
+  if (mfd.embedded) {
+    const it = items.find(([id]) => id === active);
+    text(g, it ? it[1] : '', x + 4, y + 13, { size: 19, color: W, weight: 'bold' });
+    return x;
+  }
   let xx = x;
   for (const [id, label] of items) {
     g.font = `bold 17px ${FONT}`;
@@ -203,6 +253,8 @@ export function drawStatus(mfd, s) {
   const g = mfd.begin();
   frame(g, '', s.time);
   tabs(mfd, g, LEFT_TABS, 'status', 14, 14);
+  // targets, drone and fire control: the board computer
+  key(mfd, g, 'COMPUTER ►', 290, 15, 136, { type: 'computer' }, { h: 26 });
   const col = (v) => (v > 0.7 ? G : v > 0.4 ? AMBER : RED);
   // structure per part: name, bar, percent
   const parts = [
@@ -684,10 +736,11 @@ export function drawTactical(mfd, s) {
   mfd.end();
 }
 
-const LEFT_TABS = [
-  ['status', 'STATUS'],
+const LEFT_TABS = [['status', 'STATUS']];
+// the same pages in the board computer
+const COMP_TABS = [
   ['targets', 'ZIELE'],
-  ['comp', 'COMP'],
+  ['comp', 'FEUERLEITUNG'],
 ];
 
 /* ------------------------------------------------------ fire control */
@@ -695,8 +748,8 @@ const LEFT_TABS = [
 /** COMP: the fire-control computer — target acquisition, cannon, missiles, drone */
 export function drawComputer(mfd, s) {
   const g = mfd.begin();
-  frame(g, '', 'FEUERLEIT');
-  tabs(mfd, g, LEFT_TABS, 'comp', 14, 14);
+  frame(g, '', mfd.embedded ? '' : 'FEUERLEIT');
+  tabs(mfd, g, COMP_TABS, 'comp', 14, 14);
   const fc = s.fc;
   const row = (label, y, items, key, opts = {}) => {
     text(g, label, 14, y + 12, { size: 13, color: GD, weight: 'bold' });
@@ -763,7 +816,7 @@ export function drawComputer(mfd, s) {
   text(g, t ? `${fc.autoTarget ? 'AUTO' : 'ZIEL'}: ${t.label} ${Math.round(t.dist)} m ${t.clock}h${s.locked ? ' · LOCK' : ''}` : fc.autoTarget ? 'AUTO-ZIEL: SUCHT' : 'KEIN ZIEL ZUGEWIESEN', 16, 310, { size: 16, color: t ? (s.locked ? RED : AMBER) : GD, weight: 'bold' });
   text(g, `ROHR ${s.gunAuto ? 'GEFÜHRT' : fc.gunAim === 'lead' ? 'VORHALT' : 'FREI'} · ${fc.gunMode === 'single' ? 'EINZEL' : fc.gunMode === 'burst' ? 'FEUERSTOSS' : 'DAUER'}`, 16, 334, { size: 14, color: s.gunAuto ? G : W });
   text(g, `RAK ${fc.missileProfile === 'top' ? 'STEIL' : fc.missileProfile === 'direct' ? 'DIREKT' : 'AUTO'} ×${fc.salvo}`, 16, 356, { size: 14, color: W });
-  text(g, s.drone.mode === 'manual' ? 'DROHNE: DISPLAY MITTE → DROHNE' : '', 496, 356, { size: 12, color: '#9fe8ff', align: 'right' });
+  text(g, s.drone.mode === 'manual' ? 'HANDFLUG: SEITE DROHNE' : '', 496, 356, { size: 12, color: '#9fe8ff', align: 'right' });
   mfd.end();
 }
 
@@ -781,7 +834,7 @@ const FILTERS = [
 export function drawTargetList(mfd, s) {
   const g = mfd.begin();
   frame(g, '', `${s.list.length} BEKANNT`);
-  tabs(mfd, g, LEFT_TABS, 'targets', 14, 14);
+  tabs(mfd, g, COMP_TABS, 'targets', 14, 14);
   FILTERS.forEach(([id, label], i) => key(mfd, g, label, 14 + i * 64, 52, 58, { type: 'filter', filter: id }, { on: s.filter === id }));
   const rows = s.list.filter((t) => (s.filter === 'all' ? true : s.filter === 'threat' ? t.aiming : s.filter === 'marked' ? t.marked : t.type === s.filter));
   const cols = [
@@ -839,8 +892,10 @@ export function drawTargetList(mfd, s) {
 
 /** the two pages of the centre display share their tabs (corners: the tape runs in between) */
 function camTabs(mfd, g, active) {
+  if (mfd.embedded) return;
   key(mfd, g, 'KAMERA', 6, 6, 88, { type: 'page', page: 'camera' }, { on: active === 'camera', h: 22 });
-  key(mfd, g, 'DROHNE', 418, 6, 88, { type: 'page', page: 'drone' }, { on: active === 'drone', h: 22 });
+  // the drone lives in the board computer now
+  key(mfd, g, 'DROHNE ►', 400, 6, 106, { type: 'computer', page: 'drone' }, { h: 22 });
 }
 
 const DRONE_STATES = { docked: 'ANGEDOCKT', launch: 'START', transit: 'ANFLUG', orbit: 'SUCHE', return: 'RÜCKKEHR', land: 'LANDUNG', lost: 'VERLOREN', manual: 'HANDFLUG' };
@@ -880,6 +935,12 @@ export function drawDrone(mfd, s) {
       text(g, `${b.label} ${Math.round(b.dist)}`, b.x, b.y - r - 9, { size: 13, align: 'center', color: g.strokeStyle, weight: 'bold' });
       mfd.hits.push({ x: b.x - r - 6, y: b.y - r - 6, w: (r + 6) * 2, h: (r + 6) * 2, action: { type: 'select', id: b.id } });
     }
+    // in the board computer the side bar carries the telemetry and keys: the picture stays clear
+    if (mfd.embedded) {
+      text(g, `${names[d.state]} · ${Math.round(d.alt)} m · ${Math.round(d.battery * 100)}%`, 14, 18, { size: 13, color: '#9fe8ff', weight: 'bold' });
+      mfd.end();
+      return;
+    }
     g.fillStyle = 'rgba(10,5,3,0.55)';
     g.fillRect(8, 40, 150, 104);
     text(g, names[d.state], 16, 54, { size: 15, color: '#9fe8ff', weight: 'bold' });
@@ -890,6 +951,10 @@ export function drawDrone(mfd, s) {
     text(g, `${Math.round(d.battery * 100)}%`, 150, 129, { size: 13, color: d.battery > 0.3 ? G : RED, align: 'right' });
   }
   const up2 = up && d.state !== 'land';
+  if (mfd.embedded) {
+    mfd.end();
+    return;
+  }
   key(mfd, g, up ? 'RÜCKRUF' : 'START', 14, 340, 120, up2 ? { type: 'recall' } : { type: 'launch' }, { dim: d.jammed || d.state === 'lost' || (up && !up2), on: up });
   key(mfd, g, 'ZUM ZIEL', 140, 340, 120, { type: 'droneTo' }, { dim: s.selected == null || d.jammed || d.state === 'lost' });
   const modes = { orbit: 'KREISEN', escort: 'BEGLEITEN', ahead: 'VORAUS', manual: 'MANUELL' };
@@ -904,7 +969,7 @@ export function drawDrone(mfd, s) {
     text(g, `${Math.round(d.speed * 3.6)} km/h  ${String(Math.round(((-d.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}°`, 326, 74, { size: 14, color: W });
     text(g, 'W/S TEMPO · A/D DREHEN', 326, 94, { size: 12, color: G });
     text(g, 'R/F HÖHE', 326, 112, { size: 12, color: G });
-    text(g, 'KLICK = MARKIEREN', 326, 130, { size: 12, color: G });
+    text(g, 'KLICK = ZUWEISEN', 326, 130, { size: 12, color: G });
   }
   mfd.end();
 }
@@ -968,3 +1033,6 @@ export function drawComms(mfd, c, time) {
   }
   mfd.end();
 }
+
+/** drawing helpers for the board computer */
+export const UI = { text, key, bar, frame, FONT, G, W, GD, AMBER, RED };

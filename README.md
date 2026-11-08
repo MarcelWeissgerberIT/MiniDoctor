@@ -10,7 +10,7 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 | # | Mission | Typ | Inhalt |
 |---|---|---|---|
-| 1 | Kalt & dunkel | Grundausbildung | In der Basis: einsteigen, Kaltstart nach Checkliste, laufen, Displays bedienen, Schießbahn (Kanone, MG, Rakete über die Karte), Drohne und Steilangriff, Feuerleitrechner (Auto-Ziel, Vorhalt, Salve, Drohnen-Handflug), Brandübung, Lanzenbefehle, Außenansicht |
+| 1 | Kalt & dunkel | Grundausbildung | In der Basis: einsteigen, Kaltstart nach Checkliste, laufen, Displays bedienen, Schießbahn (Kanone, MG, Rakete über die Karte), Drohne und Steilangriff, Bordcomputer mit Feuerleitung (Auto-Ziel, Vorhalt, Salve, Drohnen-Handflug), Scheibenwischer, Brandübung, Lanzenbefehle, Außenansicht |
 | 2 | Feuertaufe | Verteidigung | Waffen scharf machen, zwei Panzerwellen an der Panzersperre abwehren |
 | 3 | Schulter an Schulter | Lanze · Verteidigung | Mit Hammer 2 und Hammer 3: Befehle lernen, zwei Wellen (9 Fahrzeuge) abwehren |
 | 4 | Depotschlag | Lanze · Angriff | Mit der Lanze zum Feinddepot (700 m NO), Wachen ausschalten, 4 Depotziele zerstören, Verstärkung abwehren |
@@ -59,15 +59,25 @@ Jedes der drei Glas-Displays lässt sich **öffnen**: anklicken (z. B. aus der D
 
 | Display | Seiten | Bedienung |
 |---|---|---|
-| links | STATUS · ZIELE · COMP | COMP = Feuerleitrechner (siehe unten). ZIELE: Zielliste aller bekannten Fahrzeuge mit Entfernung, Uhrzeit-Richtung, gezeigter Seite, Verhalten und Zustand; Filter (Alle, Panzer, SPz, Bedrohung, Drohnenmarkierung), Blättern, AUFSCHALTEN / FREI, DROHNE ZUM ZIEL |
-| Mitte | KAMERA · DROHNE | Bugkamera (Zielrahmen anklicken = zuweisen) bzw. Drohnenkamera mit Höhe, Entfernung, Akku, Markierungen, START / RÜCKRUF, ZUM ZIEL |
+| links | STATUS | Strukturen, Systeme, Reaktor, Löschmittel; bei Funkverkehr das Gesicht des Sprechers · **COMPUTER ►** öffnet den Bordcomputer |
+| Mitte | KAMERA | Bugkamera (Zielrahmen anklicken = zuweisen) · **DROHNE ►** öffnet den Bordcomputer auf der Drohnenseite |
 | rechts | TAKTIK | Karte: Fahrzeug anklicken = auswählen, AUFSCHALTEN; Zoom 250 bis 2000 m; DROHNE ►, dann Punkt auf der Karte anklicken |
 
 **Bekannte Ziele:** Ein Fahrzeug erscheint auf Displays, HUD und Helmdisplay erst, wenn du, ein Flügelmann oder die Drohne es gesehen hat. Bei neuen Wellen kommt eine Erstmeldung vom HQ. Verschwindet ein Ziel aus der Sicht, bleibt es 20 s an seiner letzten bekannten Position stehen (mit „?“).
 
 **Zuweisen:** Mit **Tab** oder über ein Display bekommt der Raketensucher ein Ziel. Er schaltet darauf auf, wenn es bis zu 75° neben der Rumpfachse liegt und du es siehst oder die Drohne es markiert. Dafür musst du nicht mehr hinschauen. Der Werfer schwenkt beim Start in Richtung des zugewiesenen Ziels (höchstens 75° neben der Rumpfachse), die Rakete fliegt ein paar Meter über der Sichtlinie und lenkt dann ins Ziel.
 
-## Feuerleitrechner (linkes Display, Seite COMP)
+## Bordcomputer (Taste 7)
+
+Ein eigener Breitbild-Bildschirm an der rechten Wand über dem Tastenfeld, mit eigener Ansicht: **Taste 7**, Klick auf den Bildschirm, **COMPUTER ►** auf dem linken oder **DROHNE ►** auf dem mittleren Display (Touch: COMP). Oben liegen drei Reiter, links die Seite, rechts eine Seitenleiste mit den Details des Moments. Esc, Rechtsklick oder ✕ schließt.
+
+| Seite | Inhalt | Seitenleiste |
+|---|---|---|
+| ZIELE | Zielliste aller bekannten Fahrzeuge mit Entfernung, Uhrzeit-Richtung, gezeigter Seite, Verhalten und Zustand; Filter (Alle, Panzer, SPz, Bedrohung, Drohnenmarkierung), Blättern, AUFSCHALTEN / FREI, DROHNE ZUM ZIEL | Zieldaten des gewählten Fahrzeugs (Entfernung, Richtung, Fahrt, Lage, gezeigte Seite, Erfassung, Zustand, ob es auf dich zielt), Sucherstatus, AUTO-ZIEL |
+| DROHNE | Das Kamerabild der Drohne mit Fadenkreuz und Zielrahmen (anklicken = zuweisen) | Zustand, Akku und Restflugzeit, Höhe, Entfernung, Tempo, Kurs, Markierungen, Modi, START / RÜCKRUF, ZUM ZIEL, Hinweise zum Handflug |
+| FEUERLEITUNG | Der Feuerleitrechner (siehe unten) | Waffen: Munition, Rohrhitze, Feuerart, MG, Raketen, Sucher; alle Fahrzeuge, die ihr Rohr gerade auf dich richten (anklicken = auswählen) |
+
+## Feuerleitung (Bordcomputer, Seite FEUERLEITUNG)
 
 Der Rechner nimmt dir Zielerfassung, Richten und Vorhalt ab. Alle Einstellungen bleiben gespeichert.
 
@@ -79,13 +89,17 @@ Der Rechner nimmt dir Zielerfassung, Richten und Vorhalt ab. Alle Einstellungen 
 | RAKETEN | DIREKT / AUTO / STEIL · SALVE 1/2 | Flugprofil: DIREKT immer flach, AUTO steil nur bei einem markierten Ziel ohne Sicht, STEIL immer von oben. SALVE 2 schickt zwei Raketen im Abstand von 0,3 s |
 | DROHNE | KREISEN / BEGLEITEN / VORAUS / MANUELL · START / RÜCKRUF | siehe Aufklärungsdrohne |
 
+## Frontscheibe und Scheibenwischer
+
+Auf der Außenseite der Frontscheibe sammelt sich Schmutz: Nahe Einschläge (unter 75 m) werfen Matsch und Splitt dagegen, umso mehr, je näher und je weiter vorn sie liegen. Beim Laufen setzen sich Staub und Asche ab. Zwei parallel laufende Wischer an der Unterkante (Schalter **WIPER** an der Mittelkonsole unten, Taste **K**, Touch: WISCHER) wischen in Zügen von 1,7 s frei, was ihre Blätter überstreichen. Die oberen Ecken bleiben schmutzig. Die Wischer brauchen den Hauptstrom, beim Ausschalten fahren sie in die Parkstellung unter der Scheibenkante.
+
 ## Aufklärungsdrohne
 
 Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung, alternativ schickst du sie über die Karte oder die Zielliste zu einem Punkt bzw. Ziel.
 
 - **Flug:** Sie steigt auf, fliegt mit 26 m/s hin und kreist in 70 m Höhe (Radius 110 m) über dem Gebiet.
-- **Modi** (COMP oder Drohnenseite, MODUS-Taste): **KREISEN** über einem Punkt, **BEGLEITEN** in 70 m Radius über dem Mech (zieht mit), **VORAUS** 380 m vor dem Mech in Laufrichtung, **MANUELL** = Handflug.
-- **Handflug:** Modus MANUELL, mittleres Display auf DROHNE öffnen. Dann steuern **W/S** das Tempo (bis 108 km/h), **A/D** die Richtung und **R/F** die Höhe (12–160 m über Grund); der Mech bleibt so lange stehen. Die Drohne fliegt höchstens 1,5 km weit. Auf dem Tablet erscheinen dafür Schubhebel (= Tempo), Lenkfeld und HÖHE ▲/▼.
+- **Modi** (Bordcomputer, Seite FEUERLEITUNG oder DROHNE): **KREISEN** über einem Punkt, **BEGLEITEN** in 70 m Radius über dem Mech (zieht mit), **VORAUS** 380 m vor dem Mech in Laufrichtung, **MANUELL** = Handflug.
+- **Handflug:** Modus MANUELL, Bordcomputer auf der Seite DROHNE offen. Dann steuern **W/S** das Tempo (bis 108 km/h), **A/D** die Richtung und **R/F** die Höhe (12–160 m über Grund); der Mech bleibt so lange stehen. Die Drohne fliegt höchstens 1,5 km weit. Auf dem Tablet erscheinen dafür Schubhebel (= Tempo), Lenkfeld und HÖHE ▲/▼.
 - **Markieren:** Jedes Fahrzeug, das ihre Kamera sieht (320 m Reichweite, freie Sicht, Nebel blockiert), wird 30 s lang markiert.
 - **Rückkehr:** Bei schwachem Akku oder auf **Q** kommt sie von selbst zurück, landet auf dem Mech und lädt (95 s Flugzeit, 40 s Ladezeit).
 - **Abschuss:** Schützenpanzer in der Nähe können sie abschießen; eine Ersatzdrohne wird nach 45 s montiert.
@@ -141,7 +155,8 @@ Feindliche Fahrzeuge wählen ihr Ziel unter allen Mechs der Lanze. Das Helmdispl
    - ÜZ 2, Munitionskisten, mit dem MG
    - ÜZ 3 auf der Taktikkarte anklicken, AUFSCHALTEN, Rakete
    - ÜZ 4 steht hinter einer Ruine: Drohne starten, sie markiert das Ziel, dann Rakete im Steilangriff
-   - **Feuerleitrechner:** Seite COMP öffnen, AUTO-ZIEL einschalten, Kanone auf FEUERSTOSS und Zielhilfe AUTO, dann ÜZ 5 treffen, der quer über die Bahn fährt (der Rechner hält vor). ÜZ 6 ist schwer gepanzert: SALVE 2 und F. Drohne auf BEGLEITEN, dann auf MANUELL und selbst nach Norden fliegen, bis sie ÜZ 7 weit hinter der Deckung findet; AUTO-ZIEL weist es zu, die Rakete kommt von oben. Zum Schluss die Drohne zurückrufen
+   - **Bordcomputer:** Taste 7, Seite FEUERLEITUNG, AUTO-ZIEL einschalten, Kanone auf FEUERSTOSS und Zielhilfe AUTO, dann ÜZ 5 treffen, der quer über die Bahn fährt (der Rechner hält vor). ÜZ 6 ist schwer gepanzert: SALVE 2 und F. Drohne auf BEGLEITEN, dann auf MANUELL und selbst nach Norden fliegen, bis sie ÜZ 7 weit hinter der Deckung findet; AUTO-ZIEL weist es zu, die Rakete kommt von oben. Zum Schluss die Drohne zurückrufen
+   - **Scheibenwischer:** Die Einschläge haben die Frontscheibe verdreckt: WIPER (Taste K) einschalten
 6. **Brandübung** mit FIRE SUPPR, dann stößt die **Lanze** dazu (Befehle B und V), zum Schluss die **Außenansicht** (9). Danach Auswertung und Haken im Missionskatalog.
 
 **Laufen fühlt sich nach Laufen an:** Bei jedem Schritt verlagert der Mech sein Gewicht aufs Standbein (Kabine kippt 3–4°), hebt sich über das Bein, sackt beim Aufsetzen ab und nickt nach vorn, der Rumpf verdreht sich leicht. Der Pilotenkopf hängt federnd darin und hält den Blick teilweise waagerecht – dadurch schaukelt das Cockpit sichtbar um dich herum. Kurven, Beschleunigen, Bremsen und Kraterränder neigen die Maschine, beim Anhalten schwingt sie nach. Erkennungsmarken an einer Kette pendeln über dem Sichtschlitz, Röhrendisplays springen kurz, das Licht flackert, die Kabine knarzt, Hydraulik zischt, Schritte kommen von links bzw. rechts. Der Gyro-Stabilisator (G) dämpft das Schwanken.
@@ -213,7 +228,7 @@ Ein zerbombtes Stadtrandgebiet: Krater, ausgebrannte Panzerwracks, Gebäuderuine
 
 ## Panel-Ansichten und Zoom
 
-Wie in Flugsimulatoren kann man sich zu einzelnen Bedienfeldern hinbeugen: **1** Vorne (freier Blick), **2** Overhead-Panel (Waffen, Hydraulik, Kühlung), **3** linke Konsole (Elektrik: BATT, APU, Generatoren), **4** rechte Konsole, **5** Mittelkonsole (Reaktor, Gyro, Löschanlage, Licht, Optik, HUD, Beinverriegelung), **6** Displays, **9** Außenansicht. In einer Panel-Ansicht ist der Mauszeiger frei und Schalter werden direkt angeklickt; Esc, Rechtsklick oder dieselbe Taste führen zurück. Im freien Blick zoomt die **gedrückte rechte Maustaste** (z. B. um Displays zu lesen). Die Leiste unten am Bildschirm zeigt die Ansichten auch zum Anklicken.
+Wie in Flugsimulatoren kann man sich zu einzelnen Bedienfeldern hinbeugen: **1** Vorne (freier Blick), **2** Overhead-Panel (Waffen, Hydraulik, Kühlung), **3** linke Konsole (Elektrik: BATT, APU, Generatoren), **4** rechte Konsole, **5** Mittelkonsole (Reaktor, Gyro, Löschanlage, Licht, Optik, HUD, Wischer, Beinverriegelung), **6** Displays, **7** Bordcomputer, **9** Außenansicht. In einer Panel-Ansicht ist der Mauszeiger frei und Schalter werden direkt angeklickt; Esc, Rechtsklick oder dieselbe Taste führen zurück. Im freien Blick zoomt die **gedrückte rechte Maustaste** (z. B. um Displays zu lesen). Die Leiste unten am Bildschirm zeigt die Ansichten auch zum Anklicken.
 
 Die Instrumententafeln haben einen helleren Anstrich, größere hinterleuchtete Beschriftungen mit ON-Markierung und eigene kleine Panel-Leuchten.
 
@@ -229,7 +244,7 @@ Auf Touch-Geräten erscheinen automatisch Bedienelemente; in den Einstellungen l
 | rechts | FEUER | halten = Kanone (zeigt die Munition) |
 | rechts | MG | halten = Maschinengewehr |
 | rechts | RAKETE, ZIEL, ZOOM | Rakete starten, nächstes Ziel zuweisen, Zoom halten |
-| oben | Pause, DROHNE, KARTE, LANZE | Pause-Menü, Drohne starten oder zurückrufen, Taktikkarte, Lanzenbefehle (Folgen, Halten, Angriff) |
+| oben | Pause, DROHNE, COMP, WISCHER, KARTE, LANZE | Pause-Menü, Drohne starten oder zurückrufen, Bordcomputer, Scheibenwischer, Taktikkarte, Lanzenbefehle (Folgen, Halten, Angriff) |
 | übriger Bildschirm | Wischen | umsehen; das geht auch gleichzeitig mit gedrücktem Feuerknopf, weil jeder Finger einzeln verfolgt wird |
 | Cockpit | Antippen | Schalter und Displays bedienen |
 
@@ -241,6 +256,7 @@ Die Ansichten 1 bis 9 liegen in der Leiste unten. Im Touch-Modus übernehmen die
 |---|---|
 | Maus | umsehen (Klick fängt die Maus ein; alternativ mit gedrückter Taste ziehen) |
 | 1 – 6 | Panel-Ansicht: Vorne, Overhead, links, rechts, Mitte, Displays |
+| 7 | Bordcomputer (Ziele, Drohne, Feuerleitung) |
 | 9 | Außenansicht an/aus (Maus dreht, Mausrad zoomt) |
 | Rechte Maustaste | halten = Zoom · in Panel-Ansicht: zurück |
 | W / S | Schubhebel vor / zurück (bis −30 % rückwärts) |
@@ -256,7 +272,8 @@ Die Ansichten 1 bis 9 liegen in der Leiste unten. Im Touch-Modus übernehmen die
 | G | Gyro-Stabilisator (dämpft Schwanken und Erschütterungen) |
 | Q | Drohne starten / zurückrufen |
 | Tab | nächstes Ziel zuweisen |
-| Drohne im Handflug | W/S Tempo · A/D drehen · R/F Höhe (mittleres Display auf DROHNE offen, Modus MANUELL) |
+| Drohne im Handflug | W/S Tempo · A/D drehen · R/F Höhe (Bordcomputer auf DROHNE offen, Modus MANUELL) |
+| K | Scheibenwischer an/aus |
 | C | Blick zentrieren |
 | M | Taktikkarte |
 | P / Esc | Pause |
@@ -327,7 +344,8 @@ src/
   logic/gait.js        Gang: Gewichtsverlagerung, Nachschwingen, Kopf-Feder, Pendel (getestet)
   cockpit/cockpit.js   Cockpit-Aufbau und Beleuchtung
   cockpit/instruments.js  Rundinstrumente, Kippschalter, Leuchttaster, Alarmleuchte
-  cockpit/displays.js  Glas-Displays (Status mit Systemmatrix, Zielkamera, Taktik-Lagebild)
+  cockpit/displays.js  Glas-Displays (Status mit Systemmatrix, Zielkamera, Taktik-Lagebild, Seiten des Bordcomputers)
+  cockpit/computer.js  Bordcomputer: Reiter, eingebettete Seiten, Seitenleisten
   cockpit/hud.js       Head-up-Display
   world/world.js       Gelände, Panorama, Ruinen, Wracks
   world/effects.js     Feuer, Rauch, Asche, Leuchtspur, Artillerie
