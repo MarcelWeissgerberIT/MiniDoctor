@@ -1617,6 +1617,7 @@ class Game {
     const s = this.sys;
     const clock = new Date();
     const warning = this.fire ? 'FIRE ON BOARD' : s.warnings[0];
+    this.comms.listen(this.sound.voiceAnalyser, this.dt ?? 1 / 60);
     const link = this.comms.state(this.time);
     // an open display is redrawn every frame so clicks answer at once
     const due = (slot, k) => this.openMfd === slot || f % 4 === k;
@@ -1950,6 +1951,7 @@ class Game {
   }
 
   update(dt) {
+    this.dt = dt;
     this.time += dt;
     this.frame++;
     const inp = this.input.consume();

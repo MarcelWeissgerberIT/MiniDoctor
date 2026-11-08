@@ -45,6 +45,16 @@ export class Radio {
     const g = c.createGain();
     g.gain.value = 1.15;
     src.connect(hp).connect(lp).connect(shaper).connect(g).connect(s.voiceGain || s.master);
+    // the raw voice also feeds an analyser: the portrait on the radio display moves its lips to it
+    if (!s.voiceAnalyser) {
+      s.voiceAnalyser = c.createAnalyser();
+      s.voiceAnalyser.fftSize = 1024;
+      s.voiceAnalyser.smoothingTimeConstant = 0.1;
+      const sink = c.createGain();
+      sink.gain.value = 0;
+      s.voiceAnalyser.connect(sink).connect(c.destination);
+    }
+    src.connect(s.voiceAnalyser);
     src.start(t);
     this.current = src;
     this.squelch(t - 0.1);

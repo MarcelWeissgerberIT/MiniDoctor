@@ -356,24 +356,11 @@ async function processGlb() {
 
 /* ------------------------------------------------------------------ faces */
 
-// radio video link: portrait stills (WebP) and the talking clips (WebM + MP4, no sound,
-// the game plays the voice separately)
+// radio link portraits: the still plus transparent mouth-shape and blink overlays for the
+// lip sync, made by tools/lipsync-faces.py from the originals and their edited variants
 async function processFaces() {
-  const src = path.join(SRC, 'faces');
-  const still = path.join(OUT, 'faces');
-  const vid = path.join(OUT, 'video');
-  mk(still);
-  mk(vid);
-  for (const f of fs.readdirSync(src)) {
-    const id = f.replace(/\.[^.]+$/, '');
-    if (f.endsWith('.png')) await sharp(path.join(src, f)).resize(512, 384, { fit: 'cover' }).webp({ quality: 80 }).toFile(path.join(still, `${id}.webp`));
-    if (f.endsWith('.mp4')) {
-      const vf = 'scale=512:384:force_original_aspect_ratio=increase,crop=512:384,fps=24';
-      const { execFileSync } = await import('node:child_process');
-      execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', path.join(src, f), '-an', '-vf', vf, '-c:v', 'libx264', '-crf', '28', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', path.join(vid, `face_${id}.mp4`)]);
-      execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', path.join(src, f), '-an', '-vf', vf, '-c:v', 'libvpx-vp9', '-crf', '38', '-b:v', '0', '-row-mt', '1', path.join(vid, `face_${id}.webm`)]);
-    }
-  }
+  const { execFileSync } = await import('node:child_process');
+  execFileSync('python3', ['tools/lipsync-faces.py'], { stdio: 'inherit' });
   console.log('faces');
 }
 

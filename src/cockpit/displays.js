@@ -815,20 +815,22 @@ export function drawDrone(mfd, s) {
 /** video link: the speaker's face, channel, live mark, level meter, a little static */
 export function drawComms(mfd, c, time) {
   const g = mfd.begin();
-  const src = c.video || (c.still?.complete && c.still.naturalWidth ? c.still : null);
   // the link builds up: a short burst of static, then the picture
   const tune = Math.min(1, c.age / 0.35);
-  if (src) {
+  if (c.face) {
     g.save();
     g.globalAlpha = tune;
-    if (!c.video) {
-      // still image while the clip loads: breathe a little
-      const k = 1.02 + Math.sin(time * 1.3) * 0.01;
-      g.translate(256, 192);
-      g.scale(k, k);
-      g.translate(-256, -192);
-    }
-    g.drawImage(src, 0, 0, 512, 384);
+    // a living head: slow drift and breathing, a small nod on stressed syllables
+    const k = 1.03 + Math.sin(time * 1.3) * 0.006 + (c.talk || 0) * 0.004;
+    const dx = Math.sin(time * 0.7) * 3 + Math.sin(time * 1.9) * 1.2;
+    const dy = Math.sin(time * 0.9 + 1) * 2 + (c.nod || 0) * 3;
+    g.translate(256 + dx, 192 + dy);
+    g.scale(k, k);
+    g.rotate(Math.sin(time * 0.6) * 0.008);
+    g.translate(-256, -192);
+    g.drawImage(c.face, 0, 0, 512, 384);
+    if (c.mouth) g.drawImage(c.mouth, 0, 0, 512, 384);
+    if (c.eyes) g.drawImage(c.eyes, 0, 0, 512, 384);
     g.restore();
   }
   // static lines and grain
