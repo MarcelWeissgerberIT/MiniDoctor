@@ -21,6 +21,10 @@ const html = `
     <button class="t-btn t-fire" data-fire="1">FEUER</button>
     <button class="t-btn t-small t-zoom" data-zoom="1">ZOOM</button>
   </div>
+  <div class="t-alt">
+    <button class="t-btn t-small" data-hold="KeyR">HÖHE ▲</button>
+    <button class="t-btn t-small" data-hold="KeyF">HÖHE ▼</button>
+  </div>
   <div class="t-util">
     <button class="t-btn t-u" data-key="KeyP" data-tap="1">❚❚</button>
     <button class="t-btn t-u" data-key="KeyQ" data-tap="1">DROHNE</button>
@@ -87,7 +91,9 @@ export class TouchControls {
       // the scale runs from -30 % (bottom) to +100 % (top)
       let v = -0.3 + y * 1.3;
       if (Math.abs(v) < 0.05) v = 0; // notch at zero
-      I.throttleTarget = v;
+      // flying the drone by hand, the lever is its speed; otherwise the mech's throttle
+      if (this.g.droneHands?.()) I.droneFwd = v;
+      else I.throttleTarget = v;
     };
     this.track(thr, setThr, () => {});
 
@@ -184,9 +190,11 @@ export class TouchControls {
     const show = g.state === 'cockpit' && !g.paused && !g.inResult && !g.dead;
     const front = g.view === 'front' || g.external;
     this.el.classList.toggle('show', show);
+    const flying = g.droneHands();
     this.el.classList.toggle('panel', show && !front);
+    this.el.classList.toggle('drone', show && flying);
     if (!show) return;
-    const t = g.mech.throttle;
+    const t = flying ? this.input.droneFwd || 0 : g.mech.throttle;
     const y = ((t + 0.3) / 1.3) * 100;
     this.knob.style.bottom = `calc(${y}% - 14px)`;
     const z = (0.3 / 1.3) * 100;

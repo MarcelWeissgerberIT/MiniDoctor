@@ -10,7 +10,7 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 | # | Mission | Typ | Inhalt |
 |---|---|---|---|
-| 1 | Kalt & dunkel | Grundausbildung | In der Basis: einsteigen, Kaltstart nach Checkliste, laufen, Displays bedienen, Schießbahn (Kanone, MG, Rakete über die Karte), Drohne und Steilangriff, Brandübung, Lanzenbefehle, Außenansicht |
+| 1 | Kalt & dunkel | Grundausbildung | In der Basis: einsteigen, Kaltstart nach Checkliste, laufen, Displays bedienen, Schießbahn (Kanone, MG, Rakete über die Karte), Drohne und Steilangriff, Feuerleitrechner (Auto-Ziel, Vorhalt, Salve, Drohnen-Handflug), Brandübung, Lanzenbefehle, Außenansicht |
 | 2 | Feuertaufe | Verteidigung | Waffen scharf machen, zwei Panzerwellen an der Panzersperre abwehren |
 | 3 | Schulter an Schulter | Lanze · Verteidigung | Mit Hammer 2 und Hammer 3: Befehle lernen, zwei Wellen (9 Fahrzeuge) abwehren |
 | 4 | Depotschlag | Lanze · Angriff | Mit der Lanze zum Feinddepot (700 m NO), Wachen ausschalten, 4 Depotziele zerstören, Verstärkung abwehren |
@@ -59,23 +59,37 @@ Jedes der drei Glas-Displays lässt sich **öffnen**: anklicken (z. B. aus der D
 
 | Display | Seiten | Bedienung |
 |---|---|---|
-| links | STATUS · ZIELE | Zielliste aller bekannten Fahrzeuge mit Entfernung, Uhrzeit-Richtung, gezeigter Seite, Verhalten und Zustand; Filter (Alle, Panzer, SPz, Bedrohung, Drohnenmarkierung), Blättern, AUFSCHALTEN / FREI, DROHNE ZUM ZIEL |
+| links | STATUS · ZIELE · COMP | COMP = Feuerleitrechner (siehe unten). ZIELE: Zielliste aller bekannten Fahrzeuge mit Entfernung, Uhrzeit-Richtung, gezeigter Seite, Verhalten und Zustand; Filter (Alle, Panzer, SPz, Bedrohung, Drohnenmarkierung), Blättern, AUFSCHALTEN / FREI, DROHNE ZUM ZIEL |
 | Mitte | KAMERA · DROHNE | Bugkamera (Zielrahmen anklicken = zuweisen) bzw. Drohnenkamera mit Höhe, Entfernung, Akku, Markierungen, START / RÜCKRUF, ZUM ZIEL |
 | rechts | TAKTIK | Karte: Fahrzeug anklicken = auswählen, AUFSCHALTEN; Zoom 250 bis 2000 m; DROHNE ►, dann Punkt auf der Karte anklicken |
 
 **Bekannte Ziele:** Ein Fahrzeug erscheint auf Displays, HUD und Helmdisplay erst, wenn du, ein Flügelmann oder die Drohne es gesehen hat. Bei neuen Wellen kommt eine Erstmeldung vom HQ. Verschwindet ein Ziel aus der Sicht, bleibt es 20 s an seiner letzten bekannten Position stehen (mit „?“).
 
-**Zuweisen:** Mit **Tab** oder über ein Display bekommt der Raketensucher ein Ziel. Er schaltet darauf auf, wenn es bis zu 75° neben der Rumpfachse liegt und du es siehst oder die Drohne es markiert. Dafür musst du nicht mehr hinschauen. Raketen starten immer vom Werfer entlang der Rumpfachse und lenken dann zum Ziel.
+**Zuweisen:** Mit **Tab** oder über ein Display bekommt der Raketensucher ein Ziel. Er schaltet darauf auf, wenn es bis zu 75° neben der Rumpfachse liegt und du es siehst oder die Drohne es markiert. Dafür musst du nicht mehr hinschauen. Der Werfer schwenkt beim Start in Richtung des zugewiesenen Ziels (höchstens 75° neben der Rumpfachse), die Rakete fliegt ein paar Meter über der Sichtlinie und lenkt dann ins Ziel.
+
+## Feuerleitrechner (linkes Display, Seite COMP)
+
+Der Rechner nimmt dir Zielerfassung, Richten und Vorhalt ab. Alle Einstellungen bleiben gespeichert.
+
+| Zeile | Einstellungen | Wirkung |
+|---|---|---|
+| ZIEL | AUTO-ZIEL an/aus · BEDROHUNG / NÄCHSTES / PANZER | Mit AUTO-ZIEL weist der Rechner selbst ein Ziel zu (alle 0,5 s geprüft): BEDROHUNG = wer das Rohr auf dich gerichtet hat zuerst, dann Panzer vor SPz; NÄCHSTES = das nächste; PANZER = Panzer zuerst. Ein verlorenes Ziel wird ersetzt. HUD: „ZIEL 1/3 · AUTO“, Meldung „AUTO-ZIEL ÜZ 6 326 m“ |
+| KANONE | EINZEL / FEUERSTOSS / DAUER | Abzug: ein Schuss, Feuerstoß zu 3 Schuss oder Dauerfeuer solange gedrückt |
+| ZIELHILFE | AUS / VORHALT / AUTO | VORHALT zeigt eine Raute, wohin man bei einem fahrenden Ziel zielen muss. AUTO richtet das Rohr selbst mit Vorhalt auf das zugewiesene Ziel (Kreuz „ROHR AUTO“ im Helmdisplay), du drückst nur noch ab, auch wenn du woanders hinsiehst |
+| RAKETEN | DIREKT / AUTO / STEIL · SALVE 1/2 | Flugprofil: DIREKT immer flach, AUTO steil nur bei einem markierten Ziel ohne Sicht, STEIL immer von oben. SALVE 2 schickt zwei Raketen im Abstand von 0,3 s |
+| DROHNE | KREISEN / BEGLEITEN / VORAUS / MANUELL · START / RÜCKRUF | siehe Aufklärungsdrohne |
 
 ## Aufklärungsdrohne
 
 Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung, alternativ schickst du sie über die Karte oder die Zielliste zu einem Punkt bzw. Ziel.
 
 - **Flug:** Sie steigt auf, fliegt mit 26 m/s hin und kreist in 70 m Höhe (Radius 110 m) über dem Gebiet.
+- **Modi** (COMP oder Drohnenseite, MODUS-Taste): **KREISEN** über einem Punkt, **BEGLEITEN** in 70 m Radius über dem Mech (zieht mit), **VORAUS** 380 m vor dem Mech in Laufrichtung, **MANUELL** = Handflug.
+- **Handflug:** Modus MANUELL, mittleres Display auf DROHNE öffnen. Dann steuern **W/S** das Tempo (bis 108 km/h), **A/D** die Richtung und **R/F** die Höhe (12–160 m über Grund); der Mech bleibt so lange stehen. Die Drohne fliegt höchstens 1,5 km weit. Auf dem Tablet erscheinen dafür Schubhebel (= Tempo), Lenkfeld und HÖHE ▲/▼.
 - **Markieren:** Jedes Fahrzeug, das ihre Kamera sieht (320 m Reichweite, freie Sicht, Nebel blockiert), wird 30 s lang markiert.
 - **Rückkehr:** Bei schwachem Akku oder auf **Q** kommt sie von selbst zurück, landet auf dem Mech und lädt (95 s Flugzeit, 40 s Ladezeit).
 - **Abschuss:** Schützenpanzer in der Nähe können sie abschießen; eine Ersatzdrohne wird nach 45 s montiert.
-- **Steilangriff:** Ein markiertes Ziel ohne eigene Sicht greift die Rakete von oben an. Sie steigt auf 95 m und stürzt auf das dünne Dach (×1,5).
+- **Steilangriff:** Ein markiertes Ziel ohne eigene Sicht greift die Rakete von oben an. Sie steigt erst steil 40 m vom Werfer weg (frei von Ruinen um den Mech), dann auf bis zu 95 m, fliegt langsamer (170 m/s) und stürzt auf das dünne Dach (×1,5). Mit Profil STEIL fliegt sie immer so, außer auf ein sichtbares Ziel näher als 140 m.
 - **Mission 5:** Dort ist die Drohne durch einen Störsender gesperrt.
 
 ## Pause, Einstellungen, Erfolge
@@ -126,7 +140,8 @@ Feindliche Fahrzeuge wählen ihr Ziel unter allen Mechs der Lanze. Das Helmdispl
    - ÜZ 1 mit der Kanone (das HUD zeigt die Seite, die er dir zuwendet)
    - ÜZ 2, Munitionskisten, mit dem MG
    - ÜZ 3 auf der Taktikkarte anklicken, AUFSCHALTEN, Rakete
-   - ÜZ 4 steht hinter einer Ruine: Drohne starten, sie markiert das Ziel, dann Rakete im Steilangriff; zum Schluss die Drohne zurückrufen
+   - ÜZ 4 steht hinter einer Ruine: Drohne starten, sie markiert das Ziel, dann Rakete im Steilangriff
+   - **Feuerleitrechner:** Seite COMP öffnen, AUTO-ZIEL einschalten, Kanone auf FEUERSTOSS und Zielhilfe AUTO, dann ÜZ 5 treffen, der quer über die Bahn fährt (der Rechner hält vor). ÜZ 6 ist schwer gepanzert: SALVE 2 und F. Drohne auf BEGLEITEN, dann auf MANUELL und selbst nach Norden fliegen, bis sie ÜZ 7 weit hinter der Deckung findet; AUTO-ZIEL weist es zu, die Rakete kommt von oben. Zum Schluss die Drohne zurückrufen
 6. **Brandübung** mit FIRE SUPPR, dann stößt die **Lanze** dazu (Befehle B und V), zum Schluss die **Außenansicht** (9). Danach Auswertung und Haken im Missionskatalog.
 
 **Laufen fühlt sich nach Laufen an:** Bei jedem Schritt verlagert der Mech sein Gewicht aufs Standbein (Kabine kippt 3–4°), hebt sich über das Bein, sackt beim Aufsetzen ab und nickt nach vorn, der Rumpf verdreht sich leicht. Der Pilotenkopf hängt federnd darin und hält den Blick teilweise waagerecht – dadurch schaukelt das Cockpit sichtbar um dich herum. Kurven, Beschleunigen, Bremsen und Kraterränder neigen die Maschine, beim Anhalten schwingt sie nach. Erkennungsmarken an einer Kette pendeln über dem Sichtschlitz, Röhrendisplays springen kurz, das Licht flackert, die Kabine knarzt, Hydraulik zischt, Schritte kommen von links bzw. rechts. Der Gyro-Stabilisator (G) dämpft das Schwanken.
@@ -239,10 +254,13 @@ Die Ansichten 1 bis 9 liegen in der Leiste unten. Im Touch-Modus übernehmen die
 | L / H / N / O | Kabinenlicht / HUD / Nachtsicht / Optik |
 | R | Radarreichweite |
 | G | Gyro-Stabilisator (dämpft Schwanken und Erschütterungen) |
-| Q | Master Caution quittieren |
+| Q | Drohne starten / zurückrufen |
+| Tab | nächstes Ziel zuweisen |
+| Drohne im Handflug | W/S Tempo · A/D drehen · R/F Höhe (mittleres Display auf DROHNE offen, Modus MANUELL) |
 | C | Blick zentrieren |
-| M | Ton an/aus |
-| F1 / Tab | Hilfe |
+| M | Taktikkarte |
+| P / Esc | Pause |
+| F1 | Hilfe |
 
 ## Ressourcen: Higgsfield + Meshy
 
@@ -288,7 +306,7 @@ src/
   entry.js             Einstiegssequenz (Video mit Ton-Cues, Hinsetzen, Luke; Fallback-Kamerafahrt)
   cockpit/views.js     Panel-Ansichten (Position, Blickziel, Blickfeld)
   tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken (auch Ablaufsteuerung der Kampfmissionen)
-  training.js          Schießbahn der Grundausbildung (vier Übungsziele, eins hinter einer Ruine)
+  training.js          Schießbahn der Grundausbildung (sieben Übungsziele: eins hinter einer Ruine, eins fahrend, eins schwer, eins weit draußen)
   menu.js              Einstellungen, Erfolge, Pause-Menü (localStorage, Steam-IDs)
   touch.js             Touch-Steuerung für Tablets und Handys (Schubhebel, Lenkfeld, Feuerknöpfe, Mehrfinger-Umsehen)
   world/mechwalk.js    Prozeduraler Mech-Gang: Bein-IK, gepflanzte Füße, Schritte synchron zur Gangsimulation
@@ -296,7 +314,8 @@ src/
   combat/allies.js     Verbündete Mechs: Modelle, Gehanimation, Waffen, Treffer, Wracks
   cockpit/comms.js     Videoverbindung: wer spricht, Clip abspielen
   logic/allies.js      Flügelmann-Logik: Befehle, Formation, Bewegung, Feuer (getestet)
-  logic/drone.js       Drohnen-Logik: Start, Anflug, Suchkreis, Rückkehr, Landung, Akku (getestet)
+  logic/drone.js       Drohnen-Logik: Start, Anflug, Suchkreis, Modi, Handflug, Rückkehr, Landung, Akku (getestet)
+  logic/firecontrol.js Feuerleitrechner: Zielauswahl, Vorhaltepunkt, Abzugslogik (getestet)
   combat/drone.js      Drohne: Modell, Rotoren, Kamera, Markieren, Abschuss, Geräusch
   combat/arsenal.js    Kanone, Leuchtspur, Lenkraketen, Einschläge
   combat/enemies.js    Panzer/Schützenpanzer: abgetrennter Drehturm, ballistische Granaten mit Kollision, Nebelwände, Deckungssuche, Wracks

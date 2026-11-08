@@ -41,6 +41,8 @@ export const MISSILE = {
   life: 12,
   gimbal: (75 * Math.PI) / 180, // a designated target may lie this far off the hull axis
   loft: 95, // m a top-attack missile climbs over the cover
+  speedTop: 170, // m/s a top-attack missile cruises at
+  climbOut: 40, // m it first climbs steeply off the pod before it turns toward the target
 };
 
 /* --------------------------------------------------------------- tracks */

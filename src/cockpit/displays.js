@@ -202,7 +202,7 @@ export function drawBoot(mfd, t) {
 export function drawStatus(mfd, s) {
   const g = mfd.begin();
   frame(g, '', s.time);
-  tabs(mfd, g, [['status', 'STATUS'], ['targets', 'ZIELE']], 'status', 14, 14);
+  tabs(mfd, g, LEFT_TABS, 'status', 14, 14);
   const col = (v) => (v > 0.7 ? G : v > 0.4 ? AMBER : RED);
   // structure per part: name, bar, percent
   const parts = [
@@ -684,6 +684,89 @@ export function drawTactical(mfd, s) {
   mfd.end();
 }
 
+const LEFT_TABS = [
+  ['status', 'STATUS'],
+  ['targets', 'ZIELE'],
+  ['comp', 'COMP'],
+];
+
+/* ------------------------------------------------------ fire control */
+
+/** COMP: the fire-control computer — target acquisition, cannon, missiles, drone */
+export function drawComputer(mfd, s) {
+  const g = mfd.begin();
+  frame(g, '', 'FEUERLEIT');
+  tabs(mfd, g, LEFT_TABS, 'comp', 14, 14);
+  const fc = s.fc;
+  const row = (label, y, items, key, opts = {}) => {
+    text(g, label, 14, y + 12, { size: 13, color: GD, weight: 'bold' });
+    const x0 = 104;
+    const w = (496 - x0 - (items.length - 1) * 6) / items.length;
+    items.forEach(([v, l], i) => key2(l, x0 + i * (w + 6), y, w, { type: 'fc', key, value: v }, { on: fc[key] === v, ...opts }));
+  };
+  const key2 = (label, x, y, w, action, o) => key(mfd, g, label, x, y, w, action, o);
+  // target acquisition
+  text(g, 'ZIEL', 14, 68, { size: 13, color: GD, weight: 'bold' });
+  key2(fc.autoTarget ? 'AUTO-ZIEL AN' : 'AUTO-ZIEL AUS', 104, 56, 126, { type: 'fc', key: 'autoTarget', value: !fc.autoTarget }, { on: fc.autoTarget });
+  [
+    ['threat', 'BEDROHUNG'],
+    ['nearest', 'NÄCHSTES'],
+    ['tank', 'PANZER'],
+  ].forEach(([v, l], i) => key2(l, 236 + i * 88, 56, 82, { type: 'fc', key: 'priority', value: v }, { on: fc.priority === v, dim: !fc.autoTarget }));
+  // cannon
+  row(
+    'KANONE',
+    100,
+    [
+      ['single', 'EINZEL'],
+      ['burst', 'FEUERSTOSS'],
+      ['auto', 'DAUER'],
+    ],
+    'gunMode',
+  );
+  row(
+    'ZIELHILFE',
+    132,
+    [
+      ['manual', 'AUS'],
+      ['lead', 'VORHALT'],
+      ['auto', 'AUTO'],
+    ],
+    'gunAim',
+  );
+  // missiles
+  text(g, 'RAKETEN', 14, 188, { size: 13, color: GD, weight: 'bold' });
+  [
+    ['direct', 'DIREKT'],
+    ['auto', 'AUTO'],
+    ['top', 'STEIL'],
+  ].forEach(([v, l], i) => key2(l, 104 + i * 84, 176, 78, { type: 'fc', key: 'missileProfile', value: v }, { on: fc.missileProfile === v }));
+  key2(`SALVE ${fc.salvo}`, 360, 176, 136, { type: 'fc', key: 'salvo', value: fc.salvo === 1 ? 2 : 1 }, { on: fc.salvo > 1 });
+  // drone
+  text(g, 'DROHNE', 14, 232, { size: 13, color: GD, weight: 'bold' });
+  [
+    ['orbit', 'KREISEN'],
+    ['escort', 'BEGLEITEN'],
+    ['ahead', 'VORAUS'],
+    ['manual', 'MANUELL'],
+  ].forEach(([v, l], i) => key2(l, 104 + i * 99, 220, 93, { type: 'droneMode', mode: v }, { on: s.drone.mode === v, dim: s.drone.jammed }));
+  const up = s.drone.state !== 'docked' && s.drone.state !== 'lost';
+  key2(up ? 'RÜCKRUF' : 'START', 104, 254, 126, up ? { type: 'recall' } : { type: 'launch' }, { on: up, dim: s.drone.jammed || s.drone.state === 'lost' });
+  text(g, `AKKU ${Math.round(s.drone.battery * 100)}%  ·  ${DRONE_STATES[s.drone.state] ?? s.drone.state}`, 240, 266, { size: 14, color: '#9fe8ff' });
+  // what the computer is doing right now
+  g.strokeStyle = GD;
+  g.beginPath();
+  g.moveTo(10, 292);
+  g.lineTo(502, 292);
+  g.stroke();
+  const t = s.target;
+  text(g, t ? `${fc.autoTarget ? 'AUTO' : 'ZIEL'}: ${t.label} ${Math.round(t.dist)} m ${t.clock}h${s.locked ? ' · LOCK' : ''}` : fc.autoTarget ? 'AUTO-ZIEL: SUCHT' : 'KEIN ZIEL ZUGEWIESEN', 16, 310, { size: 16, color: t ? (s.locked ? RED : AMBER) : GD, weight: 'bold' });
+  text(g, `ROHR ${s.gunAuto ? 'GEFÜHRT' : fc.gunAim === 'lead' ? 'VORHALT' : 'FREI'} · ${fc.gunMode === 'single' ? 'EINZEL' : fc.gunMode === 'burst' ? 'FEUERSTOSS' : 'DAUER'}`, 16, 334, { size: 14, color: s.gunAuto ? G : W });
+  text(g, `RAK ${fc.missileProfile === 'top' ? 'STEIL' : fc.missileProfile === 'direct' ? 'DIREKT' : 'AUTO'} ×${fc.salvo}`, 16, 356, { size: 14, color: W });
+  text(g, s.drone.mode === 'manual' ? 'DROHNE: DISPLAY MITTE → DROHNE' : '', 496, 356, { size: 12, color: '#9fe8ff', align: 'right' });
+  mfd.end();
+}
+
 /* --------------------------------------------------------- target list */
 
 const FILTERS = [
@@ -698,7 +781,7 @@ const FILTERS = [
 export function drawTargetList(mfd, s) {
   const g = mfd.begin();
   frame(g, '', `${s.list.length} BEKANNT`);
-  tabs(mfd, g, [['status', 'STATUS'], ['targets', 'ZIELE']], 'targets', 14, 14);
+  tabs(mfd, g, LEFT_TABS, 'targets', 14, 14);
   FILTERS.forEach(([id, label], i) => key(mfd, g, label, 14 + i * 64, 52, 58, { type: 'filter', filter: id }, { on: s.filter === id }));
   const rows = s.list.filter((t) => (s.filter === 'all' ? true : s.filter === 'threat' ? t.aiming : s.filter === 'marked' ? t.marked : t.type === s.filter));
   const cols = [
@@ -760,13 +843,15 @@ function camTabs(mfd, g, active) {
   key(mfd, g, 'DROHNE', 418, 6, 88, { type: 'page', page: 'drone' }, { on: active === 'drone', h: 22 });
 }
 
+const DRONE_STATES = { docked: 'ANGEDOCKT', launch: 'START', transit: 'ANFLUG', orbit: 'SUCHE', return: 'RÜCKKEHR', land: 'LANDUNG', lost: 'VERLOREN', manual: 'HANDFLUG' };
+
 /** DROHNE: the drone's camera with its marks, battery and controls */
 export function drawDrone(mfd, s) {
   const d = s.drone;
   const up = d.state !== 'docked' && d.state !== 'lost';
   const g = mfd.begin(up && s.feed ? 0 : 1);
   camTabs(mfd, g, 'drone');
-  const names = { docked: 'ANGEDOCKT', launch: 'START', transit: 'ANFLUG', orbit: 'SUCHE', return: 'RÜCKKEHR', land: 'LANDUNG', lost: 'VERLOREN' };
+  const names = DRONE_STATES;
   if (!up) {
     text(g, d.jammed ? 'STÖRSENDER AKTIV' : `DROHNE ${names[d.state]}`, 256, 130, { size: 24, align: 'center', color: d.state === 'lost' || d.jammed ? RED : W, weight: 'bold' });
     if (d.state === 'lost') text(g, d.spares ? 'ERSATZDROHNE WIRD MONTIERT' : 'KEINE ERSATZDROHNE', 256, 162, { size: 16, align: 'center', color: AMBER });
@@ -807,6 +892,20 @@ export function drawDrone(mfd, s) {
   const up2 = up && d.state !== 'land';
   key(mfd, g, up ? 'RÜCKRUF' : 'START', 14, 340, 120, up2 ? { type: 'recall' } : { type: 'launch' }, { dim: d.jammed || d.state === 'lost' || (up && !up2), on: up });
   key(mfd, g, 'ZUM ZIEL', 140, 340, 120, { type: 'droneTo' }, { dim: s.selected == null || d.jammed || d.state === 'lost' });
+  const modes = { orbit: 'KREISEN', escort: 'BEGLEITEN', ahead: 'VORAUS', manual: 'MANUELL' };
+  const order = ['orbit', 'escort', 'ahead', 'manual'];
+  const next = order[(order.indexOf(d.mode) + 1) % order.length];
+  key(mfd, g, `MODUS: ${modes[d.mode]}`, 266, 340, 232, { type: 'droneMode', mode: next }, { on: d.mode === 'manual', dim: d.jammed });
+  if (d.state === 'manual') {
+    // flying by hand: the sticks and what the drone does
+    g.fillStyle = 'rgba(10,5,3,0.55)';
+    g.fillRect(316, 40, 188, 112);
+    text(g, 'MANUELL', 326, 54, { size: 15, color: '#9fe8ff', weight: 'bold' });
+    text(g, `${Math.round(d.speed * 3.6)} km/h  ${String(Math.round(((-d.heading * 180) / Math.PI + 3600) % 360)).padStart(3, '0')}°`, 326, 74, { size: 14, color: W });
+    text(g, 'W/S TEMPO · A/D DREHEN', 326, 94, { size: 12, color: G });
+    text(g, 'R/F HÖHE', 326, 112, { size: 12, color: G });
+    text(g, 'KLICK = MARKIEREN', 326, 130, { size: 12, color: G });
+  }
   mfd.end();
 }
 
