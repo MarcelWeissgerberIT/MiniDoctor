@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   voice: 1,
   subtitles: true,
   bob: 1, // head and cabin motion (lower against motion sickness)
+  touch: 'auto', // on-screen controls: auto (touch screens) | on | off
 };
 
 export function loadSettings() {
@@ -231,6 +232,23 @@ export class Menu {
       changed();
     };
     row('Grafikqualität', sel);
+    const ts = document.createElement('select');
+    for (const [v, t] of [
+      ['auto', 'Automatisch'],
+      ['on', 'Immer an'],
+      ['off', 'Aus'],
+    ]) {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = t;
+      ts.appendChild(o);
+    }
+    ts.value = s.touch;
+    ts.onchange = () => {
+      s.touch = ts.value;
+      changed();
+    };
+    row('Touch-Steuerung', ts);
     range('Sichtfeld', 'fov', 55, 95, 1, (v) => `${v}°`);
     range('Mausempfindlichkeit', 'sens', 0.3, 2.5, 0.05, (v) => `${v.toFixed(2)}×`);
     check('Maus Y invertieren', 'invertY');

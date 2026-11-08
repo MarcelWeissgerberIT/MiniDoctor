@@ -9,6 +9,7 @@ import { Assets } from './assets.js';
 import { Cockpit } from './cockpit/cockpit.js';
 import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms, drawTargetList, drawDrone } from './cockpit/displays.js';
 import { Drone } from './combat/drone.js';
+import { MechWalker } from './world/mechwalk.js';
 import { Comms, speakerOf } from './cockpit/comms.js';
 import { World, WORLD } from './world/world.js';
 import { Post } from './post.js';
@@ -20,6 +21,7 @@ import { createSystems, stepSystems, hotSwitches } from './logic/systems.js';
 import { Tutorial, VOICE_TEXT, TRAINING_TEXT } from './tutorial.js';
 import { Range } from './training.js';
 import { loadSettings, Achievements, Menu } from './menu.js';
+import { TouchControls, isTouchDevice } from './touch.js';
 import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
 import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
@@ -212,6 +214,11 @@ class Game {
       if (!locked && this.state === 'cockpit' && !this.input.cursorMode && !this.inResult && !this.dead && !this.menu.open && !this.external) this.pause();
       else ui.lockHint(!locked && this.state !== 'title' && !this.input.cursorMode && !this.menu.open);
     };
+    // on-screen controls for tablets: on by default on touch screens, switched on by the first touch
+    this.touch = new TouchControls(this, this.input);
+    this.input.onTouch = () => {
+      if (!this.touch.on && this.settings.touch !== 'off') this.touch.setEnabled(true);
+    };
     this.applySettings(this.settings);
     this.post.cockpitPass.enabled = false;
     this.placeMech();
@@ -325,8 +332,7 @@ class Game {
   /** the rigged, animated copy of the mech for the third-person view */
   buildRig() {
     const src = assets.models.mech_rigged;
-    const clip = src?.animations?.[0];
-    if (!src || !clip) return;
+    if (!src) return;
     const body = fitModel(src, { height: MECH.height, rotY: Math.PI });
     body.traverse((o) => {
       if (o.isMesh) {
@@ -339,15 +345,8 @@ class Game {
     this.world.playerMech.updateMatrixWorld(true);
     this.world.centreOnTorso(body);
     body.visible = false;
-    const mixer = new THREE.AnimationMixer(src);
-    const action = mixer.clipAction(clip);
-    action.play();
-    action.setEffectiveWeight(0);
-    let hips = null;
-    src.traverse((o) => {
-      if (o.isBone && !hips && /hips/i.test(o.name)) hips = o;
-    });
-    this.rig = { body, mixer, action, dur: clip.duration, phase: 0, weight: 0, hips, hipsBind: hips?.position.clone() };
+    // procedural walk: planted feet and two-bone leg IK, driven by the simulated steps
+    this.rig = { body, walker: new MechWalker(body, this.world.playerMech) };
   }
 
   setExternal(on) {
@@ -367,27 +366,15 @@ class Game {
       this.ext.yaw = 0.5;
       this.ext.pitch = 0.22;
       this.ext.h = this.mech.heading;
+      this.rig?.walker.reset();
     }
   }
 
-  /** walk cycle synced to the simulated steps (one clip cycle = two steps) */
+  /** the outside model walks in step with the simulated gait (the cockpit feels the same steps) */
   updateRig(dt) {
     const r = this.rig;
     if (!r || !this.external) return;
-    const m = this.mech;
-    const sp = Math.abs(m.speed);
-    const rate = sp > 0.05 ? sp / stepLength(sp) : Math.abs(m.turn) * 1.4;
-    r.phase = (r.phase + ((dt * rate) / 2) * (m.speed < -0.05 ? -1 : 1) + 1) % 1;
-    const w = clamp(sp / 1.2 + Math.abs(m.turn) * 0.8, 0, 1);
-    r.weight += (w - r.weight) * Math.min(1, dt * 4);
-    r.action.setEffectiveWeight(r.weight);
-    r.action.time = r.phase * r.dur;
-    r.mixer.update(0);
-    // the clip walks forward on its own: keep it on the spot, our simulation moves the mech
-    if (r.hips) {
-      r.hips.position.x = r.hipsBind.x;
-      r.hips.position.z = r.hipsBind.z;
-    }
+    r.walker.update(dt, this.mech, (x, z) => this.world.heightAt(x, z));
   }
 
   updateExternalCam(dt) {
@@ -422,7 +409,8 @@ class Game {
     // the gun is slaved to the helmet within its traverse (measured in the torso frame)
     const local = dir.clone().applyQuaternion(this.mechObj.quaternion.clone().invert());
     const inLimits = gunInLimits(Math.atan2(-local.x, -local.z), Math.asin(clamp(local.y, -1, 1)));
-    const aiming = this.view === 'front' && !this.hovered && !this.dead && (this.input.locked || this.external);
+    const touch = this.touch?.on;
+    const aiming = this.view === 'front' && (!this.hovered || touch) && !this.dead && (this.input.locked || this.external || touch);
     // the visible arm swings towards where the pilot looks
     if (!this.aimPt || this.frame % 2 === 0) this.aimPt = this.arsenal.aimPoint(cam.position, dir, this.aimPt || new THREE.Vector3());
     this.gunRig.update(dt, { mechObj: this.mechObj, aim: this.aimPt, heat: this.arsenal.w.gun.heat, show: !this.external });
@@ -947,6 +935,11 @@ class Game {
     if (this.sound.voiceGain) this.sound.voiceGain.gain.value = s.voice;
     ui.subsOff = !s.subtitles;
     this.fov = -1;
+    if (this.touch) {
+      this.touch.setEnabled(s.touch === 'on' || (s.touch !== 'off' && (this.touch.on || isTouchDevice())));
+      this.input.noLock = this.touch.on;
+      this.input.touchLook = s.sens;
+    }
   }
 
   pause() {
@@ -1192,8 +1185,15 @@ class Game {
   updateMech(dt) {
     const I = this.input;
     const playing = this.state === 'cockpit' && !this.dead;
-    const thr = playing ? (I.down('KeyW', 'ArrowUp') ? 1 : I.down('KeyS', 'ArrowDown') ? -1 : 0) : 0;
-    const turn = playing ? (I.down('KeyA', 'ArrowLeft') ? 1 : I.down('KeyD', 'ArrowRight') ? -1 : 0) : 0;
+    let thr = playing ? (I.down('KeyW', 'ArrowUp') ? 1 : I.down('KeyS', 'ArrowDown') ? -1 : 0) : 0;
+    let turn = playing ? (I.down('KeyA', 'ArrowLeft') ? 1 : I.down('KeyD', 'ArrowRight') ? -1 : 0) : 0;
+    // touch lever: move towards the set value; touch pad: proportional turning
+    if (playing && !thr && I.throttleTarget != null) {
+      const d = I.throttleTarget - this.mech.throttle;
+      thr = Math.abs(d) > 0.01 ? clamp(d * 6, -1, 1) : 0;
+    }
+    if (playing && I.down('KeyW', 'ArrowUp', 'KeyS', 'ArrowDown')) I.throttleTarget = null; // the keys take over
+    if (playing && !turn && I.turnAxis) turn = -I.turnAxis;
     const stop = playing && (I.down('KeyX', 'Space') || I.hit('KeyX') || I.hit('Space'));
     this.turnInput = turn;
     if (!this.sys.canWalk) {
@@ -1796,6 +1796,7 @@ class Game {
     this.hmd.draw(dt, {
       visible: this.state === 'cockpit',
       panels: this.view === 'front' || this.external,
+      touch: !!this.touch?.on,
       power: this.sys.battBus ? Math.max(0.6, this.cockpit.power) : 0.4,
       external: this.external,
       throttle: m.throttle,
@@ -2041,6 +2042,7 @@ class Game {
     });
     this.drawDisplays();
     this.drawHMD(dt);
+    this.touch.update();
     this.sound.update({ turn: this.mech.turn, lookRate: this.state === 'cockpit' ? this.lookRate : 0, speed: this.mech.speed, reactor: this.sys.reactor });
     ui.update(this);
   }

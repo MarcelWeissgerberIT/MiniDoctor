@@ -72,8 +72,9 @@ export class Input {
         return;
       }
       if (!this.locked) {
-        this.drag = { moved: 0 };
-        this.lock();
+        // touch screens look with the finger (touch events), taps only press things
+        this.drag = { moved: 0, noLook: !!this.noLock };
+        if (!this.noLock) this.lock();
       } else {
         this.clicked = true;
         this.lmb = true;
@@ -85,22 +86,42 @@ export class Input {
       this.lockTime = performance.now();
       this.onLockChange?.(this.locked);
     });
-    // touch: drag to look
+    // touch: drag to look, following one finger (others may hold the fire button)
     let last = null;
-    canvas.addEventListener('touchstart', (e) => (last = e.touches[0]), { passive: true });
+    this.touchLook = 1;
     canvas.addEventListener(
-      'touchmove',
+      'touchstart',
       (e) => {
-        const t = e.touches[0];
-        if (last) {
-          this.dx += (t.clientX - last.clientX) * 2;
-          this.dy += (t.clientY - last.clientY) * 2;
+        this.onTouch?.();
+        if (!last) {
+          const t = e.changedTouches[0];
+          last = { id: t.identifier, x: t.clientX, y: t.clientY };
         }
-        last = t;
       },
       { passive: true },
     );
-    canvas.addEventListener('touchend', () => (last = null));
+    canvas.addEventListener(
+      'touchmove',
+      (e) => {
+        if (!last) return;
+        for (const t of e.changedTouches) {
+          if (t.identifier !== last.id) continue;
+          this.dx += (t.clientX - last.x) * 2 * this.touchLook;
+          this.dy += (t.clientY - last.y) * 2 * this.touchLook;
+          last.x = t.clientX;
+          last.y = t.clientY;
+        }
+      },
+      { passive: true },
+    );
+    const end = (e) => {
+      for (const t of e.changedTouches) if (last && t.identifier === last.id) last = null;
+    };
+    canvas.addEventListener('touchend', end);
+    canvas.addEventListener('touchcancel', end);
+    // throttle lever and turn axis set by the touch controls
+    this.throttleTarget = null;
+    this.turnAxis = 0;
   }
 
   unlock() {

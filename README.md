@@ -133,7 +133,15 @@ Eine Panzerkolonne rollt auf Sektor Kilo zu. Der Mech steht betriebsbereit an de
 
 **Helmdisplay (HMD):** Unabhängig von der Blickrichtung stehen Schub (−30…+100 %, Balken + Zahl), Geschwindigkeit und Fahrtrichtung immer links unten im Bild; rechts unten Munition, Rohrhitze, Raketen und Lock-Status, darüber der Schadenszustand. Feinde werden per Datenlink mit Rahmen und Entfernung markiert, außerhalb des Sichtfelds zeigen Pfeile am Rand in ihre Richtung.
 
-**Außenansicht (Taste 9):** Kamera hinter dem Mech, mit der Maus drehbar, Mausrad = Abstand. Der Mech ist dafür mit Meshy geriggt und läuft mit einer Gehanimation, die mit den simulierten Schritten synchronisiert ist. Steuern und schießen geht auch von außen.
+**Außenansicht (Taste 9):** Kamera hinter dem Mech, mit der Maus drehbar, Mausrad = Abstand. Steuern und schießen geht auch von außen.
+
+Der Mech ist mit Meshy geriggt und läuft **prozedural** statt mit einer fertigen Animation. Zwei-Gelenk-IK an den Beinen sorgt für Folgendes:
+- Der Standfuß bleibt fest auf dem Boden, während der Körper über ihn hinwegläuft.
+- Der Schwungfuß setzt auf einem Bogen (0,5 m Hub) zum nächsten Aufsetzpunkt über.
+- Bei langen Schritten sinkt die Hüfte, der Oberkörper verdreht sich leicht gegen die Beine.
+- Die Schritte sind dieselben, die man im Cockpit spürt und hört.
+
+Die Flügelmänner laufen genauso.
 
 ## Starten
 
@@ -179,6 +187,24 @@ Ein zerbombtes Stadtrandgebiet: Krater, ausgebrannte Panzerwracks, Gebäuderuine
 Wie in Flugsimulatoren kann man sich zu einzelnen Bedienfeldern hinbeugen: **1** Vorne (freier Blick), **2** Overhead-Panel (Waffen, Hydraulik, Kühlung), **3** linke Konsole (Elektrik: BATT, APU, Generatoren), **4** rechte Konsole, **5** Mittelkonsole (Reaktor, Gyro, Löschanlage, Licht, Optik, HUD, Beinverriegelung), **6** Displays, **9** Außenansicht. In einer Panel-Ansicht ist der Mauszeiger frei und Schalter werden direkt angeklickt; Esc, Rechtsklick oder dieselbe Taste führen zurück. Im freien Blick zoomt die **gedrückte rechte Maustaste** (z. B. um Displays zu lesen). Die Leiste unten am Bildschirm zeigt die Ansichten auch zum Anklicken.
 
 Die Instrumententafeln haben einen helleren Anstrich, größere hinterleuchtete Beschriftungen mit ON-Markierung und eigene kleine Panel-Leuchten.
+
+## Tablet und Handy (Touch-Steuerung)
+
+Auf Touch-Geräten erscheinen automatisch Bedienelemente; in den Einstellungen lassen sie sich auf „Immer an“ oder „Aus“ stellen. Das Gerät quer halten.
+
+| Wo | Element | Funktion |
+|---|---|---|
+| links | Schubhebel | ziehen: −30 % bis +100 %, Raste bei 0 |
+| links | Lenkfeld | nach links/rechts ziehen = drehen, federt zurück |
+| links | STOPP | Schub sofort auf null |
+| rechts | FEUER | halten = Kanone (zeigt die Munition) |
+| rechts | MG | halten = Maschinengewehr |
+| rechts | RAKETE, ZIEL, ZOOM | Rakete starten, nächstes Ziel zuweisen, Zoom halten |
+| oben | Pause, DROHNE, KARTE, LANZE | Pause-Menü, Drohne starten oder zurückrufen, Taktikkarte, Lanzenbefehle (Folgen, Halten, Angriff) |
+| übriger Bildschirm | Wischen | umsehen; das geht auch gleichzeitig mit gedrücktem Feuerknopf, weil jeder Finger einzeln verfolgt wird |
+| Cockpit | Antippen | Schalter und Displays bedienen |
+
+Die Ansichten 1 bis 9 liegen in der Leiste unten. Im Touch-Modus übernehmen die Bedienelemente das Schub- und das Waffenpanel des Helmdisplays.
 
 ## Steuerung
 
@@ -250,6 +276,8 @@ src/
   tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken (auch Ablaufsteuerung der Kampfmissionen)
   training.js          Schießbahn der Grundausbildung (vier Übungsziele, eins hinter einer Ruine)
   menu.js              Einstellungen, Erfolge, Pause-Menü (localStorage, Steam-IDs)
+  touch.js             Touch-Steuerung für Tablets und Handys (Schubhebel, Lenkfeld, Feuerknöpfe, Mehrfinger-Umsehen)
+  world/mechwalk.js    Prozeduraler Mech-Gang: Bein-IK, gepflanzte Füße, Schritte synchron zur Gangsimulation
   missions.js          Missionskatalog: Definitionen, Wellen, Ziele, Funksprüche, Ablauf
   combat/allies.js     Verbündete Mechs: Modelle, Gehanimation, Waffen, Treffer, Wracks
   cockpit/comms.js     Videoverbindung: wer spricht, Clip abspielen
