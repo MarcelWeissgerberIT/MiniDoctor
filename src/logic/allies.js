@@ -2,7 +2,7 @@
 // Pure logic, no three.js. Heading 0 = -Z, positive = turning left.
 
 export const WINGMAN = {
-  hp: 160,
+  hp: 200,
   maxSpeed: 8.5,
   accel: 2.6,
   turnRate: 0.75,
@@ -92,6 +92,11 @@ export function stepWingman(w, dt, ctx) {
     goal = [w.x + (tgt.x - w.x) * k, w.z + (tgt.z - w.z) * k];
   } else if (w.order === 'attack') goal = [w.x, w.z];
   else goal = formationPoint(ctx.leader, w.slot);
+  // no clear shot at the target: step out from behind the obstacle, towards it
+  if (tgt && w.noLos && w.order !== 'hold') {
+    const side = w.slot[0] < 0 ? -1 : 1;
+    goal = [tgt.x + (w.x - tgt.x) * 0.75 + side * 20 * Math.cos(w.heading), tgt.z + (w.z - tgt.z) * 0.75 - side * 20 * Math.sin(w.heading)];
+  }
   const gdx = goal[0] - w.x;
   const gdz = goal[1] - w.z;
   const gd = Math.hypot(gdx, gdz);

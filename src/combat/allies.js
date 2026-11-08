@@ -191,6 +191,13 @@ export class Allies {
   shoot(w, tgt, dist) {
     const from = this.muzzle(w, new THREE.Vector3());
     const to = this.g.enemies.center(tgt, new THREE.Vector3());
+    if (!this.world.lineOfSight(from, to.clone().setY(to.y + tgt.height * 0.35))) {
+      w.noLos = true;
+      w.reload = 1;
+      w.burstLeft = 0;
+      return;
+    }
+    w.noLos = false;
     const hit = Math.random() < wingmanHitChance(dist);
     if (!hit) {
       to.x += (Math.random() - 0.5) * 14;
@@ -205,6 +212,9 @@ export class Allies {
   }
 
   launch(w, tgt) {
+    const top = this.g.enemies.center(tgt, new THREE.Vector3());
+    top.y += tgt.height * 0.35;
+    if (!this.world.lineOfSight(this.muzzle(w, new THREE.Vector3()), top)) return;
     const fx = -Math.sin(w.heading);
     const fz = -Math.cos(w.heading);
     const rx = Math.cos(w.heading);

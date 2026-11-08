@@ -349,7 +349,8 @@ export class World {
         const s = height / ruins.size.y;
         ruins.add(p[0], p[1], r() * Math.PI * 2, s, 0.03, 0, i);
         const rad = Math.max(ruins.size.x, ruins.size.z) * s * 0.42;
-        this.colliders.push({ x: p[0], z: p[1], r: rad });
+        // h: how high it blocks the view (ruins are tall but full of gaps: about half)
+        this.colliders.push({ x: p[0], z: p[1], r: rad, h: height * 0.5 });
         this.contacts.push({ x: p[0], z: p[1], type: 'struct' });
         if (r() < 0.3) this.fires.push({ x: p[0] + (r() - 0.5) * rad, z: p[1] + (r() - 0.5) * rad, scale: 5 + r() * 4, smoke: 1.2 });
       }
@@ -367,7 +368,7 @@ export class World {
         if (!p) continue;
         const s = 10.2 / Math.max(tanks.size.x, tanks.size.z);
         tanks.add(p[0], p[1], r() * Math.PI * 2, s, 0.05, 0.12, i);
-        this.colliders.push({ x: p[0], z: p[1], r: 4.8 });
+        this.colliders.push({ x: p[0], z: p[1], r: 4.8, h: 2.6 });
         this.contacts.push({ x: p[0], z: p[1], type: 'struct' });
         if (i < 2 || r() < 0.45) this.fires.push({ x: p[0], z: p[1], scale: 3 + r() * 2.5, smoke: 1, y: 2.0 });
       }
@@ -464,7 +465,7 @@ export class World {
       if (r() < 0.5) b.add(wallGeo(w * 0.5, h * 0.6, floors), this.m.concrete, [w / 2, 0, 0.2 * w], [0, -Math.PI / 2, 0], frame);
       // collapsed slab
       b.add(rbox(w * 0.7, 0.35, w * 0.4, 0.05, 3.2), this.m.concrete, [0, 1.5, 0], [0.35 * (r() - 0.5), 0, 0.3], frame);
-      this.colliders.push({ x, z, r: w * 0.5 });
+      this.colliders.push({ x, z, r: w * 0.5, h: h * 0.7 });
       this.contacts.push({ x, z, type: 'struct' });
       if (r() < 0.25) this.fires.push({ x, z, scale: 4 + r() * 3, smoke: 1 });
     }
@@ -688,6 +689,38 @@ export class World {
 
   setMechHatch(v) {
     this.mechHatch.rotation.y = -v * 1.7;
+  }
+
+  /* -------------------------------------------------------- line of sight */
+
+  /**
+   * Can a gunner at a see b? Ruins and the ground block the view; small obstacles
+   * (sandbags, hedgehogs, drums) do not. a, b: {x, y, z}
+   */
+  lineOfSight(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = b.z - a.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 1) return true;
+    const x0 = Math.min(a.x, b.x) - 20;
+    const x1 = Math.max(a.x, b.x) + 20;
+    const z0 = Math.min(a.z, b.z) - 20;
+    const z1 = Math.max(a.z, b.z) + 20;
+    const blockers = this.colliders.filter((c) => c.r > 2.5 && c.x > x0 && c.x < x1 && c.z > z0 && c.z < z1);
+    const n = Math.ceil(len / 6);
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      const x = a.x + dx * t;
+      const y = a.y + dy * t;
+      const z = a.z + dz * t;
+      const g = this.heightAt(x, z);
+      if (y < g - 0.3) return false; // grazing the ground is fine (the muzzle sits higher than this)
+      for (const c of blockers) {
+        if ((x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r * 0.8 && y < g + (c.h ?? Math.min(10, c.r * 2))) return false;
+      }
+    }
+    return true;
   }
 
   /* ------------------------------------------------------------- beacons */

@@ -79,3 +79,14 @@ describe('enemy target choice', () => {
     expect(e.state).toBe('engage');
   });
 });
+
+describe('cover', () => {
+  it('a vehicle without line of sight leaves its spot to find a new firing position', () => {
+    const e = createEnemy('tank', 0, -300, 0, [0, -300]);
+    stepEnemy(e, 0.1, { player: { x: 0, z: 0 } });
+    expect(e.state).toBe('engage');
+    e.noLos = true;
+    for (let t = 0; t < 5; t += 0.1) stepEnemy(e, 0.1, { player: { x: 0, z: 0 } });
+    expect(Math.hypot(e.x, e.z + 300)).toBeGreaterThan(5);
+  });
+});

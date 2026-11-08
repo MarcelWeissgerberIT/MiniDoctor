@@ -415,3 +415,61 @@ export function drawTactical(mfd, s) {
   text(g, `HOSTILE ${s.hostiles}`, lx, 330, { size: 21, weight: 'bold', color: s.hostiles ? RED : G });
   mfd.end();
 }
+
+/* ---------------------------------------------------------------- comms */
+
+/** video link: the speaker's face, channel, live mark, level meter, a little static */
+export function drawComms(mfd, c, time) {
+  const g = mfd.begin();
+  const src = c.video || (c.still?.complete && c.still.naturalWidth ? c.still : null);
+  // the link builds up: a short burst of static, then the picture
+  const tune = Math.min(1, c.age / 0.35);
+  if (src) {
+    g.save();
+    g.globalAlpha = tune;
+    if (!c.video) {
+      // still image while the clip loads: breathe a little
+      const k = 1.02 + Math.sin(time * 1.3) * 0.01;
+      g.translate(256, 192);
+      g.scale(k, k);
+      g.translate(-256, -192);
+    }
+    g.drawImage(src, 0, 0, 512, 384);
+    g.restore();
+  }
+  // static lines and grain
+  g.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i < 6; i++) g.fillRect(0, Math.random() * 384, 512, 1 + Math.random() * 2);
+  if (tune < 1) {
+    for (let i = 0; i < 120; i++) {
+      g.fillStyle = `rgba(255,${160 + Math.random() * 90},${80 + Math.random() * 80},${(1 - tune) * 0.6})`;
+      g.fillRect(Math.random() * 512, Math.random() * 384, 4 + Math.random() * 30, 2);
+    }
+  }
+  // edges darker, like a cheap camera
+  const vg = g.createRadialGradient(256, 192, 140, 256, 192, 330);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+  g.fillStyle = vg;
+  g.fillRect(0, 0, 512, 384);
+  // header and footer bars
+  g.fillStyle = 'rgba(10,5,2,0.7)';
+  g.fillRect(0, 0, 512, 40);
+  g.fillRect(0, 344, 512, 40);
+  text(g, c.channel, 14, 20, { size: 17, color: G });
+  if (Math.floor(time * 2) % 2 === 0) {
+    g.fillStyle = RED;
+    g.beginPath();
+    g.arc(436, 20, 6, 0, Math.PI * 2);
+    g.fill();
+  }
+  text(g, 'LIVE', 498, 20, { size: 17, color: RED, align: 'right', weight: 'bold' });
+  text(g, c.name, 14, 364, { size: 22, color: W, weight: 'bold' });
+  // voice level meter
+  for (let i = 0; i < 14; i++) {
+    const h = 4 + Math.abs(Math.sin(time * 11 + i * 1.7) * Math.sin(time * 5.3 + i)) * 22;
+    g.fillStyle = i > 10 ? AMBER : G;
+    g.fillRect(330 + i * 12, 364 - h / 2, 8, h);
+  }
+  mfd.end();
+}

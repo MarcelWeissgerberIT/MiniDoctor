@@ -72,7 +72,7 @@ const M2_STEPS = [
   { id: 'wp3', title: 'Stellung an WP 3 beziehen', text: 'Zur Panzersperre beim grünen Rauch. R schaltet das Radar auf 1000 m.', voice: 'm2_02', waypoint: 2, done: (g) => near(g, wp('WP 3'), 35) || g.tutorial.t > 150 },
   { id: 'wave1', title: 'Welle 1: 3 Kampfpanzer (NO)', text: 'Feuer frei! In Bewegung bleiben – stehende Ziele treffen sie leichter.', voice: 'm2_03', start: (g) => g.mission.spawnWave(1), done: (g) => g.mission.cleared(1) },
   { id: 'wave2', title: 'Welle 2: 2 Panzer + 1 SPz (O)', text: 'Zweite Welle von Osten.', voice: 'm2_07', wait: 3, start: (g) => g.mission.spawnWave(2), done: (g) => g.mission.cleared(2) },
-  { id: 'end', title: 'Sektor Kilo gehalten', text: 'Mission erfüllt.', voice: 'm2_09', wait: 9, done: () => true },
+  { id: 'end', title: 'Sektor Kilo gehalten', text: 'Mission erfüllt.', voice: 'm2_09', wait: 9, start: (g) => g.mission.finish(), done: () => true },
 ];
 
 const M3_STEPS = [
@@ -81,21 +81,21 @@ const M3_STEPS = [
   { id: 'hold', title: 'POSITION HALTEN (V)', text: 'Taste V: die Flügelmänner bleiben, wo sie sind.', voice: 'm3_02', wait: 2, done: (g) => g.allies.alive().some((w) => w.order === 'hold') || g.tutorial.t > 25 },
   { id: 'wave1', title: 'Welle 1: 4 Fahrzeuge (NW)', text: 'T: Flügelmänner auf dein aufgeschaltetes Ziel ansetzen.', voice: 'm3_03', start: (g) => g.mission.spawnWave(1), done: (g) => g.mission.cleared(1) },
   { id: 'wave2', title: 'Welle 2: 5 Fahrzeuge (N)', text: 'Halte die Linie. B holt die Lanze wieder zu dir.', voice: 'm3_04', wait: 3, start: (g) => g.mission.spawnWave(2), done: (g) => g.mission.cleared(2) },
-  { id: 'end', title: 'Angriff abgewehrt', text: 'Mission erfüllt.', voice: 'm3_05', wait: 8, done: () => true },
+  { id: 'end', title: 'Angriff abgewehrt', text: 'Mission erfüllt.', voice: 'm3_05', wait: 8, start: (g) => g.mission.finish(), done: () => true },
 ];
 
 const M4_STEPS = [
   { id: 'intro', title: 'Einsatzbefehl Depot', text: 'Feindliches Nachschubdepot ca. 700 m Nordost.', voice: 'm4_00', wait: 10, start: (g) => g.mission.setupDepot(), done: () => true },
   { id: 'advance', title: 'Mit der Lanze zu WP 4', text: 'B: Flügelmänner folgen. Radar mit R auf 1000 m.', voice: 'm4_01', waypoint: 3, done: (g) => near(g, wp('WP 4'), 70) },
   { id: 'depot', title: 'Depot zerstören (4 Ziele)', text: 'TREIB = Treibstoff, GEN = Generator, MUN = Munition. Raketen (F) wirken gut.', voice: 'm4_02', done: (g) => g.mission.cleared('depot') },
-  { id: 'end', title: 'Depot zerstört', text: 'Mission erfüllt.', voice: 'm4_04', wait: 8, done: () => true },
+  { id: 'end', title: 'Depot zerstört', text: 'Mission erfüllt.', voice: 'm4_04', wait: 8, start: (g) => g.mission.finish(), done: () => true },
 ];
 
 const M5_STEPS = [
   { id: 'intro', title: 'Spähtrupp West', text: 'Allein und leise. Ruinen im Westen.', voice: 'm5_00', wait: 11, start: (g) => g.mission.setupRecon(), done: () => true },
   { id: 'mark', title: 'Vier Fahrzeuge markieren', text: 'Ziel im gestrichelten Kreis halten bis LOCK = markiert. Nicht näher als 300 m.', voice: 'm5_01', done: (g) => g.mission.marked >= 4 },
   { id: 'back', title: 'Zurück zur Basis', text: 'Artillerie schlägt auf die markierten Ziele ein. Zur Wegmarke BASIS.', voice: 'm5_04', waypoint: 4, start: (g) => g.mission.artillery(), done: (g) => near(g, wp('BASIS'), 45) },
-  { id: 'end', title: 'Aufklärung abgeschlossen', text: 'Mission erfüllt.', voice: 'm5_05', wait: 6, done: () => true },
+  { id: 'end', title: 'Aufklärung abgeschlossen', text: 'Mission erfüllt.', voice: 'm5_05', wait: 6, start: (g) => g.mission.finish(), done: () => true },
 ];
 
 /* ------------------------------------------------------------- catalogue */
@@ -181,7 +181,7 @@ export const MISSIONS = [
     armed: true,
     allies: ['h2', 'h3'],
     steps: M4_STEPS,
-    total: 10,
+    total: 9,
     depot: { x: 430, z: -560 },
     waves: {
       reinforce: [
@@ -222,6 +222,11 @@ export class Mission {
     this.marked = 0;
     this.detected = false;
     this.reinforced = false;
+  }
+
+  /** objective done: what is left of the enemy breaks off */
+  finish() {
+    this.ended = true;
   }
 
   spawnWave(n) {
@@ -274,7 +279,6 @@ export class Mission {
       ['tank', cx - 30, cz + 25],
       ['tank', cx + 35, cz - 20],
       ['apc', cx + 10, cz + 40],
-      ['apc', cx - 35, cz - 30],
     ];
     this.waves.guard = guards.map(([type, x, z]) => E.spawn(type, x, z, [x, z], 'guard', { heading: Math.atan2(-(0 - x), -(0 - z)) }));
   }
