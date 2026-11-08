@@ -44,21 +44,22 @@ export const TRAINING_TEXT = {
   t07: 'Jetzt die Zielerfassung über das Display. Taste M öffnet die Taktikkarte. Klicken Sie Ziel drei an und dann auf Aufschalten.',
   t08: 'Aufgeschaltet. Schließen Sie das Display und drücken Sie F. Rakete los.',
   t09: 'Ziel vier steht hinter der Ruine, kein Sichtkontakt. Dafür haben Sie die Aufklärungsdrohne. Taste Q startet sie in Blickrichtung. Oder schicken Sie sie über die Taktikkarte.',
-  t10: 'Drohne in der Luft. Sie kreist über dem Gebiet und markiert alles, was sie sieht. Das Bild sehen Sie auf dem mittleren Display, Seite Drohne.',
+  t10: 'Drohne in der Luft. Sie kreist über dem Gebiet und markiert alles, was sie sieht. Das Bild sehen Sie im Bordcomputer, Taste sieben, Seite Drohne.',
   t11: 'Ziel vier ist markiert. Wählen Sie es mit Tab oder auf der Karte, schalten Sie auf und feuern Sie. Die Rakete steigt über die Deckung und stößt von oben herab.',
   t12: 'Treffer. Holen Sie die Drohne zurück, Taste Q. Sie landet selbstständig auf Ihrem Rücken und lädt den Akku nach.',
   t13: 'Achtung, Übung! Brand im Torso. Feuerlöschanlage auf der Mittelkonsole, Taste fünf, Schalter Fire Suppression. Schnell!',
   t14: 'Feuer aus. Jetzt Ihre Lanze: Hammer zwei und Hammer drei stoßen zu Ihnen. Taste B heißt folgen, V heißt Position halten, T heißt Ihr Ziel angreifen. Befehlen Sie: folgen.',
   t15: 'Gut. Und jetzt: Position halten, Taste V.',
   t16: 'Zum Schluss: Mit Taste neun sehen Sie Ihren Mech von außen. Mit neun geht es zurück ins Cockpit.',
-  t17: 'Jetzt der Feuerleitrechner. Linkes Display, Seite COMP. Dort stellen Sie Zielerfassung, Kanone, Raketen und Drohne ein.',
+  t17: 'Jetzt der Bordcomputer. Taste sieben, oder auf dem linken Display auf Computer klicken. Auf der Seite Feuerleitung stellen Sie Zielerfassung, Kanone, Raketen und Drohne ein.',
   t18: 'Schalten Sie die automatische Zielerfassung ein. Der Rechner weist dann selbst das gefährlichste Ziel zu. Sie müssen nur noch feuern.',
   t19: 'Für die Kanone: Feuerart Feuerstoß, Zielhilfe auf Auto. Der Rechner richtet das Rohr selbst auf das zugewiesene Ziel und hält bei fahrenden Zielen vor.',
   t20: 'Übungsziel fünf fährt. Schließen Sie das Display und feuern Sie mit der linken Maustaste. Den Vorhalt übernimmt der Rechner.',
   t21: 'Ziel sechs ist schwer gepanzert. Stellen Sie die Raketen auf Salve zwei. Mit F gehen dann zwei Raketen hintereinander raus.',
   t22: 'Die Drohne kann mehr als kreisen. Stellen Sie im Rechner den Modus auf Begleiten. Dann bleibt sie über Ihnen und meldet alles im Umkreis.',
-  t23: 'Jetzt fliegen Sie selbst. Modus Manuell, dann das mittlere Display auf Drohne öffnen. W und S für das Tempo, A und D zum Drehen, R und F für die Höhe. Suchen Sie Ziel sieben, weit im Norden.',
+  t23: 'Jetzt fliegen Sie selbst. Modus Manuell, dann im Bordcomputer die Seite Drohne. W und S für das Tempo, A und D zum Drehen, R und F für die Höhe. Suchen Sie Ziel sieben, weit im Norden.',
   t24: 'Ziel sieben ist markiert, die Auto-Zielerfassung hat es schon zugewiesen. Schließen Sie das Display und feuern Sie. Die Rakete fliegt im Steilflug über die Deckung.',
+  t25: 'Durch die Einschläge ist Ihre Frontscheibe verdreckt. Schalten Sie den Scheibenwischer ein: Taste K, oder der Schalter WIPER unten an der Mittelkonsole.',
 };
 
 const near = (g, wp, r = 16) => Math.hypot(g.mech.x - wp.x, g.mech.z - wp.z) < r;
@@ -100,24 +101,38 @@ export const STEPS = [
   { id: 'missile', title: 'Rakete auf ÜZ 3', text: 'Display schließen (Esc), dann F.', voice: 't08', done: (g) => g.firingRange.dead(3) },
   // --- drone and top attack
   { id: 'drone', title: 'Aufklärungsdrohne starten', text: 'Q startet sie in Blickrichtung (ÜZ 4 hinter der Ruine). Oder Karte: DROHNE ►, dann Ziel anklicken.', voice: 't09', done: (g) => g.drone.airborne },
-  { id: 'dmark', title: 'Die Drohne markiert ÜZ 4', text: 'Mittleres Display, Seite DROHNE. Die Drohne kreist und markiert, was sie sieht.', voice: 't10', done: (g) => g.firingRange.marked(4) || g.firingRange.dead(4) },
+  { id: 'dmark', title: 'Die Drohne markiert ÜZ 4', text: 'Bordcomputer (Taste 7), Seite DROHNE: ihr Kamerabild. Sie kreist und markiert, was sie sieht.', voice: 't10', done: (g) => g.firingRange.marked(4) || g.firingRange.dead(4) },
   { id: 'indirect', title: 'ÜZ 4 im Steilangriff', text: 'Tab (oder Karte) weist es zu, F feuert: die Rakete steigt über die Deckung.', voice: 't11', done: (g) => g.firingRange.dead(4) },
   // --- fire-control computer: auto target, the laid gun with lead, salvo, drone modes and flying by hand
-  { id: 'comp', title: 'Feuerleitrechner öffnen', text: 'Linkes Display anklicken, Reiter COMP.', voice: 't17', start: (g) => g.firingRange.setupFireControl(), done: (g) => g.openMfd === 'status' && g.pages.status === 'comp' },
-  { id: 'autot', title: 'AUTO-ZIEL einschalten', text: 'COMP: AUTO-ZIEL. Der Rechner weist das gefährlichste Ziel selbst zu.', voice: 't18', done: (g) => g.fc.autoTarget },
-  { id: 'gunfc', title: 'Kanone: FEUERSTOSS, Zielhilfe AUTO', text: 'COMP: FEUERSTOSS und bei ZIELHILFE AUTO. Das Rohr richtet sich mit Vorhalt.', voice: 't19', done: (g) => g.fc.gunMode === 'burst' && g.fc.gunAim === 'auto' },
-  { id: 'mover', title: 'Fahrendes Ziel ÜZ 5', text: 'Display schließen (Esc), ÜZ 5 ist zugewiesen: linke Maustaste.', voice: 't20', done: (g) => g.firingRange.dead(5) },
-  { id: 'salvo', title: 'Salve 2 auf ÜZ 6', text: 'COMP: SALVE 2. ÜZ 6 wird automatisch zugewiesen: F.', voice: 't21', done: (g) => g.firingRange.dead(6) },
-  { id: 'escort', title: 'Drohne: Modus BEGLEITEN', text: 'COMP (oder Drohnenseite): BEGLEITEN.', voice: 't22', done: (g) => g.drone.d.mode === 'escort' },
+  { id: 'comp', title: 'Bordcomputer: FEUERLEITUNG', text: 'Taste 7 (oder linkes Display: COMPUTER ►), Reiter FEUERLEITUNG.', voice: 't17', start: (g) => g.firingRange.setupFireControl(), done: (g) => g.openMfd === 'computer' && g.compPage === 'fc' },
+  { id: 'autot', title: 'AUTO-ZIEL einschalten', text: 'FEUERLEITUNG: AUTO-ZIEL. Der Rechner weist das gefährlichste Ziel selbst zu.', voice: 't18', done: (g) => g.fc.autoTarget },
+  { id: 'gunfc', title: 'Kanone: FEUERSTOSS, Zielhilfe AUTO', text: 'FEUERLEITUNG: FEUERSTOSS und bei ZIELHILFE AUTO. Das Rohr richtet sich mit Vorhalt.', voice: 't19', done: (g) => g.fc.gunMode === 'burst' && g.fc.gunAim === 'auto' },
+  { id: 'mover', title: 'Fahrendes Ziel ÜZ 5', text: 'Computer schließen (Esc), ÜZ 5 ist zugewiesen: linke Maustaste.', voice: 't20', done: (g) => g.firingRange.dead(5) },
+  { id: 'salvo', title: 'Salve 2 auf ÜZ 6', text: 'FEUERLEITUNG: SALVE 2 (Taste 7). ÜZ 6 wird automatisch zugewiesen: Esc, dann F.', voice: 't21', done: (g) => g.firingRange.dead(6) },
+  { id: 'escort', title: 'Drohne: Modus BEGLEITEN', text: 'Bordcomputer, FEUERLEITUNG oder DROHNE: BEGLEITEN.', voice: 't22', done: (g) => g.drone.d.mode === 'escort' },
   {
     id: 'manual',
     title: 'Drohne von Hand: ÜZ 7 finden',
-    text: 'COMP: MANUELL (Drohne starten mit Q), dann mittleres Display, Reiter DROHNE. W/S Tempo · A/D drehen · R/F Höhe. ÜZ 7 liegt weit im Norden.',
+    text: 'Bordcomputer, Seite DROHNE: MANUELL (START oder Q). W/S Tempo · A/D drehen · R/F Höhe. ÜZ 7 liegt weit im Norden.',
     voice: 't23',
     done: (g) => g.firingRange.marked(7) || g.firingRange.dead(7),
   },
-  { id: 'final', title: 'ÜZ 7 bekämpfen', text: 'Auto-Ziel hat es zugewiesen: Display schließen, F.', voice: 't24', done: (g) => g.firingRange.dead(7) },
+  { id: 'final', title: 'ÜZ 7 bekämpfen', text: 'Auto-Ziel hat es zugewiesen: Computer schließen (Esc), F.', voice: 't24', done: (g) => g.firingRange.dead(7) },
   { id: 'recall', title: 'Drohne zurückrufen', text: 'Q. Sie landet selbstständig und lädt nach.', voice: 't12', done: (g) => !g.drone.airborne || g.drone.state === 'return' || g.drone.state === 'land' },
+  // --- the front screen: mud from the range, the wipers clear it
+  {
+    id: 'wiper',
+    title: 'Scheibenwischer: WIPER (K)',
+    text: 'Schalter WIPER unten an der Mittelkonsole (Taste 5) oder Taste K.',
+    voice: 't25',
+    target: 'wiper',
+    start: (g) => {
+      g.cockpit.splatter(1, -0.3);
+      g.cockpit.splatter(1, 0.4);
+      g.cockpit.dustGlass(0.06);
+    },
+    done: (g) => g.sw.wiper && g.cockpit.grimeLevel() < 0.15,
+  },
   // --- damage control, lance, outside view
   { id: 'fire', title: 'Brandübung: FIRE SUPPR', text: 'Mittelkonsole (Taste 5), Schalter FIRE SUPPR.', voice: 't13', target: 'firesup', start: (g) => g.startFire('torso', true), done: (g) => !g.fire },
   { id: 'lance', title: 'Lanze: folgen (B)', text: 'B folgen · V Position halten · T dein Ziel angreifen.', voice: 't14', start: (g) => g.spawnTrainingLance(), done: (g) => g.lastLanceOrder === 'follow' },
