@@ -15,6 +15,16 @@ export const GUN = {
   spread: 0.0018, // rad dispersion
 };
 
+// coaxial 7.62 mm machine gun on the cannon housing: fast, light, for soft targets
+export const MG = {
+  rpm: 900,
+  ammo: 1500,
+  speed: 850,
+  damage: 1.6,
+  spread: 0.0045,
+  tracerEvery: 3, // every third round glows
+};
+
 export const MISSILE = {
   count: 12,
   lockTime: 1.2,
@@ -49,6 +59,7 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export function createWeapons() {
   return {
     gun: { ammo: GUN.ammo, heat: 0, overheated: false, cooldown: 0, shots: 0, hits: 0 },
+    mg: { ammo: MG.ammo, cooldown: 0, shots: 0, hits: 0 },
     missiles: { count: MISSILE.count, cooldown: 0, lockT: 0, target: null, locked: false, fired: 0, hits: 0 },
   };
 }
@@ -56,7 +67,7 @@ export function createWeapons() {
 /** sw: switch snapshot; returns which weapons are live */
 export function weaponState(sw, mainBus) {
   const master = !!(sw.wpnArm && mainBus);
-  return { master, gun: master && !!sw.gun, missile: master && !!sw.missile };
+  return { master, gun: master && !!sw.gun, missile: master && !!sw.missile, mg: master && !!sw.mg };
 }
 
 export function stepWeapons(w, dt) {
@@ -64,6 +75,7 @@ export function stepWeapons(w, dt) {
   g.heat = Math.max(0, g.heat - GUN.cool * dt);
   if (g.overheated && g.heat < GUN.resume) g.overheated = false;
   g.cooldown = Math.max(0, g.cooldown - dt);
+  if (w.mg) w.mg.cooldown = Math.max(0, w.mg.cooldown - dt);
   w.missiles.cooldown = Math.max(0, w.missiles.cooldown - dt);
 }
 
@@ -84,6 +96,16 @@ export function fireGun(w, live) {
     g.heat = 1;
     g.overheated = true;
   }
+  return true;
+}
+
+/** one MG round; returns true when it fires (every MG.tracerEvery-th is a tracer) */
+export function fireMG(w, live) {
+  const m = w.mg;
+  if (!live || m.cooldown > 0 || m.ammo <= 0) return false;
+  m.ammo--;
+  m.shots++;
+  m.cooldown = 60 / MG.rpm;
   return true;
 }
 

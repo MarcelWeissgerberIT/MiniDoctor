@@ -208,7 +208,8 @@ export class HMD {
       col = AMBER;
     }
     this.text(lock, x - 200, y - 40, { size: 14, color: col });
-    this.text('LMB Kanone · F Rakete', x - 200, y - 14, { size: 12, color: DIM, weight: 'normal' });
+    this.text(`MG ${w.mg ? w.mgAmmo : 'AUS'}`, x, y - 40, { size: 13, color: w.mg ? G : DIM, align: 'right' });
+    this.text('LMB Kanone · E MG · F Rakete', x - 200, y - 14, { size: 12, color: DIM, weight: 'normal' });
   }
 
   drawParts(p, x, y) {

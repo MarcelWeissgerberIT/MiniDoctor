@@ -289,6 +289,27 @@ export class Sound {
     if (kind === 'toggle') this.thump(900, 0.06, 0.03);
   }
 
+  /** a spent case hits the ground (size 1 = 30 mm, smaller = MG) */
+  tink(size = 1) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    const t = c.currentTime + 0.01;
+    const big = size > 0.5;
+    for (const [f, g] of [
+      [big ? 2300 : 4200, 0.045],
+      [big ? 3650 : 6300, 0.025],
+    ]) {
+      const o = c.createOscillator();
+      o.frequency.value = f * (0.94 + Math.random() * 0.12);
+      const gn = c.createGain();
+      gn.gain.setValueAtTime(g * (big ? 1 : 0.5), t);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t + (big ? 0.22 : 0.12));
+      o.connect(gn).connect(this.master);
+      o.start(t);
+      o.stop(t + 0.25);
+    }
+  }
+
   beep(freq = 1200, dur = 0.12, gain = 0.12, delay = 0) {
     if (!this.ctx) return;
     const c = this.ctx;
