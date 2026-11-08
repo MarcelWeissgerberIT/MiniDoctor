@@ -4,13 +4,13 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 *A browser first-person mech game. You board a 5 m combat robot, bring it up from cold and dark and walk it out of a forward base.*
 
-**Stand: Prototyp 0.4 – Missionskatalog mit fünf Einsätzen, Waffen, Gegnern, Außenansicht und einer eigenen Lanze aus verbündeten Mechs.**
+**Stand: Prototyp 0.5 – Grundausbildung in der Basis, fünf Einsätze, interaktive Displays, Aufklärungsdrohne, Lanze, Pause-Menü mit Einstellungen und Erfolgen.**
 
 ## Missionskatalog
 
 | # | Mission | Typ | Inhalt |
 |---|---|---|---|
-| 1 | Kalt & dunkel | Einweisung | Einsteigen, Mech nach Checkliste hochfahren, laufen lernen |
+| 1 | Kalt & dunkel | Grundausbildung | In der Basis: einsteigen, Kaltstart nach Checkliste, laufen, Displays bedienen, Schießbahn (Kanone, MG, Rakete über die Karte), Drohne und Steilangriff, Brandübung, Lanzenbefehle, Außenansicht |
 | 2 | Feuertaufe | Verteidigung | Waffen scharf machen, zwei Panzerwellen an der Panzersperre abwehren |
 | 3 | Schulter an Schulter | Lanze · Verteidigung | Mit Hammer 2 und Hammer 3: Befehle lernen, zwei Wellen (9 Fahrzeuge) abwehren |
 | 4 | Depotschlag | Lanze · Angriff | Mit der Lanze zum Feinddepot (700 m NO), Wachen ausschalten, 4 Depotziele zerstören, Verstärkung abwehren |
@@ -38,6 +38,42 @@ Geschossen wird nur bei freier Sicht: Gebäuderuinen und Geländekuppen blockier
   - Torso: **Gyro** (keine Stabilisierung, die Kanone streut stärker) oder **Kühlung** (Kanone und Reaktor laufen heißer)
   - linker Arm: **Raketenwerfer** blockiert
   - Beine: **Hydraulik** (nur noch 70 % Geschwindigkeit)
+
+## Displays bedienen und Ziele zuweisen
+
+Jedes der drei Glas-Displays lässt sich **öffnen**: anklicken (z. B. aus der Displays-Ansicht, Taste 6), oder **M** für die Taktikkarte. Der Blick geht dann nah an das Display, Checkliste und Untertitel treten zurück. Oben wechseln Reiter die Seiten, unten liegen Funktionstasten, und Inhalte sind anklickbar. Esc oder Rechtsklick schließt.
+
+| Display | Seiten | Bedienung |
+|---|---|---|
+| links | STATUS · ZIELE | Zielliste aller bekannten Fahrzeuge mit Entfernung, Uhrzeit-Richtung, gezeigter Seite, Verhalten und Zustand; Filter (Alle, Panzer, SPz, Bedrohung, Drohnenmarkierung), Blättern, AUFSCHALTEN / FREI, DROHNE ZUM ZIEL |
+| Mitte | KAMERA · DROHNE | Bugkamera (Zielrahmen anklicken = zuweisen) bzw. Drohnenkamera mit Höhe, Entfernung, Akku, Markierungen, START / RÜCKRUF, ZUM ZIEL |
+| rechts | TAKTIK | Karte: Fahrzeug anklicken = auswählen, AUFSCHALTEN; Zoom 250 bis 2000 m; DROHNE ►, dann Punkt auf der Karte anklicken |
+
+**Bekannte Ziele:** Ein Fahrzeug erscheint auf Displays, HUD und Helmdisplay erst, wenn du, ein Flügelmann oder die Drohne es gesehen hat. Bei neuen Wellen kommt eine Erstmeldung vom HQ. Verschwindet ein Ziel aus der Sicht, bleibt es 20 s an seiner letzten bekannten Position stehen (mit „?“).
+
+**Zuweisen:** Mit **Tab** oder über ein Display bekommt der Raketensucher ein Ziel. Er schaltet darauf auf, wenn es bis zu 75° neben der Rumpfachse liegt und du es siehst oder die Drohne es markiert. Dafür musst du nicht mehr hinschauen. Raketen starten immer vom Werfer entlang der Rumpfachse und lenken dann zum Ziel.
+
+## Aufklärungsdrohne
+
+Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung, alternativ schickst du sie über die Karte oder die Zielliste zu einem Punkt bzw. Ziel.
+
+- **Flug:** Sie steigt auf, fliegt mit 26 m/s hin und kreist in 70 m Höhe (Radius 110 m) über dem Gebiet.
+- **Markieren:** Jedes Fahrzeug, das ihre Kamera sieht (320 m Reichweite, freie Sicht, Nebel blockiert), wird 30 s lang markiert.
+- **Rückkehr:** Bei schwachem Akku oder auf **Q** kommt sie von selbst zurück, landet auf dem Mech und lädt (95 s Flugzeit, 40 s Ladezeit).
+- **Abschuss:** Schützenpanzer in der Nähe können sie abschießen; eine Ersatzdrohne wird nach 45 s montiert.
+- **Steilangriff:** Ein markiertes Ziel ohne eigene Sicht greift die Rakete von oben an. Sie steigt auf 95 m und stürzt auf das dünne Dach (×1,5).
+- **Mission 5:** Dort ist die Drohne durch einen Störsender gesperrt.
+
+## Pause, Einstellungen, Erfolge
+
+- **Pause:** **P** oder Esc (Maus verlassen) öffnet das Pause-Menü: Fortsetzen, Einstellungen, Erfolge, Steuerung, Neustart, Hauptmenü.
+- **Einstellungen**, auch im Titelmenü, alles sofort gespeichert:
+  - Grafikqualität, Sichtfeld, Mausempfindlichkeit, Y-Invertierung
+  - Kopf- und Kabinenbewegung: weniger Schaukeln gegen Reiseübelkeit
+  - Lautstärke und Funklautstärke getrennt, Untertitel
+- **Erfolge:** 14 Stück, z. B. Heckschuss, Von oben, Fliegendes Auge, Unberührt, Niemand bleibt zurück. Eine Meldung oben im Bild zeigt jeden neuen Erfolg. Die Liste steht im Pause- und Titelmenü.
+
+Wie BattleBot auf Steam kommen soll und was dafür noch fehlt, steht in [docs/STEAM.md](docs/STEAM.md).
 
 ## Die Lanze: verbündete Mechs
 
@@ -70,7 +106,14 @@ Feindliche Fahrzeuge wählen ihr Ziel unter allen Mechs der Lanze. Das Helmdispl
    | OPTICS + HUD | Kamerabild und Head-up-Display |
    | LEG LOCK aus | Beinverriegelung löst sich – erst jetzt kann der Mech laufen |
 
-3. **Laufen:** Schub geben, zur ersten Wegmarke (grüner Signalrauch, blinkende Leuchte, Markierung im HUD und auf dem Radar), drehen, zweite Wegmarke, anhalten, Nachtsicht testen. Danach freies Bewegen.
+3. **Laufen:** Schub geben, zur ersten Wegmarke (grüner Signalrauch, blinkende Leuchte, Markierung im HUD und auf dem Radar), drehen, zweite Wegmarke, anhalten, Nachtsicht testen.
+4. **Displays:** Holo-HUD lesen, ein Display mit der Maus öffnen (Seiten oben, Funktionstasten unten) und wieder schließen.
+5. **Schießbahn an Wegmarke 3:** Waffen scharf machen (Overhead-Panel), dann vier ausgemusterte Panzer als Übungsziele (ÜZ):
+   - ÜZ 1 mit der Kanone (das HUD zeigt die Seite, die er dir zuwendet)
+   - ÜZ 2, Munitionskisten, mit dem MG
+   - ÜZ 3 auf der Taktikkarte anklicken, AUFSCHALTEN, Rakete
+   - ÜZ 4 steht hinter einer Ruine: Drohne starten, sie markiert das Ziel, dann Rakete im Steilangriff; zum Schluss die Drohne zurückrufen
+6. **Brandübung** mit FIRE SUPPR, dann stößt die **Lanze** dazu (Befehle B und V), zum Schluss die **Außenansicht** (9). Danach Auswertung und Haken im Missionskatalog.
 
 **Laufen fühlt sich nach Laufen an:** Bei jedem Schritt verlagert der Mech sein Gewicht aufs Standbein (Kabine kippt 3–4°), hebt sich über das Bein, sackt beim Aufsetzen ab und nickt nach vorn, der Rumpf verdreht sich leicht. Der Pilotenkopf hängt federnd darin und hält den Blick teilweise waagerecht – dadurch schaukelt das Cockpit sichtbar um dich herum. Kurven, Beschleunigen, Bremsen und Kraterränder neigen die Maschine, beim Anhalten schwingt sie nach. Erkennungsmarken an einer Kette pendeln über dem Sichtschlitz, Röhrendisplays springen kurz, das Licht flackert, die Kabine knarzt, Hydraulik zischt, Schritte kommen von links bzw. rechts. Der Gyro-Stabilisator (G) dämpft das Schwanken.
 
@@ -204,11 +247,15 @@ src/
   main.js              Spielablauf, Kamera-Rig, Verdrahtung der Systeme
   entry.js             Einstiegssequenz (Video mit Ton-Cues, Hinsetzen, Luke; Fallback-Kamerafahrt)
   cockpit/views.js     Panel-Ansichten (Position, Blickziel, Blickfeld)
-  tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken (auch Ablaufsteuerung für Mission 2)
+  tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken (auch Ablaufsteuerung der Kampfmissionen)
+  training.js          Schießbahn der Grundausbildung (vier Übungsziele, eins hinter einer Ruine)
+  menu.js              Einstellungen, Erfolge, Pause-Menü (localStorage, Steam-IDs)
   missions.js          Missionskatalog: Definitionen, Wellen, Ziele, Funksprüche, Ablauf
   combat/allies.js     Verbündete Mechs: Modelle, Gehanimation, Waffen, Treffer, Wracks
   cockpit/comms.js     Videoverbindung: wer spricht, Clip abspielen
   logic/allies.js      Flügelmann-Logik: Befehle, Formation, Bewegung, Feuer (getestet)
+  logic/drone.js       Drohnen-Logik: Start, Anflug, Suchkreis, Rückkehr, Landung, Akku (getestet)
+  combat/drone.js      Drohne: Modell, Rotoren, Kamera, Markieren, Abschuss, Geräusch
   combat/arsenal.js    Kanone, Leuchtspur, Lenkraketen, Einschläge
   combat/enemies.js    Panzer/Schützenpanzer: abgetrennter Drehturm, ballistische Granaten mit Kollision, Nebelwände, Deckungssuche, Wracks
   combat/hmd.js        Helmdisplay (Schub, Waffen, Zielmarken, Trefferrichtung)

@@ -19,6 +19,7 @@ import { BodyDynamics } from './logic/gait.js';
 import { createSystems, stepSystems, hotSwitches } from './logic/systems.js';
 import { Tutorial, VOICE_TEXT, TRAINING_TEXT } from './tutorial.js';
 import { Range } from './training.js';
+import { loadSettings, Achievements, Menu } from './menu.js';
 import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
 import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
@@ -97,6 +98,27 @@ class Game {
     this.radio = new Radio(this.sound, ui);
     this.voiceText = { ...VOICE_TEXT, ...TRAINING_TEXT, ...EXTRA_VOICE, ...MISSION_TEXT };
     this.firingRange = new Range(this);
+    // store-ready basics: settings, achievements, pause menu
+    this.settings = loadSettings();
+    this.ach = new Achievements((a) => {
+      ui.achToast(a);
+      this.sound.beep(1760, 0.08, 0.06);
+      this.sound.beep(2350, 0.12, 0.05, 0.09);
+    });
+    this.paused = false;
+    this.menu = new Menu({
+      settings: this.settings,
+      achievements: this.ach,
+      onChange: (s) => this.applySettings(s),
+      onResume: () => this.resume(),
+      onRestart: () => {
+        this.resume();
+        if (this.mission) this.restartMission();
+        else location.reload();
+      },
+      onQuit: () => location.reload(),
+      onHelp: () => ui.toggleHelp(),
+    });
     this.tutorial = new Tutorial(this, ui);
     this.comms = new Comms();
     this.ray = new THREE.Raycaster();
@@ -185,7 +207,12 @@ class Game {
       if (d < 600) setTimeout(() => (this.shake += 0.6 * s), (d / 343) * 1000);
     };
     addEventListener('resize', () => this.resize());
-    this.input.onLockChange = (locked) => ui.lockHint(!locked && this.state !== 'title' && !this.input.cursorMode);
+    this.input.onLockChange = (locked) => {
+      // losing the mouse in the cockpit (Esc in the browser) pauses the game
+      if (!locked && this.state === 'cockpit' && !this.input.cursorMode && !this.inResult && !this.dead && !this.menu.open && !this.external) this.pause();
+      else ui.lockHint(!locked && this.state !== 'title' && !this.input.cursorMode && !this.menu.open);
+    };
+    this.applySettings(this.settings);
     this.post.cockpitPass.enabled = false;
     this.placeMech();
     // title backdrop: a slow look at the parked mech
@@ -613,6 +640,12 @@ class Game {
 
   onEnemyKilled(e, by = null) {
     this.stats.kills++;
+    if (!by && !e.training) this.ach.count('kills');
+    // how the killing round struck (set by onArmorHit just before)
+    if (!by && e.type === 'tank' && this.time - (e.lastFaceT ?? -9) < 0.2) {
+      if (e.lastFace === 'rear') this.ach.unlock('rear');
+      if (e.lastFace === 'top') this.ach.unlock('top');
+    }
     const what = e.type === 'tank' ? 'PANZER' : e.type === 'apc' ? 'SCHÜTZENPANZER' : 'DEPOTZIEL';
     this.hmd.notify(`${what} ZERSTÖRT${by ? ' · ' + by.name : ''}`, '#a6ffb8', 2.5);
     if (!by && this.mission?.def.id === 'm2') this.mission.call('m2_04', 12);
@@ -641,6 +674,7 @@ class Game {
   }
 
   shellWhizz(p) {
+    this.ach.count('whizz');
     this.sound.one('shell_whizz', 0.75, 0.9 + Math.random() * 0.2, undefined, 0, this.panOf(p));
   }
 
@@ -698,6 +732,8 @@ class Game {
 
   /** our round struck an enemy's armour: show where (front plates shrug it off) */
   onArmorHit(e, face, f, kind) {
+    e.lastFace = face;
+    e.lastFaceT = this.time;
     if (kind === 'mg' && face !== 'rear') return;
     const name = { front: 'FRONT', side: 'SEITE', rear: 'HECK', turret: 'TURM', top: 'DACH' }[face];
     this.hmd.armorHit(`${name} ×${f.toFixed(1)}`, f >= 1.3 ? '#a6ffb8' : f >= 0.9 ? '#effff2' : '#ffc15e');
@@ -757,7 +793,10 @@ class Game {
       const drill = this.fire.drill;
       this.fire = null;
       this.hmd.notify('BRAND GELÖSCHT', '#a6ffb8', 2.5);
-      if (!drill) setTimeout(() => this.say('m2_11'), 1400);
+      if (!drill) {
+        setTimeout(() => this.say('m2_11'), 1400);
+        this.ach.unlock('fire');
+      }
     }
   }
 
@@ -786,7 +825,13 @@ class Game {
     const def = this.mission?.def ?? (this.mode === 'mission' ? MISSIONS[0] : null);
     const t = Math.max(0, this.time - this.stats.start);
     const lance = this.allies.list;
-    if (win && def) saveProgress(def.id, t);
+    if (win && def) {
+      saveProgress(def.id, t);
+      this.ach.unlock(def.kind === 'tutorial' ? 'training' : `win_${def.id}`);
+      if (def.kind !== 'tutorial' && this.stats.hitsTaken === 0) this.ach.unlock('untouched');
+      if (lance.length && !lance.some((x) => x.dead)) this.ach.unlock('lance');
+    }
+    this.inResult = true;
     ui.result(
       {
         win,
@@ -833,6 +878,7 @@ class Game {
 
   async startCombatMission(def) {
     await this.sound.init();
+    this.applySettings(this.settings);
     this.sound.startAmbience();
     this.input.enabled = true;
     this.input.lock();
@@ -867,6 +913,7 @@ class Game {
   }
 
   restartMission() {
+    this.inResult = false;
     ui.hideResult();
     this.input.lock();
     this.beginMission(this.mission.def);
@@ -889,6 +936,35 @@ class Game {
     return clamp(f, v * 0.8, Math.max(v, Math.min(95, v * 1.6)));
   }
 
+  /** graphics quality, volumes and subtitles; FOV, mouse and head motion are read live */
+  applySettings(s) {
+    const pr = { low: 0.75, medium: 1, high: Math.min(devicePixelRatio, params.has('lowres') ? 1 : 1.5) }[s.quality] ?? 1;
+    if (Math.abs(renderer.getPixelRatio() - pr) > 0.01) {
+      renderer.setPixelRatio(pr);
+      this.resize?.();
+    }
+    if (this.sound.master) this.sound.master.gain.value = 0.9 * s.volume;
+    if (this.sound.voiceGain) this.sound.voiceGain.gain.value = s.voice;
+    ui.subsOff = !s.subtitles;
+    this.fov = -1;
+  }
+
+  pause() {
+    if (this.paused || this.state !== 'cockpit') return;
+    this.paused = true;
+    ui.lockHint(false);
+    this.sound.ctx?.suspend?.();
+    this.menu.show('pause', { inGame: true, canRestart: true });
+  }
+
+  resume() {
+    if (!this.paused) return this.menu.hide();
+    this.paused = false;
+    this.menu.hide();
+    this.sound.ctx?.resume?.();
+    if (this.view === 'front' && !this.external) this.input.lock();
+  }
+
   resize() {
     this.fov = -1; // recompute the field of view for the new aspect
     const w = innerWidth;
@@ -905,6 +981,7 @@ class Game {
 
   async startMission() {
     await this.sound.init();
+    this.applySettings(this.settings);
     this.sound.startAmbience();
     this.input.enabled = true;
     this.input.lock();
@@ -921,6 +998,7 @@ class Game {
 
   async startFree() {
     await this.sound.init();
+    this.applySettings(this.settings);
     this.sound.startAmbience();
     this.input.enabled = true;
     this.input.lock();
@@ -982,7 +1060,10 @@ class Game {
         this.sound.one('reactor_start', 1.0);
         this.message = 'REACTOR IGNITION';
       }
-      if (e === 'reactorRunning') this.message = 'REACTOR ONLINE';
+      if (e === 'reactorRunning') {
+        this.message = 'REACTOR ONLINE';
+        this.ach.unlock('coldstart');
+      }
       if (e === 'reactorFail') {
         c.switches.reactor.set(false);
         s.prev.reactor = false;
@@ -1084,8 +1165,9 @@ class Game {
       return;
     }
     const free = this.view === 'front';
-    const dyaw = free ? -inp.dx * LOOK.sens * (1 - this.zoom * 0.6) : 0;
-    const dpitch = free ? -inp.dy * LOOK.sens * (1 - this.zoom * 0.6) : 0;
+    const sens = LOOK.sens * this.settings.sens * (1 - this.zoom * 0.6);
+    const dyaw = free ? -inp.dx * sens : 0;
+    const dpitch = free ? -inp.dy * sens * (this.settings.invertY ? -1 : 1) : 0;
     // focus views fade in and out; the right mouse button zooms in free look
     const vt = free ? 0 : 1;
     this.viewBlend += (vt - this.viewBlend) * Math.min(1, dt * 5.5);
@@ -1194,9 +1276,13 @@ class Game {
     const stab = this.sw.stab && this.sys.gyro > 0.9 && !this.failed.gyro;
     const m = this.mech;
     // the walker's torso (= cockpit) pose from the gait, and the pilot's head inside it
-    const b = this.body.update(dt, m, this.groundSlope(), stab);
-    this.pose = b;
-    const head = this.body.head;
+    const raw = this.body.update(dt, m, this.groundSlope(), stab);
+    this.pose = raw;
+    // comfort setting: less cabin and head motion against motion sickness
+    const bob = this.settings.bob;
+    const b = bob === 1 ? raw : { ...raw, x: raw.x * bob, y: raw.y * bob, pitch: raw.pitch * bob, roll: raw.roll * bob, yaw: raw.yaw * bob };
+    const h0 = this.body.head;
+    const head = bob === 1 ? h0 : { ...h0, p: h0.p.map((v) => v * bob), pitch: h0.pitch * bob, roll: h0.roll * bob, yaw: h0.yaw * bob };
     // extra impulses (leg release, impacts) on a separate spring
     this.headVel.addScaledVector(this.headOff, -90 * dt).multiplyScalar(Math.max(0, 1 - (stab ? 13 : 8) * dt));
     this.headOff.addScaledVector(this.headVel, dt);
@@ -1231,7 +1317,7 @@ class Game {
         this.cockpitCam.position.addScaledVector(this.focusPose.pos, e);
       }
       this.cockpitCam.quaternion.copy(this._qs).multiply(this._ql);
-      const fov = this.fitFov(THREE.MathUtils.lerp(THREE.MathUtils.lerp(70, this.focusPose.fov, e), ZOOM_FOV, this.zoom));
+      const fov = this.fitFov(THREE.MathUtils.lerp(THREE.MathUtils.lerp(this.settings.fov, this.focusPose.fov, e), ZOOM_FOV, this.zoom));
       if (Math.abs(fov - this.fov) > 0.01) {
         this.fov = fov;
         for (const cam of [this.cockpitCam, this.worldCam]) {
@@ -1330,6 +1416,7 @@ class Game {
     if (I.hit('Backspace') && this.caution.active) this.cockpit.lamps.lock.toggle();
     if (I.hit('F1') || I.hit('Slash')) ui.toggleHelp();
     // displays, targets and the drone
+    if (I.hit('KeyP')) this.pause();
     if (I.hit('KeyM')) this.toggleDisplay('tactical');
     if (I.hit('Tab')) this.nextTarget();
     if (I.hit('KeyQ')) this.drone.toggle(this.droneGoal());
@@ -1493,6 +1580,7 @@ class Game {
   }
 
   onDroneMark(e) {
+    this.ach.count('marks');
     this.sound.beep(1900, 0.04, 0.05);
     this.hmd.notify(`DROHNE: ${e.label || (e.type === 'tank' ? 'PZ' : 'SPZ')} MARKIERT`, '#9fe8ff', 1.8);
   }
@@ -2010,7 +2098,7 @@ function loop() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  game.update(dt);
+  if (!game.paused) game.update(dt);
   game.render();
   requestAnimationFrame(loop);
 }
@@ -2049,6 +2137,8 @@ Promise.all([assets.loadAll(), loadFonts()])
       game.beginMission(def);
     } else
       ui.ready(MISSIONS, loadProgress(), (def) => (def.kind === 'tutorial' ? game.startMission() : game.startCombatMission(def)), () => game.startFree());
+      document.getElementById('opts').onclick = () => game.menu.show('settings', { inGame: false });
+      document.getElementById('achbtn').onclick = () => game.menu.show('ach', { inGame: false });
     renderer.compile(game.world.scene, game.worldCam);
     renderer.compile(game.cockpit.scene, game.cockpitCam);
     if (params.has('manual')) {

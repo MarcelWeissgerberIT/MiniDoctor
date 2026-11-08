@@ -44,7 +44,7 @@ export class Radio {
     shaper.curve = RADIO_CURVE;
     const g = c.createGain();
     g.gain.value = 1.15;
-    src.connect(hp).connect(lp).connect(shaper).connect(g).connect(s.master);
+    src.connect(hp).connect(lp).connect(shaper).connect(g).connect(s.voiceGain || s.master);
     src.start(t);
     this.current = src;
     this.squelch(t - 0.1);
@@ -106,6 +106,8 @@ export class Sound {
     comp.threshold.value = -14;
     comp.ratio.value = 4;
     this.master.connect(comp).connect(c.destination);
+    this.voiceGain = c.createGain();
+    this.voiceGain.connect(this.master);
     for (const [k, ab] of Object.entries(this.raw)) {
       try {
         this.buf[k] = await c.decodeAudioData(ab.slice(0));

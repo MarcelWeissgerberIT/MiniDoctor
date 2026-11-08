@@ -203,7 +203,21 @@ export class UI {
     this.viewsEl.querySelectorAll('button').forEach((b) => b.classList.toggle('hint', b.dataset.view === name));
   }
 
+  /** an achievement unlocked: a small card slides in at the top */
+  achToast(a) {
+    const el = document.createElement('div');
+    el.className = 'achtoast';
+    el.innerHTML = '<small>ERFOLG FREIGESCHALTET</small><b></b><span></span>';
+    el.querySelector('b').textContent = `★ ${a.name}`;
+    el.querySelector('span').textContent = a.desc;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => el.classList.remove('show'), 4200);
+    setTimeout(() => el.remove(), 5000);
+  }
+
   subtitle(text, seconds) {
+    if (this.subsOff) return;
     this.sub.innerHTML = '';
     const who = document.createElement('span');
     who.className = 'who';

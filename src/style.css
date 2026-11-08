@@ -90,7 +90,9 @@ body {
   gap: 14px;
   flex-wrap: wrap;
 }
-#quick {
+#quick,
+#opts,
+#achbtn {
   font: inherit;
   font-size: 18px;
   letter-spacing: 0.14em;
@@ -101,11 +103,15 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.25);
   cursor: pointer;
 }
-#quick:disabled {
+#quick:disabled,
+#opts:disabled,
+#achbtn:disabled {
   opacity: 0.4;
   cursor: wait;
 }
-#quick:not(:disabled):hover {
+#quick:not(:disabled):hover,
+#opts:hover,
+#achbtn:hover {
   background: rgba(255, 255, 255, 0.16);
 }
 .load {
@@ -826,4 +832,189 @@ body.mfdopen #subtitle {
   bottom: 44px;
   font-size: 13px;
   max-width: min(560px, calc(100vw - 32px));
+}
+
+/* pause menu, settings, achievements */
+#menu {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+}
+#menu.show {
+  display: flex;
+}
+#menu .box {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: rgba(14, 14, 11, 0.95);
+  border: 1px solid rgba(217, 164, 65, 0.5);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  font-family: 'Barlow Condensed', sans-serif;
+  color: #ece6d6;
+}
+#menu .mtabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(217, 164, 65, 0.12);
+}
+#menu .mtabs button {
+  flex: 1;
+  padding: 10px 6px;
+  background: transparent;
+  border: 0;
+  color: #c9b98f;
+  font: 600 15px 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+#menu .mtabs button.on {
+  background: #d9a441;
+  color: #1a1408;
+}
+#menu .mtabs button.close {
+  flex: 0 0 44px;
+}
+#menu .mbody {
+  padding: 18px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#menu h2 {
+  margin: 0 0 6px;
+  font-size: 26px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+#menu .mbody > button {
+  padding: 11px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ece6d6;
+  font: 600 18px 'Barlow Condensed', sans-serif;
+  cursor: pointer;
+}
+#menu .mbody > button.primary {
+  background: #d9a441;
+  color: #1a1408;
+  border-color: #d9a441;
+}
+#menu .mbody > button:hover {
+  border-color: #d9a441;
+}
+#menu .settings label {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 17px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+#menu .settings input[type='checkbox'] {
+  justify-self: start;
+  width: 20px;
+  height: 20px;
+  accent-color: #d9a441;
+}
+#menu .settings input[type='range'] {
+  accent-color: #d9a441;
+}
+#menu .settings select {
+  grid-column: span 2;
+  padding: 5px;
+  background: #1d1c17;
+  color: #ece6d6;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font: 16px 'Barlow Condensed', sans-serif;
+}
+#menu .settings output {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #d9a441;
+  text-align: right;
+}
+#menu .note {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: #a39b86;
+}
+#menu .achlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#menu .achlist li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #8e877a;
+}
+#menu .achlist li.done {
+  color: #ece6d6;
+}
+#menu .achlist b {
+  font-size: 17px;
+}
+#menu .achlist li.done b {
+  color: #d9a441;
+}
+#menu .achlist span {
+  grid-column: 1;
+  font-size: 14px;
+}
+#menu .achlist i {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-style: normal;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+.achtoast {
+  position: fixed;
+  left: 50%;
+  top: 14px;
+  transform: translate(-50%, -140%);
+  transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  z-index: 25;
+  min-width: 260px;
+  padding: 10px 18px;
+  background: rgba(14, 14, 11, 0.94);
+  border: 1px solid #d9a441;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  font-family: 'Barlow Condensed', sans-serif;
+  color: #ece6d6;
+  text-align: center;
+  pointer-events: none;
+}
+.achtoast.show {
+  transform: translate(-50%, 0);
+}
+.achtoast small {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: #d9a441;
+}
+.achtoast b {
+  display: block;
+  font-size: 20px;
+}
+.achtoast span {
+  font-size: 14px;
+  color: #b9b19c;
+}
+
+#opts,
+#achbtn {
+  font-size: 15px;
+  padding: 14px 16px;
 }

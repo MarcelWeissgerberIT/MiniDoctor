@@ -105,10 +105,10 @@ export const MISSIONS = [
     id: 'm1',
     num: 1,
     name: 'Kalt & dunkel',
-    tag: 'EINWEISUNG',
+    tag: 'GRUNDAUSBILDUNG',
     diff: 1,
     lance: 0,
-    desc: 'BB-07 steht abgeschaltet an Rampe drei. Steig über die Leiter ein, fahr den Mech nach Checkliste hoch und bring ihn zum Laufen.',
+    desc: 'Alles, was ein Pilot können muss, in der Basis: einsteigen, Kaltstart nach Checkliste, laufen, Displays bedienen, Schießbahn mit Kanone, MG und Raketen, Aufklärungsdrohne mit Steilangriff, Brandübung und Lanzenbefehle.',
     kind: 'tutorial',
   },
   {
