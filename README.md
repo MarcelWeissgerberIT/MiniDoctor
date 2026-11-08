@@ -60,7 +60,7 @@ Bei jedem Push auf `main` baut und veröffentlicht GitHub Actions das Spiel auf 
 
 ## Das Cockpit
 
-Modern und aufgeräumt wie im Einstiegsvideo: satiniertes Gunmetal, schlanke Streben, große dreigeteilte Panzerglaskanzel, schwarze Glas-Displays und bernsteinfarbene LED-Lichtlinien. (Die folgende Liste beschreibt die Ausstattung.)
+Gebaut nach dem Innenraum aus dem Einstiegsvideo: Rundum-Kanzel aus breiter Frontscheibe und zwei schrägen Seitenscheiben, ein geschwungenes schwarzes Armaturenbrett aus fünf Segmenten um den Sitz herum, orange hinterleuchtete Rundinstrumente (Reaktor, Hydraulik, Kühlung, APU, Gyro, Kerntemperatur, Bordnetz, Temperatur, Geschwindigkeit), orange Siebensegment-Anzeigen (Kurs, Munition, Schub, km/h) und eine Anzeigeleiste oben an der Scheibe (Uhrzeit, Kurs, Entfernung). Die Multifunktionsdisplays leuchten ebenfalls orange; nur die Nachtsicht bleibt grün. (Die folgende Liste beschreibt die Ausstattung.)
 
 - **Panzerhülle** aus olivgrünen, rostigen Stahlplatten, genieteten Spanten, Diamant-Riffelblech am Boden, Hydraulikleitungen und Kabelbäumen.
 - **Sichtschlitz** aus drei verschmutzten Panzerglasscheiben (Kratzer, Staub, Schlieren), getrennt durch Stahlstreben, dazu zwei kleine seitliche Sichtblöcke. Der Kopf lässt sich nur begrenzt drehen (±105° seitlich, 38° hoch, 62° runter).

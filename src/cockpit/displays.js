@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 
 const FONT = "'JetBrains Mono','DejaVu Sans Mono','Consolas',monospace";
-const G = '#8dffa0';
-const W = '#e8fff0';
-const GD = 'rgba(125,255,138,0.4)';
-const AMBER = '#ffb347';
+// orange glass displays, matching the back-lit instruments
+const G = '#ffa040';
+const W = '#ffe6c8';
+const GD = 'rgba(255,160,64,0.4)';
+const AMBER = '#ffe04a';
 const RED = '#ff4a3a';
 
 const vert = /* glsl */ `
@@ -29,13 +30,14 @@ void main(){
   uv.y += jolt * 0.006 * sin(time * 90.0);
   uv.x += jolt * 0.015 * step(0.94, fract(uv.y * 7.0 + time * 13.0)) * sin(time * 140.0);
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
-  vec3 col = vec3(0.004, 0.009, 0.012);
+  vec3 col = vec3(0.012, 0.006, 0.003);
   if (useFeed > 0.5) {
     vec3 f = texture2D(feed, uv).rgb;
     float l = dot(f, vec3(0.299, 0.587, 0.114));
     l = pow(max(l * 1.4, 0.0), mix(0.8, 0.55, nv)) * mix(0.95, 1.7, nv);
     l += (hash(uv * 400.0 + time) - 0.5) * mix(0.03, 0.12, nv);
-    col += mix(vec3(0.32, 0.9, 0.42), vec3(0.25, 1.0, 0.3), nv) * l * 0.9;
+    // day: warm monochrome like the instruments, night vision: classic green
+    col += mix(vec3(1.0, 0.62, 0.3), vec3(0.25, 1.0, 0.3), nv) * l * 0.9;
   }
   vec4 o = texture2D(map, uv);
   col = mix(col, o.rgb, o.a);
@@ -90,7 +92,7 @@ export class MFD {
     g.setTransform(2, 0, 0, 2, 0, 0);
     if (clearAlpha < 1) g.clearRect(0, 0, 512, 384);
     else {
-      g.fillStyle = '#02070a';
+      g.fillStyle = '#0a0503';
       g.fillRect(0, 0, 512, 384);
     }
     g.lineJoin = 'round';
@@ -321,7 +323,7 @@ export function drawTactical(mfd, s) {
   g.lineTo(cx, cy + R);
   g.stroke();
   // field of view wedge of the pilot's head
-  g.fillStyle = 'rgba(125,255,138,0.08)';
+  g.fillStyle = 'rgba(255,160,64,0.08)';
   g.beginPath();
   g.moveTo(cx, cy);
   g.arc(cx, cy, R, -Math.PI / 2 - s.look - 0.6, -Math.PI / 2 - s.look + 0.6);
@@ -331,9 +333,9 @@ export function drawTactical(mfd, s) {
   const sw = (s.time * 1.6) % (Math.PI * 2);
   const grd = g.createConicGradient ? g.createConicGradient(sw - Math.PI / 2 - 0.9, cx, cy) : null;
   if (grd) {
-    grd.addColorStop(0, 'rgba(125,255,138,0)');
-    grd.addColorStop(0.14, 'rgba(125,255,138,0.28)');
-    grd.addColorStop(0.141, 'rgba(125,255,138,0)');
+    grd.addColorStop(0, 'rgba(255,160,64,0)');
+    grd.addColorStop(0.14, 'rgba(255,160,64,0.28)');
+    grd.addColorStop(0.141, 'rgba(255,160,64,0)');
     g.fillStyle = grd;
     g.beginPath();
     g.arc(cx, cy, R, 0, Math.PI * 2);
@@ -366,7 +368,7 @@ export function drawTactical(mfd, s) {
       g.closePath();
       g.fill();
     } else if (c.type === 'wp') {
-      g.strokeStyle = '#d8ffe0';
+      g.strokeStyle = '#ffe6c8';
       g.lineWidth = 2;
       g.beginPath();
       g.moveTo(px, py - 8);
@@ -379,7 +381,7 @@ export function drawTactical(mfd, s) {
       g.fillStyle = `rgba(255,179,71,${a})`;
       g.fillRect(px - 3, py - 3, 6, 6);
     } else {
-      g.fillStyle = `rgba(125,255,138,${a * 0.7})`;
+      g.fillStyle = `rgba(255,160,64,${a * 0.7})`;
       g.fillRect(px - 2.5, py - 2.5, 5, 5);
     }
   }
