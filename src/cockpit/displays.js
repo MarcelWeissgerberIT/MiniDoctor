@@ -377,6 +377,15 @@ export function drawTactical(mfd, s) {
       g.lineTo(px - 8, py);
       g.closePath();
       g.stroke();
+    } else if (c.type === 'ally') {
+      g.fillStyle = '#9fe8ff';
+      g.beginPath();
+      g.moveTo(px, py - 8);
+      g.lineTo(px + 6, py + 6);
+      g.lineTo(px, py + 2);
+      g.lineTo(px - 6, py + 6);
+      g.closePath();
+      g.fill();
     } else if (c.type === 'fire') {
       g.fillStyle = `rgba(255,179,71,${a})`;
       g.fillRect(px - 3, py - 3, 6, 6);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { VOICE_KEYS } from './missions.js';
 
 const BASE = import.meta.env.BASE_URL + 'assets/';
 
@@ -17,10 +18,7 @@ export const SOUNDS = [
   'creak_1', 'creak_2', 'hyd_step', 'rattle',
   'gun_shot', 'missile_launch', 'explosion_near', 'armor_hit', 'sparks', 'enemy_cannon', 'shell_whizz', 'extinguisher',
 ];
-export const VOICES = [
-  ...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')),
-  ...Array.from({ length: 12 }, (_, i) => 'm2_' + String(i).padStart(2, '0')),
-];
+export const VOICES = [...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')), ...VOICE_KEYS];
 
 /**
  * Loads every generated asset (Higgsfield images/audio, Meshy models) and

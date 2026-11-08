@@ -5,7 +5,9 @@
 export const WAYPOINTS = [
   { x: 6, z: -115, label: 'WP 1' },
   { x: 92, z: -168, label: 'WP 2' },
-  { x: 114, z: -246, label: 'WP 3' }, // behind the hedgehog line (mission 2)
+  { x: 114, z: -246, label: 'WP 3' }, // behind the hedgehog line (missions 2 and 3)
+  { x: 360, z: -470, label: 'WP 4' }, // approach to the enemy depot (mission 4)
+  { x: 0, z: -30, label: 'BASIS' }, // in front of the base (mission 5)
 ];
 
 export const VOICE_TEXT = {

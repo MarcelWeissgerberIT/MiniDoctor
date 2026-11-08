@@ -151,6 +151,19 @@ export class Arsenal {
         done = true;
         break;
       }
+      // our own lance: rounds stop on them (and they complain)
+      if (!done) {
+        for (const w of this.g.allies.list) {
+          if (w.dead) continue;
+          const t = segmentHitsSphere(p0, p1, this.g.allies.center(w, _c).toArray(), 2.2);
+          if (t < 0) continue;
+          _a.copy(r.prev).lerp(r.p, t);
+          this.fx.impact(_a.x, _a.y, _a.z, 'metal', 1);
+          this.g.allies.damage(w, 2, { friendly: true });
+          done = true;
+          break;
+        }
+      }
       // the ground
       if (!done) {
         const h = this.world.heightAt(r.p.x, r.p.z);

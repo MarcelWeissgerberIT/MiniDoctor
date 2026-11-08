@@ -29,34 +29,55 @@ export class UI {
     this.bar.style.width = `${Math.round(p * 100)}%`;
   }
 
-  ready(onMission, onFree, onMission2) {
+  /** mission catalogue on the title screen; progress: { id: { done, best } } */
+  ready(missions, progress, onStart, onFree) {
     this.title.classList.add('loaded');
     this.start.disabled = false;
     this.quick.disabled = false;
-    // mission cards: pick one, then start it
-    let pick = new URLSearchParams(location.search).get('mission') === '2' ? '2' : '1';
-    const cards = this.title.querySelectorAll('.mission');
+    const list = this.title.querySelector('.missions');
+    const desc = this.title.querySelector('.mdesc');
+    const want = +(new URLSearchParams(location.search).get('mission') || 1);
+    let pick = missions.find((m) => m.num === want) || missions[0];
+    const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     const select = (m) => {
       pick = m;
-      cards.forEach((c) => c.classList.toggle('sel', c.dataset.m === m));
-      this.start.textContent = m === '2' ? 'Mission 2 starten' : 'Mission 1 starten';
+      list.querySelectorAll('li').forEach((li) => li.classList.toggle('sel', li.dataset.id === m.id));
+      desc.textContent = m.desc;
+      this.start.textContent = `Mission ${m.num} starten`;
     };
-    cards.forEach((c) => {
-      c.addEventListener('click', () => select(c.dataset.m));
-      c.addEventListener('dblclick', () => this.start.click());
-    });
+    list.innerHTML = '';
+    for (const m of missions) {
+      const li = document.createElement('li');
+      li.dataset.id = m.id;
+      const done = progress[m.id]?.done;
+      li.innerHTML = `<span class="num">${m.num}</span><span class="info"><span class="mtag"></span><span class="mname"></span></span><span class="meta"></span>`;
+      li.querySelector('.mtag').textContent = m.tag;
+      li.querySelector('.mname').textContent = m.name;
+      const meta = li.querySelector('.meta');
+      meta.textContent = `${'★'.repeat(m.diff)}${'☆'.repeat(3 - m.diff)}${m.lance ? ` · Lanze ${m.lance + 1}` : ''}`;
+      if (done) {
+        const b = document.createElement('span');
+        b.className = 'done';
+        b.textContent = progress[m.id].best ? `✓ ${fmt(progress[m.id].best)}` : '✓';
+        meta.appendChild(b);
+      }
+      li.addEventListener('click', () => select(m));
+      li.addEventListener('dblclick', () => this.start.click());
+      list.appendChild(li);
+    }
     select(pick);
-    this.start.addEventListener('click', () => (pick === '2' ? onMission2() : onMission()), { once: true });
+    this.start.addEventListener('click', () => onStart(pick), { once: true });
     this.quick.addEventListener('click', onFree, { once: true });
   }
 
   /** end of a fight: title, stats, retry / menu */
-  result({ win, rows }, onRetry, onMenu) {
+  result({ win, rows, tag, sub }, onRetry, onMenu) {
     const el = $('result');
     el.classList.toggle('win', win);
     el.classList.toggle('lose', !win);
+    el.querySelector('.rtag').textContent = tag || '';
     el.querySelector('h2').textContent = win ? 'MISSION ERFÜLLT' : 'MECH ZERSTÖRT';
-    el.querySelector('.rsub').textContent = win ? 'Sektor Kilo ist gehalten.' : 'BB-07 ist ausgefallen. Mission fehlgeschlagen.';
+    el.querySelector('.rsub').textContent = sub || (win ? 'Ziel erreicht.' : 'BB-07 ist ausgefallen. Mission fehlgeschlagen.');
     const t = el.querySelector('table');
     t.innerHTML = '';
     for (const [k, v] of rows) {

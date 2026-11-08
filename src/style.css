@@ -550,37 +550,89 @@ body.hovering #scene {
   object-fit: cover;
 }
 
-/* ---------------------------------------------------------- mission select */
-.missions {
+/* ------------------------------------------------------- mission catalogue */
+.catalog {
+  margin: 0 0 20px;
+}
+.catalog .ctag {
+  font-size: 12px;
+  letter-spacing: 0.35em;
+  color: #c9a24a;
+  margin-bottom: 8px;
+}
+.catalog .missions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 0 0 22px;
+  gap: 4px;
 }
-.missions .mission {
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  background: rgba(0, 0, 0, 0.28);
-  border: 0;
-  border-left: 3px solid rgba(217, 164, 65, 0.35);
-  padding: 6px 14px 8px 16px;
-  margin: 0;
+.catalog li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px 6px 0;
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 3px solid rgba(217, 164, 65, 0.3);
   cursor: pointer;
 }
-.missions .mission.sel {
-  border-left-color: #d9a441;
-  background: rgba(217, 164, 65, 0.13);
-}
-.missions .mission:not(.sel) p {
-  display: none;
-}
-.missions .mission:not(.sel) .mname {
-  font-size: 22px;
-  opacity: 0.7;
-}
-.missions .mission:hover {
+.catalog li:hover {
   background: rgba(217, 164, 65, 0.09);
+}
+.catalog li.sel {
+  border-left-color: #d9a441;
+  background: rgba(217, 164, 65, 0.16);
+}
+.catalog .num {
+  width: 34px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #d9a441;
+}
+.catalog .info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.catalog .mtag {
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: #9d988b;
+}
+.catalog .mname {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catalog .meta {
+  font-size: 13px;
+  color: #d9a441;
+  text-align: right;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.catalog .done {
+  color: #a6ffb8;
+  font-size: 12px;
+}
+.catalog .mdesc {
+  margin: 10px 0 0;
+  font-size: 16px;
+  line-height: 1.4;
+  color: #bdb7a8;
+  min-height: 2.8em;
+}
+#title .content {
+  max-height: 100vh;
+  overflow-y: auto;
 }
 
 /* ------------------------------------------------- helmet display + damage */

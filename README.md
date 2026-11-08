@@ -4,7 +4,31 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 *A browser first-person mech game. You board a 5 m combat robot, bring it up from cold and dark and walk it out of a forward base.*
 
-**Stand: Prototyp 0.3 – Mission 1 „Kalt & dunkel“ und Mission 2 „Feuertaufe“ mit Waffen, Gegnern und Außenansicht.**
+**Stand: Prototyp 0.4 – Missionskatalog mit fünf Einsätzen, Waffen, Gegnern, Außenansicht und einer eigenen Lanze aus verbündeten Mechs.**
+
+## Missionskatalog
+
+| # | Mission | Typ | Inhalt |
+|---|---|---|---|
+| 1 | Kalt & dunkel | Einweisung | Einsteigen, Mech nach Checkliste hochfahren, laufen lernen |
+| 2 | Feuertaufe | Verteidigung | Waffen scharf machen, zwei Panzerwellen an der Panzersperre abwehren |
+| 3 | Schulter an Schulter | Lanze · Verteidigung | Mit Hammer 2 und Hammer 3: Befehle lernen, zwei Wellen (9 Fahrzeuge) abwehren |
+| 4 | Depotschlag | Lanze · Angriff | Mit der Lanze zum Feinddepot (700 m NO), Wachen ausschalten, 4 Depotziele zerstören, Verstärkung abwehren |
+| 5 | Spähtrupp | Aufklärung | Allein vier Fahrzeuge in den Ruinen mit dem Raketensucher markieren, ohne entdeckt zu werden; danach Artillerieschlag und Rückkehr |
+
+Das Titelmenü zeigt alle Missionen mit Typ, Schwierigkeit, Lanzengröße und – nach einem Sieg – einem Haken mit der besten Zeit (im Browser gespeichert).
+
+## Die Lanze: verbündete Mechs
+
+In den Lanzen-Missionen laufen **Hammer 2** und **Hammer 3** neben dir: dieselben 5-m-Mechs (geriggtes Meshy-Modell mit eigener Gehanimation, leicht anders lackiert), mit grüner IFF-Leuchte, 30-mm-Kanone und Raketen. Sie suchen sich selbst Ziele in Reichweite, melden sich mit eigenen Funkstimmen („Kontakt“, „Ziel zerstört“, „Ich werde getroffen“) und können ausfallen.
+
+| Taste | Befehl |
+|---|---|
+| B | Folgen (Formation links und rechts hinter dir) |
+| V | Position halten |
+| T | Dein aufgeschaltetes – oder das anvisierte – Ziel angreifen |
+
+Feindliche Fahrzeuge wählen ihr Ziel unter allen Mechs der Lanze. Das Helmdisplay zeigt den Zustand der Lanze und grüne Markierungen über den Flügelmännern, das Taktik-Radar zeigt sie in Hellblau. Eigenbeschuss stoppt an ihnen – und sie beschweren sich.
 
 ## Mission 1 · Einweisung: Kalt & dunkel
 
@@ -98,6 +122,7 @@ Die Instrumententafeln haben einen helleren Anstrich, größere hinterleuchtete 
 | A / D | Mech drehen |
 | Linksklick | Schalter unter dem Fadenkreuz betätigen · sonst Kanone feuern (Waffen scharf) |
 | F | Rakete starten |
+| B / V / T | Lanze: folgen / Position halten / Ziel angreifen |
 | Leertaste | Einstiegssequenz überspringen |
 | L / H / N / O | Kabinenlicht / HUD / Nachtsicht / Optik |
 | R | Radarreichweite |
@@ -129,6 +154,7 @@ Alle Grafiken, Modelle und Sounds wurden für dieses Projekt generiert:
 | Feuerball, Mündungsfeuer, Glasbruch | Higgsfield (GPT Image 2.6) | `public/assets/fx/` |
 | Kanone, Raketenstart, Explosion, Panzertreffer, Funken, Panzerkanone, vorbeipfeifende Granate, Feuerlöscher | Higgsfield (Mirelo SFX) | `public/assets/audio/` |
 | 12 Funksprüche für Mission 2 | Higgsfield (Text-to-Speech, ElevenLabs „Barrett“) | `public/assets/voice/m2_*.mp3` |
+| 17 Funksprüche für die Missionen 3–5, je 8 für Hammer 2 und Hammer 3 | Higgsfield (Text-to-Speech, ElevenLabs „Barrett“, „Knox“ und „Vera“; per Spracherkennung geprüft) | `public/assets/voice/m3_* … w3_*.mp3` |
 
 `tools/process-assets.mjs` macht daraus spielfertige Dateien: Normal-Maps und gepackte ORM-Maps (Ambient Occlusion, Rauheit, Metallanteil) werden aus den Farbtexturen abgeleitet (Rost = rau und nicht-metallisch, blanker Stahl = metallisch), Texturen werden nahtlos gemacht, das Panorama wird horizontal nahtlos überblendet, die Decals ausgeschnitten und die GLBs mit WebP-Texturen und Meshopt komprimiert. Die Rohdateien liegen in `assets-src/` (nicht im Repo).
 
@@ -149,7 +175,9 @@ src/
   entry.js             Einstiegssequenz (Video mit Ton-Cues, Hinsetzen, Luke; Fallback-Kamerafahrt)
   cockpit/views.js     Panel-Ansichten (Position, Blickziel, Blickfeld)
   tutorial.js          Mission 1: Schritte, Bedingungen, Funksprüche, Wegmarken (auch Ablaufsteuerung für Mission 2)
-  mission2.js          Mission 2: Schritte, Angriffswellen, Funk-Callouts
+  missions.js          Missionskatalog: Definitionen, Wellen, Ziele, Funksprüche, Ablauf
+  combat/allies.js     Verbündete Mechs: Modelle, Gehanimation, Waffen, Treffer, Wracks
+  logic/allies.js      Flügelmann-Logik: Befehle, Formation, Bewegung, Feuer (getestet)
   combat/arsenal.js    Kanone, Leuchtspur, Lenkraketen, Einschläge
   combat/enemies.js    Panzer/Schützenpanzer im Gelände, Granaten, Wracks
   combat/hmd.js        Helmdisplay (Schub, Waffen, Zielmarken, Trefferrichtung)

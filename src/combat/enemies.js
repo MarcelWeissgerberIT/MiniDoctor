@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ENEMY_TYPES, createEnemy, stepEnemy, damageEnemy, hitChance } from '../logic/combat.js';
+import { ENEMY_TYPES, createEnemy, stepEnemy, damageEnemy, hitChance, chooseTarget } from '../logic/combat.js';
 import { fitModel } from '../geom.js';
 
 // model fitting: the Meshy vehicles lie along X with the front at -X; turn them to face -Z
@@ -65,16 +65,36 @@ export class Enemies {
     this.tracers.count = 0;
   }
 
-  spawn(type, x, z, goal, wave = 0) {
-    const heading = Math.atan2(-(goal[0] - x), -(goal[1] - z));
+  /**
+   * opts: { engage: detection/engagement range override, model: prop model for depot
+   * targets ('drums', 'generator', 'crates'), heading }
+   */
+  spawn(type, x, z, goal, wave = 0, opts = {}) {
+    const heading = opts.heading ?? Math.atan2(-(goal[0] - x), -(goal[1] - z));
     const e = createEnemy(type, x, z, heading, goal);
     e.wave = wave;
+    if (opts.engage) e.engage = opts.engage;
     const T = ENEMY_TYPES[type];
     e.radius = T.radius;
     e.height = T.height;
-    e.length = MODEL[type].length;
-    e.obj = this.templates[type] ? this.templates[type].clone(true) : new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 7), new THREE.MeshStandardMaterial({ color: 0x555a4a }));
-    if (this.templates[type]) e.obj.traverse((o) => o.isMesh && (o.material = o.material.clone()));
+    if (type === 'depot') {
+      const src = this.g.assets.models[opts.model || 'drums'];
+      e.length = 3;
+      e.obj = src ? fitModel(src.clone(true), { height: opts.model === 'generator' ? 2.0 : 1.6 }) : new THREE.Mesh(new THREE.BoxGeometry(3, 2, 3), new THREE.MeshStandardMaterial({ color: 0x4a4a3a }));
+      e.obj.traverse((o) => {
+        if (o.isMesh) {
+          o.material = o.material.clone();
+          o.castShadow = true;
+        }
+      });
+      e.fuel = opts.model !== 'crates';
+      e.label = opts.model === 'generator' ? 'GEN' : opts.model === 'crates' ? 'MUN' : 'TREIB';
+    } else {
+      e.length = MODEL[type].length;
+      e.label = type === 'tank' ? 'PZ' : 'SPZ';
+      e.obj = this.templates[type] ? this.templates[type].clone(true) : new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 7), new THREE.MeshStandardMaterial({ color: 0x555a4a }));
+      if (this.templates[type]) e.obj.traverse((o) => o.isMesh && (o.material = o.material.clone()));
+    }
     e.obj.rotation.order = 'YXZ';
     e.pitch = 0;
     e.roll = 0;
@@ -121,8 +141,9 @@ export class Enemies {
 
   destroy(e) {
     const c = this.center(e);
-    this.fx.explosion(c.x, c.y + 0.5, c.z, e.type === 'tank' ? 11 : 9);
-    e.fire = this.fx.addFire({ x: e.x, z: e.z, y: e.height * 0.55, scale: e.type === 'tank' ? 3.2 : 2.6, smoke: 1 });
+    // fuel goes up in a much bigger ball
+    this.fx.explosion(c.x, c.y + 0.5, c.z, e.type === 'tank' ? 11 : e.fuel ? 16 : 9);
+    e.fire = this.fx.addFire({ x: e.x, z: e.z, y: e.height * 0.55, scale: e.type === 'tank' ? 3.2 : e.fuel ? 4.5 : 2.6, smoke: 1 });
     this.g.explosionSound(c, 1.2);
     // burnt-out wreck: charred, slumped on one side
     e.obj.traverse((o) => {
@@ -138,13 +159,20 @@ export class Enemies {
     this.g.onEnemyKilled?.(e);
   }
 
+  /**
+   * ctx.targets: our mechs [{ x, z, speed, dead, isPlayer, center(out), onHit(shell) }],
+   * ctx.playerCenter: for the near-miss sounds
+   */
   update(dt, ctx) {
     const rand = Math.random;
     for (const e of this.list) {
-      if (e.state === 'dead') continue;
+      if (e.state === 'dead' || ENEMY_TYPES[e.type].static) continue;
       // only the obstacles close by matter to the driver
       const near = this.world.colliders.filter((c) => Math.abs(c.x - e.x) < 40 && Math.abs(c.z - e.z) < 40);
-      const ev = stepEnemy(e, dt, { player: ctx.player, colliders: near, rand });
+      const tgt = chooseTarget(e, ctx.targets, dt, rand);
+      const was = e.state;
+      const ev = stepEnemy(e, dt, { player: tgt, colliders: near, rand });
+      if (was !== 'engage' && e.state === 'engage') this.g.onEnemyEngaged?.(e);
       this.place(e, Math.min(1, dt * 4));
       // dust behind the tracks
       if (e.speed > 1.5) {
@@ -156,12 +184,12 @@ export class Enemies {
           this.fx.spawnDust(bx + (rand() - 0.5) * 3, this.world.heightAt(bx, bz) + 0.4, bz + (rand() - 0.5) * 3, 2.2, 3 + rand() * 2, 0.8, 0.35);
         }
       }
-      for (const f of ev) if (f.kind === 'fire') this.fire(e, f.dist, ctx);
+      for (const f of ev) if (f.kind === 'fire') this.fire(e, f.dist, tgt);
     }
     this.updateShells(dt, ctx);
   }
 
-  fire(e, dist, ctx) {
+  fire(e, dist, victim) {
     const T = ENEMY_TYPES[e.type];
     const fx = -Math.sin(e.heading);
     const fz = -Math.cos(e.heading);
@@ -173,8 +201,8 @@ export class Enemies {
     if (tank) for (let i = 0; i < 3; i++) this.fx.spawnDust(muzzle.x + (Math.random() - 0.5) * 6, gy + 0.5, muzzle.z + (Math.random() - 0.5) * 6, 3, 2.5, 1, 0.4);
     this.g.distantGun(muzzle, tank ? 1 : 0.55);
     // decide now whether this one hits (range and our speed), then fly it there
-    const hit = Math.random() < hitChance(dist, ctx.player.speed) * (ctx.accuracy ?? 1);
-    const target = ctx.playerCenter.clone();
+    const hit = Math.random() < hitChance(dist, victim.speed);
+    const target = victim.center(new THREE.Vector3());
     if (hit) target.add(_v.set((Math.random() - 0.5) * 1.2, (Math.random() - 0.3) * 1.2, (Math.random() - 0.5) * 1.2));
     else {
       // a miss: short in the dirt, wide to a side or high over the cockpit
@@ -200,6 +228,7 @@ export class Enemies {
       high: !hit && target.y > this.world.heightAt(target.x, target.z) + 1,
       dmg: T.damage[0] + Math.random() * (T.damage[1] - T.damage[0]),
       type: e.type,
+      victim,
       from: new THREE.Vector3(e.x, gy, e.z),
       whizzed: false,
     });
@@ -217,7 +246,7 @@ export class Enemies {
       }
       if (s.t >= s.T) {
         this.shells.splice(i, 1);
-        if (s.hit) this.g.onPlayerHit(s);
+        if (s.hit && !s.victim.dead) s.victim.onHit(s);
         else if (!s.high) {
           const tank = s.type === 'tank';
           this.fx.explosion(s.target.x, s.target.y, s.target.z, tank ? 4.5 : 1.6, { smoke: 0.4, light: tank ? 0.5 : 0.15 });
