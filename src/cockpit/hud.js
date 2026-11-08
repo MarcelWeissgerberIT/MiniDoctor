@@ -112,7 +112,7 @@ export class HUD {
   /** heading band along the top of the canopy, ticks placed on the real directions */
   drawCompass(s, q) {
     const g = this.g;
-    const y = 80;
+    const y = 175; // below the display pod at the top of the screen
     const deg = ((-s.heading / DEG) % 360) + 360;
     const base = Math.round(deg / 5) * 5;
     for (let k = -60; k <= 60; k += 5) {

@@ -760,6 +760,25 @@ class Game {
     g.hyd.set(s.hyd * 30 * 0.92 * live);
     g.temp.set((15 + ((s.heat - 0.1) / 0.9) * 360) * live);
     g.speed.set(Math.abs(this.mech.speed) * 3.6 * live);
+    g.coolant.set((this.sw.pump && s.mainBus ? s.coolant * 100 : 0) * live);
+    g.apu.set(s.apuRpm * 100 * live);
+    g.gyro.set(s.gyro * 100 * live);
+    g.core.set(s.heat * 100 * live);
+    g.amp.set((s.mainBus ? 140 + s.reactor * 120 + Math.abs(this.mech.speed) * 9 : s.battBus ? 35 : 0) * live);
+    // segment readouts
+    if (this.frame % 5 === 0) {
+      const sg = c.segs;
+      const m = this.mech;
+      const now = new Date();
+      sg.clock.set(`${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`);
+      const hdg = String(Math.round(((-m.heading * 180) / Math.PI + 3600) % 360) % 360).padStart(3, '0');
+      sg.podHdg.set(hdg);
+      sg.hdg.set(hdg);
+      sg.range.set(this.range ? String(Math.min(9999, Math.round(this.range))) : '----');
+      sg.ammo.set(String(this.arsenal.w.gun.ammo).padStart(3, '0'));
+      sg.thr.set(String(Math.round(m.throttle * 100)));
+      sg.spd.set(String(Math.round(Math.abs(m.speed) * 3.6)));
+    }
   }
 
   updateLook(dt, inp) {

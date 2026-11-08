@@ -42,7 +42,7 @@ export function makeLabel(text, width, height = width * 0.25, opts = {}) {
     transparent: true,
     alphaTest: 0.25,
     roughness: 0.7,
-    emissive: 0xd8f0d8,
+    emissive: 0xffd2a6,
     emissiveMap: tex,
     emissiveIntensity: opts.glow ?? 0.18,
     polygonOffset: true,
@@ -73,13 +73,13 @@ function gaugeFace({ title, unit, min, max, major, minor, red }) {
   const span = (270 * Math.PI) / 180;
   const ang = (v) => a0 + ((v - min) / (max - min)) * span;
   if (red) {
-    g.strokeStyle = '#b3261e';
+    g.strokeStyle = '#ff2a10';
     g.lineWidth = 22;
     g.beginPath();
     g.arc(cx, cy, S * 0.4, ang(red), ang(max));
     g.stroke();
   }
-  g.strokeStyle = '#ece6d6';
+  g.strokeStyle = '#ff8a2a';
   for (let v = min; v <= max + 1e-6; v += minor) {
     const isMajor = Math.abs(((v - min) / major) % 1) < 1e-6 || Math.abs(((v - min) / major) % 1) > 1 - 1e-6;
     const a = ang(v);
@@ -91,22 +91,22 @@ function gaugeFace({ title, unit, min, max, major, minor, red }) {
     g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
     g.stroke();
     if (isMajor) {
-      g.fillStyle = '#ece6d6';
+      g.fillStyle = '#ffb36a';
       g.font = `bold 44px ${FONT}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText(String(Math.round(v)), cx + Math.cos(a) * S * 0.27, cy + Math.sin(a) * S * 0.27);
     }
   }
-  g.fillStyle = '#d8d2c2';
+  g.fillStyle = '#ff9a45';
   g.font = `bold 40px ${FONT}`;
   g.textAlign = 'center';
   g.fillText(title, cx, cy + S * 0.2);
   g.font = `32px ${FONT}`;
   g.fillText(unit, cx, cy + S * 0.29);
   // grime
-  for (let i = 0; i < 1600; i++) {
-    g.fillStyle = `rgba(${90 + Math.random() * 60},${70 + Math.random() * 40},40,${Math.random() * 0.05})`;
+  for (let i = 0; i < 400; i++) {
+    g.fillStyle = `rgba(${90 + Math.random() * 60},${70 + Math.random() * 40},40,${Math.random() * 0.03})`;
     const r = Math.random() * 6;
     g.beginPath();
     g.arc(Math.random() * S, Math.random() * S, r, 0, 6.3);
@@ -130,8 +130,9 @@ export class Gauge {
       new THREE.CircleGeometry(r, 48),
       new THREE.MeshStandardMaterial({
         map: gaugeFace(opts),
-        roughness: 0.6,
-        emissive: 0xffe7c0,
+        color: 0x777777,
+        roughness: 0.8,
+        emissive: 0xffffff,
         emissiveMap: null,
         emissiveIntensity: 0,
       }),
@@ -154,10 +155,10 @@ export class Gauge {
       new THREE.MeshStandardMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.1,
+        opacity: 0.05,
         roughness: 0.05,
         metalness: 0,
-        envMapIntensity: 2.5,
+        envMapIntensity: 0.12,
         depthWrite: false,
       }),
     );
@@ -375,5 +376,96 @@ export class AlarmLamp {
     this.lvl = (this.lvl ?? 0) + (target - (this.lvl ?? 0)) * Math.min(1, dt * 30);
     this.bulbMat.emissiveIntensity = 0.05 + this.lvl * 6;
     this.light.intensity = this.lvl * 1.3;
+  }
+}
+
+/* ------------------------------------------------------- 7-segment readout */
+
+const SEGS = {
+  0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg', 5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg',
+  '-': 'g', ' ': '', _: 'd', A: 'abcefg', b: 'cdefg', C: 'adef', d: 'bcdeg', E: 'adefg', F: 'aefg', H: 'bcefg',
+  L: 'def', n: 'ceg', o: 'cdeg', P: 'abefg', r: 'eg', S: 'acdfg', t: 'defg', U: 'bcdef',
+};
+
+/** Orange glowing seven-segment readout with a small caption (like the boarding film's dash). */
+export class SegDisplay {
+  constructor(mat, { w, h, digits = 4, label = '' }) {
+    this.digits = digits;
+    this.label = label;
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 60 * digits + 24;
+    this.canvas.height = 132;
+    this.g = this.canvas.getContext('2d');
+    this.tex = new THREE.CanvasTexture(this.canvas);
+    this.tex.colorSpace = THREE.SRGBColorSpace;
+    this.tex.anisotropy = 8;
+    this.mat = new THREE.MeshBasicMaterial({ map: this.tex, color: new THREE.Color(1.5, 1.5, 1.5) });
+    this.group = new THREE.Group();
+    const bezel = new THREE.Mesh(rbox(w + 0.016, h + 0.016, 0.014, 0.004, 0.2), mat.consoleMetal);
+    bezel.position.z = 0.003;
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(w, h), this.mat);
+    screen.position.z = 0.0105;
+    this.group.add(bezel, screen);
+    this.text = '';
+    this.next = '';
+    this.power = -1;
+  }
+
+  set(text) {
+    this.next = String(text);
+  }
+
+  update(power) {
+    const p = Math.round(power * 20) / 20;
+    if (this.next === this.text && p === this.power) return;
+    this.text = this.next;
+    this.power = p;
+    this.draw();
+  }
+
+  draw() {
+    const { g } = this;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const p = this.power;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#0b0603';
+    g.fillRect(0, 0, W, H);
+    g.font = `700 22px 'JetBrains Mono', monospace`;
+    g.textBaseline = 'top';
+    g.fillStyle = `rgba(255,140,60,${0.25 + 0.55 * p})`;
+    g.fillText(this.label, 12, 6);
+    const str = this.text.padStart(this.digits).slice(-this.digits);
+    for (let i = 0; i < this.digits; i++) this.digit(16 + i * 60, 36, str[i], p);
+    this.tex.needsUpdate = true;
+  }
+
+  digit(x, y, ch, p) {
+    const g = this.g;
+    const w = 40;
+    const h = 84;
+    const t = 9;
+    const half = h / 2;
+    const bars = {
+      a: [x + t * 0.7, y, w - 1.4 * t, t],
+      d: [x + t * 0.7, y + h - t, w - 1.4 * t, t],
+      g: [x + t * 0.7, y + half - t / 2, w - 1.4 * t, t],
+      f: [x, y + t * 0.7, t, half - t * 1.2],
+      b: [x + w - t, y + t * 0.7, t, half - t * 1.2],
+      e: [x, y + half + t * 0.5, t, half - t * 1.2],
+      c: [x + w - t, y + half + t * 0.5, t, half - t * 1.2],
+    };
+    const lit = SEGS[ch] ?? '';
+    g.save();
+    // classic forward slant of segment displays
+    g.transform(1, 0, -0.1, 1, (y + h) * 0.1, 0);
+    for (const [k, r] of Object.entries(bars)) {
+      const on = lit.includes(k) && p > 0;
+      g.fillStyle = on ? `rgba(255,${110 + 30 * p},28,${0.35 + 0.65 * p})` : 'rgba(255,90,20,0.07)';
+      g.shadowColor = '#ff5a00';
+      g.shadowBlur = on ? 10 * p : 0;
+      g.fillRect(...r);
+    }
+    g.restore();
   }
 }
