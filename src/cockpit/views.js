@@ -7,7 +7,7 @@ export const VIEWS = {
   left: { key: 'Digit3', label: 'Linke Konsole', pos: [-0.3, -0.06, -0.02], target: [-0.8, -0.48, 0.05], fov: 42 },
   right: { key: 'Digit4', label: 'Rechte Konsole', pos: [0.26, -0.08, 0.02], target: [0.76, -0.6, -0.06], fov: 48 },
   center: { key: 'Digit5', label: 'Mittelkonsole', pos: [0, -0.16, -0.22], target: [0, -0.76, -0.72], fov: 52 },
-  displays: { key: 'Digit6', label: 'Displays', pos: [0, -0.04, 0.02], target: [0, -0.37, -0.8], fov: 50 },
+  displays: { key: 'Digit6', label: 'Displays', pos: [0, -0.06, 0.0], target: [0, -0.48, -0.8], fov: 50 },
 };
 
 export const VIEW_ORDER = ['front', 'overhead', 'left', 'right', 'center', 'displays'];
@@ -35,7 +35,7 @@ export const CONTROL_VIEW = {
   ir: 'center',
   radar: 'center',
   legLock: 'center',
-  lock: 'center',
+  lock: 'displays',
 };
 
 export const ZOOM_FOV = 28;

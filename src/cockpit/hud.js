@@ -29,8 +29,8 @@ export class HUD {
     this.w = win.x1 - win.x0;
     this.h = win.y1 - win.y0;
     this.canvas = document.createElement('canvas');
-    this.W = 2048;
-    this.H = Math.round((2048 * this.h) / this.w);
+    this.W = Math.round(this.w * 1250);
+    this.H = Math.round(this.h * 1250);
     this.canvas.width = this.W;
     this.canvas.height = this.H;
     this.g = this.canvas.getContext('2d');
@@ -112,7 +112,7 @@ export class HUD {
   /** heading band along the top of the canopy, ticks placed on the real directions */
   drawCompass(s, q) {
     const g = this.g;
-    const y = 175; // below the display pod at the top of the screen
+    const y = 60;
     const deg = ((-s.heading / DEG) % 360) + 360;
     const base = Math.round(deg / 5) * 5;
     for (let k = -60; k <= 60; k += 5) {

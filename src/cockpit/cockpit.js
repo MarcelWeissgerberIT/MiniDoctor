@@ -10,9 +10,11 @@ export const C = { floor: -1.25, ceil: 0.8, wallX: 1.08, back: 0.97 };
 // wrap-around canopy (like the boarding film): a wide front screen and two angled side
 // screens. fx: half width of the front frame, b*: where the side screens meet the walls
 const CANOPY = { z: -0.97, fx: 0.64, bx: 1.06, bz: -0.56 };
-const WIN = { x0: -0.61, x1: 0.61, y0: -0.2, y1: 0.44 }; // screen opening (front frame coords)
-// curved dash: flat facets tangent to a circle around the pilot, leaning back
-const DASH = { r: 0.8, y: -0.46, tilt: -0.5, angles: [-62, -34, 0, 34, 62] };
+const WIN = { x0: -0.628, x1: 0.628, y0: -0.35, y1: 0.55 }; // screen opening (front frame coords)
+// the canopy HUD only needs the middle band of the screen
+const HUD_WIN = { x0: WIN.x0, x1: WIN.x1, y0: -0.26, y1: 0.42 };
+// curved dash: low, flat facets tangent to a circle around the pilot, leaning back
+const DASH = { r: 0.8, y: -0.5, tilt: -0.5, angles: [-62, -34, 0, 34, 62], y0: -0.22, y1: 0.16, outerY0: -0.06 };
 const LEAN = Math.sin(-DASH.tilt); // how much further away the facet gets per metre up
 
 /**
@@ -190,13 +192,13 @@ export class Cockpit {
     // front screen
     const front = this.frame([0, 0, CANOPY.z], [0, 0, 0]);
     this.front = front;
-    const plate = plateWithHoles([-fx - 0.02, -0.52, fx + 0.02, 0.92, 0.01], [[WIN.x0, WIN.y0, WIN.x1, WIN.y1, 0.03]], 0.08, 0.9, 0.008);
-    batch.add(plate, m.armorDark, [0, 0, -0.09], [0, 0, 0], front);
+    const plate = plateWithHoles([-fx - 0.01, -0.52, fx + 0.01, 0.92, 0.01], [[WIN.x0, WIN.y0, WIN.x1, WIN.y1, 0.02]], 0.04, 0.9, 0.004);
+    batch.add(plate, m.armorDark, [0, 0, -0.06], [0, 0, 0], front);
     this.screenFrame(front, WIN.x0, WIN.x1, -0.012);
-    this.addGlass(WIN.x1 - WIN.x0 - 0.01, wh - 0.01, [0, wy, -0.055], [0, 0, 0], 1, front);
-    this.paneRects = [{ frame: front, x: 0, y: wy, z: -0.05, w: WIN.x1 - WIN.x0 - 0.01, h: wh - 0.01 }];
+    this.addGlass(WIN.x1 - WIN.x0 - 0.01, wh - 0.01, [0, wy, -0.04], [0, 0, 0], 1, front);
+    this.paneRects = [{ frame: front, x: 0, y: wy, z: -0.035, w: WIN.x1 - WIN.x0 - 0.01, h: wh - 0.01 }];
     // holographic HUD projected onto the front screen
-    this.hud = new HUD(WIN, { tilt: 0, origin: [0, 0, CANOPY.z], z: -0.045 });
+    this.hud = new HUD(HUD_WIN, { tilt: 0, origin: [0, 0, CANOPY.z], z: -0.03 });
     front.add(this.hud.mesh);
 
     // angled side screens from the front screen back to the side walls
@@ -209,20 +211,20 @@ export class Cockpit {
       dir.normalize();
       // local +x runs left to right along the screen, local +z points into the cabin
       const side = this.frame([start.x, 0, start.z], [0, Math.atan2(-dir.z, dir.x), 0]);
-      const sp = plateWithHoles([0, C.floor - 0.03, len, C.ceil + 0.03, 0.01], [[0.035, WIN.y0, len - 0.035, WIN.y1, 0.03]], 0.06, 0.9, 0.008);
-      batch.add(sp, m.armorDark, [0, 0, -0.07], [0, 0, 0], side);
-      this.screenFrame(side, 0.035, len - 0.035, -0.012);
-      this.addGlass(len - 0.08, wh - 0.01, [len / 2, wy, -0.042], [0, 0, 0], 1, side);
-      this.paneRects.push({ frame: side, x: len / 2, y: wy, z: -0.037, w: len - 0.08, h: wh - 0.01 });
+      const sp = plateWithHoles([0, C.floor - 0.03, len, C.ceil + 0.03, 0.01], [[0.016, WIN.y0, len - 0.016, WIN.y1, 0.02]], 0.04, 0.9, 0.004);
+      batch.add(sp, m.armorDark, [0, 0, -0.06], [0, 0, 0], side);
+      this.screenFrame(side, 0.016, len - 0.016, -0.012);
+      this.addGlass(len - 0.035, wh - 0.01, [len / 2, wy, -0.04], [0, 0, 0], 1, side);
+      this.paneRects.push({ frame: side, x: len / 2, y: wy, z: -0.035, w: len - 0.035, h: wh - 0.01 });
       // slim pillars at both joints
-      for (const p of [a, b]) batch.add(rbox(0.05, C.ceil - C.floor, 0.05, 0.014, 0.6), m.armorDark, [p.x, (C.ceil + C.floor) / 2, p.z + 0.012], [0, Math.PI / 4, 0]);
+      for (const p of [a, b]) batch.add(rbox(0.032, C.ceil - C.floor, 0.032, 0.01, 0.6), m.armorDark, [p.x, (C.ceil + C.floor) / 2, p.z + 0.006], [0, Math.PI / 4, 0]);
     }
 
     // brow above the front screen with an LED line, and a display pod hanging from it
     batch.add(rbox(1.34, 0.05, 0.12, 0.015, 0.5), m.armorDark, [0, WIN.y1 + 0.1, 0.05], [-0.3, 0, 0], front);
     batch.add(rbox(1.2, 0.006, 0.01, 0.002, 0.25), m.led, [0, WIN.y1 + 0.072, 0.108], [-0.3, 0, 0], front);
-    batch.add(rbox(0.07, 0.06, 0.04, 0.01, 0.4), m.armorDark, [0, WIN.y1 + 0.005, 0.03], [0, 0, 0], front);
-    batch.add(rbox(0.4, 0.085, 0.08, 0.012, 0.4), m.armorDark, [0, WIN.y1 - 0.055, 0.05], [0, 0, 0], front);
+    batch.add(rbox(0.05, 0.1, 0.03, 0.008, 0.4), m.armorDark, [0, WIN.y1 - 0.03, 0.03], [0, 0, 0], front);
+    batch.add(rbox(0.38, 0.075, 0.06, 0.012, 0.4), m.armorDark, [0, WIN.y1 - 0.1, 0.05], [0, 0, 0], front);
     this.segs = {};
     const pod = [
       ['clock', 'ZEIT', 4, -0.125],
@@ -230,8 +232,8 @@ export class Cockpit {
       ['range', 'ENTF', 4, 0.125],
     ];
     for (const [key, label, digits, x] of pod) {
-      const d = new SegDisplay(m, { w: 0.105, h: 0.055, digits, label });
-      d.group.position.set(x, WIN.y1 - 0.055, 0.091);
+      const d = new SegDisplay(m, { w: 0.105, h: 0.052, digits, label });
+      d.group.position.set(x, WIN.y1 - 0.1, 0.081);
       front.add(d.group);
       this.segs[key] = d;
     }
@@ -240,13 +242,13 @@ export class Cockpit {
   /** slim trim around a screen opening (frame coordinates) */
   screenFrame(frame, x0, x1, z) {
     const { m, batch } = this;
-    const fw = 0.026;
+    const fw = 0.016;
     const wy = (WIN.y0 + WIN.y1) / 2;
     const wh = WIN.y1 - WIN.y0;
-    batch.add(rbox(x1 - x0 + 2 * fw, fw, 0.03, 0.008, 0.4), m.rivets, [(x0 + x1) / 2, WIN.y1 + fw / 2, z], [0, 0, 0], frame);
-    batch.add(rbox(x1 - x0 + 2 * fw, fw, 0.03, 0.008, 0.4), m.rivets, [(x0 + x1) / 2, WIN.y0 - fw / 2, z], [0, 0, 0], frame);
-    batch.add(rbox(fw, wh, 0.03, 0.008, 0.4), m.rivets, [x0 - fw / 2, wy, z], [0, 0, 0], frame);
-    batch.add(rbox(fw, wh, 0.03, 0.008, 0.4), m.rivets, [x1 + fw / 2, wy, z], [0, 0, 0], frame);
+    batch.add(rbox(x1 - x0 + 2 * fw, fw, 0.02, 0.006, 0.4), m.rivets, [(x0 + x1) / 2, WIN.y1 + fw / 2, z], [0, 0, 0], frame);
+    batch.add(rbox(x1 - x0 + 2 * fw, fw, 0.02, 0.006, 0.4), m.rivets, [(x0 + x1) / 2, WIN.y0 - fw / 2, z], [0, 0, 0], frame);
+    batch.add(rbox(fw, wh, 0.02, 0.006, 0.4), m.rivets, [x0 - fw / 2, wy, z], [0, 0, 0], frame);
+    batch.add(rbox(fw, wh, 0.02, 0.006, 0.4), m.rivets, [x1 + fw / 2, wy, z], [0, 0, 0], frame);
   }
 
   addGlass(w, h, p, r, grimeScale = 1, frame = null) {
@@ -294,8 +296,8 @@ export class Cockpit {
       const dist = (y) => DASH.r + LEAN * y;
       return {
         o,
-        y0: outer ? -0.07 : -0.29,
-        y1: 0.29,
+        y0: outer ? DASH.outerY0 : DASH.y0,
+        y1: DASH.y1,
         L: (y) => (tl != null ? dist(y) * tl : (0.22 * dist(y)) / DASH.r),
         R: (y) => (tr != null ? dist(y) * tr : (0.22 * dist(y)) / DASH.r),
       };
@@ -320,7 +322,7 @@ export class Cockpit {
     }
 
     // three MFDs: status (left), camera (centre), tactical (right)
-    const my = 0.06;
+    const my = 0.03;
     this.mfd = {};
     const mfdOn = [
       ['status', f[1]],
@@ -329,13 +331,9 @@ export class Cockpit {
     ];
     for (const [kind, k] of mfdOn) {
       const x = (k.R(my) - k.L(my)) / 2;
-      batch.add(rbox(0.41, 0.31, 0.04, 0.02, 0.4), m.consoleMetal, [x, my, 0.012], [0, 0, 0], k.o);
-      batch.add(rbox(0.35, 0.265, 0.01, 0.004, 0.4), m.blackPaint, [x, my, 0.03], [0, 0, 0], k.o);
-      for (let j = -2; j <= 2; j++) {
-        for (const sx of [-1, 1]) batch.add(rbox(0.024, 0.022, 0.014, 0.003, 0.1), m.rubber, [x + sx * 0.183, my + j * 0.05, 0.036], [0, 0, 0], k.o);
-      }
-      const mfd = new MFD(0.34, 0.255, { feed: kind === 'camera' ? feedTarget : null });
-      mfd.mesh.position.set(x, my, 0.0365);
+      batch.add(rbox(0.33, 0.25, 0.026, 0.012, 0.4), m.consoleMetal, [x, my, 0.008], [0, 0, 0], k.o);
+      const mfd = new MFD(0.3, 0.225, { feed: kind === 'camera' ? feedTarget : null });
+      mfd.mesh.position.set(x, my, 0.0225);
       k.o.add(mfd.mesh);
       this.mfd[kind] = mfd;
     }
@@ -349,41 +347,41 @@ export class Cockpit {
       this.gauges[key] = g;
       this.controls.push(g);
     };
-    gauge('reactor', f[0], -0.075, 0.185, 0.052, { title: 'REACTOR', unit: '%', min: 0, max: 100, major: 20, minor: 5, red: 90 });
-    gauge('hyd', f[0], 0.07, 0.185, 0.052, { title: 'HYD', unit: 'MPa', min: 0, max: 30, major: 5, minor: 1, red: 26 });
-    gauge('coolant', f[0], -0.12, 0.035, 0.034, { title: 'COOL', unit: '%', min: 0, max: 100, major: 25, minor: 5 });
-    gauge('apu', f[0], 0.0, 0.035, 0.034, { title: 'APU', unit: '%', min: 0, max: 100, major: 25, minor: 5 });
-    gauge('gyro', f[0], 0.12, 0.035, 0.034, { title: 'GYRO', unit: '%', min: 0, max: 100, major: 25, minor: 5 });
-    const xs = (f[1].R(-0.2) - f[1].L(-0.2)) / 2;
-    gauge('core', f[1], xs - 0.095, -0.2, 0.045, { title: 'CORE', unit: '%', min: 0, max: 100, major: 25, minor: 5, red: 80 });
-    gauge('amp', f[1], xs + 0.095, -0.2, 0.045, { title: 'BUS', unit: 'A', min: 0, max: 400, major: 100, minor: 25 });
-    gauge('temp', f[4], -0.07, 0.185, 0.052, { title: 'TEMP', unit: '°C', min: 0, max: 400, major: 100, minor: 25, red: 320 });
-    gauge('speed', f[4], 0.075, 0.185, 0.052, { title: 'SPEED', unit: 'km/h', min: 0, max: 60, major: 10, minor: 2 });
+    gauge('reactor', f[0], -0.13, 0.105, 0.042, { title: 'REACTOR', unit: '%', min: 0, max: 100, major: 20, minor: 5, red: 90 });
+    gauge('hyd', f[0], 0.0, 0.105, 0.042, { title: 'HYD', unit: 'MPa', min: 0, max: 30, major: 5, minor: 1, red: 26 });
+    gauge('core', f[0], 0.13, 0.105, 0.042, { title: 'CORE', unit: '%', min: 0, max: 100, major: 25, minor: 5, red: 80 });
+    gauge('coolant', f[0], -0.14, 0.0, 0.028, { title: 'COOL', unit: '%', min: 0, max: 100, major: 25, minor: 5 });
+    gauge('apu', f[0], -0.047, 0.0, 0.028, { title: 'APU', unit: '%', min: 0, max: 100, major: 25, minor: 5 });
+    gauge('gyro', f[0], 0.047, 0.0, 0.028, { title: 'GYRO', unit: '%', min: 0, max: 100, major: 25, minor: 5 });
+    gauge('amp', f[0], 0.14, 0.0, 0.028, { title: 'BUS', unit: 'A', min: 0, max: 400, major: 100, minor: 25 });
+    gauge('temp', f[4], -0.075, 0.105, 0.042, { title: 'TEMP', unit: '°C', min: 0, max: 400, major: 100, minor: 25, red: 320 });
+    gauge('speed', f[4], 0.075, 0.105, 0.042, { title: 'SPEED', unit: 'km/h', min: 0, max: 60, major: 10, minor: 2 });
 
     // orange segment readouts on the right
     const seg = (key, k, x, y, label, digits) => {
-      const d = new SegDisplay(m, { w: 0.13, h: 0.06, digits, label });
+      const d = new SegDisplay(m, { w: 0.12, h: 0.05, digits, label });
       d.group.position.set(x, y, 0);
       k.o.add(d.group);
       this.segs[key] = d;
     };
-    seg('hdg', f[4], -0.08, 0.035, 'KURS', 3);
-    seg('ammo', f[4], 0.075, 0.035, 'MUNITION', 3);
-    const xt = (f[3].R(-0.2) - f[3].L(-0.2)) / 2;
-    seg('thr', f[3], xt - 0.09, -0.2, 'SCHUB %', 4);
-    seg('spd', f[3], xt + 0.09, -0.2, 'KM/H', 3);
+    seg('hdg', f[4], -0.075, 0.0, 'KURS', 3);
+    seg('ammo', f[4], 0.075, 0.0, 'MUNITION', 3);
+    const xt = (f[3].R(-0.16) - f[3].L(-0.16)) / 2;
+    seg('thr', f[3], xt - 0.08, -0.16, 'SCHUB %', 4);
+    seg('spd', f[3], xt + 0.08, -0.16, 'KM/H', 3);
 
     // annunciators and guarded switches under the camera display
     const c = f[2].o;
+    const xa = (f[1].R(-0.16) - f[1].L(-0.16)) / 2;
     const ann = [
-      ['heat', 'HEAT\nHIGH', '#ff9a1f', -0.135],
-      ['armor', 'ARMOR\nDMG', '#ff9a1f', 0],
-      ['lock', 'MASTER\nCAUTION', '#ff3b2a', 0.135],
+      ['heat', 'HEAT\nHIGH', '#ff9a1f', xa - 0.105],
+      ['armor', 'ARMOR\nDMG', '#ff9a1f', xa],
+      ['lock', 'MASTER\nCAUTION', '#ff3b2a', xa + 0.105],
     ];
     for (const [key, txt, col, x] of ann) {
-      const lb = new LampButton(m, { text: txt, color: col, w: 0.11, h: 0.05, blink: key === 'lock' });
-      lb.group.position.set(x, -0.13, 0);
-      c.add(lb.group);
+      const lb = new LampButton(m, { text: txt, color: col, w: 0.095, h: 0.045, blink: key === 'lock' });
+      lb.group.position.set(x, -0.16, 0);
+      f[1].o.add(lb.group);
       this.lamps[key] = lb;
       this.controls.push(lb);
       this.hitTargets.push(lb.cap);
@@ -398,7 +396,7 @@ export class Cockpit {
     ];
     for (const [key, label, x] of guarded) {
       const sw = new ToggleSwitch(m, { label, guard: true });
-      sw.group.position.set(x, -0.225, 0);
+      sw.group.position.set(x, -0.165, 0);
       c.add(sw.group);
       this.switches[key] = sw;
       this.controls.push(sw);
@@ -406,7 +404,7 @@ export class Cockpit {
     }
 
     // lower dash panel with a toggle row (optics, NV, ...)
-    const low = this.frame([0, -0.84, -0.7], [-0.18, 0, 0]);
+    const low = this.frame([0, -0.88, -0.68], [-0.18, 0, 0]);
     batch.add(rbox(1.0, 0.27, 0.06, 0.015, 0.7), m.panel, [0, 0, -0.03], [0, 0, 0], low);
     batch.add(rbox(0.96, 0.006, 0.01, 0.002, 0.22), m.led, [0, 0.133, 0.0], [0, 0, 0], low);
     const toggles = [
@@ -623,7 +621,6 @@ export class Cockpit {
     this.seat = place('seat', { height: 1.34 }, [0, C.floor, 0.24], Math.PI);
     this.throttleModel = place('throttle', { height: 0.24 }, [0, 0, 0], 0);
     this.stickModel = place('stick', { height: 0.3 }, [0, 0, 0], 0);
-    place('radio', { width: 0.36 }, [-C.wallX + 0.12, -0.2, 0.1], Math.PI / 2);
     place('extinguisher', { height: 0.5 }, [C.wallX - 0.11, -0.52, 0.66], -Math.PI / 2);
 
     // throttle and stick pivots so they can move with the inputs
@@ -726,8 +723,8 @@ export class Cockpit {
     this.scene.add(this.windowLight, this.windowLight.target);
 
     // soft fill from the whole window area
-    this.windowFill = new THREE.RectAreaLight(0xc8ccd4, 1.6, 1.25, 0.64);
-    this.windowFill.position.set(0, 0.12, -0.96);
+    this.windowFill = new THREE.RectAreaLight(0xc8ccd4, 1.6, 1.25, 0.9);
+    this.windowFill.position.set(0, 0.1, -0.96);
     this.windowFill.lookAt(0, -0.3, 0);
     this.scene.add(this.windowFill);
 

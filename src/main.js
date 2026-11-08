@@ -107,7 +107,7 @@ class Game {
     this.sys = createSystems(false);
     this.sw = this.switchSnapshot();
     this.yaw = 0;
-    this.pitch = -9 * DEG;
+    this.pitch = -5 * DEG;
     this.view = 'front'; // panel focus view
     this.viewBlend = 0;
     this.focusPose = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 70 };
@@ -804,7 +804,7 @@ class Game {
     this.pitch = clamp(this.pitch + dpitch, -LOOK.down, LOOK.up);
     if (this.input.hit('KeyC')) {
       this.yaw = 0;
-      this.pitch = -9 * DEG;
+      this.pitch = -5 * DEG;
     }
     for (const name of VIEW_ORDER) if (this.input.hit(VIEWS[name].key)) this.setView(name);
     if (!free && (this.input.hit('Escape') || inp.rmbClicked)) this.setView('front');
