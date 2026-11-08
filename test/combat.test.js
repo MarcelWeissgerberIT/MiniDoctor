@@ -137,3 +137,75 @@ describe('enemies', () => {
     expect(stepEnemy(e, 1, { player: { x: 0, z: 0 } })).toHaveLength(0);
   });
 });
+
+import { gunnerAim, armorFace, hitPart, systemHit, flankPoint, ARMOR } from '../src/logic/combat.js';
+
+describe('realistic gunnery', () => {
+  it('leads a moving target by the flight time', () => {
+    const r = () => 0.25; // cos(pi/2) = 0: no scatter; speed judged 17 % low
+    const still = gunnerAim({ x: 0, y: 2, z: 0 }, { x: 0, y: 3, z: -900 }, 900, 1, r);
+    expect(still.x).toBeCloseTo(0, 1);
+    const moving = gunnerAim({ x: 0, y: 2, z: 0 }, { x: 0, y: 3, z: -900, vx: 9, vz: 0 }, 900, 1, r);
+    expect(moving.x).toBeGreaterThan(7); // ~1 s flight at 9 m/s
+  });
+
+  it('scatter grows with range', () => {
+    let near = 0;
+    let far = 0;
+    for (let i = 0; i < 400; i++) {
+      near += Math.abs(gunnerAim({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -200 }, 900).x);
+      far += Math.abs(gunnerAim({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -900 }, 900).x);
+    }
+    expect(far).toBeGreaterThan(near * 2);
+  });
+
+  it('armour faces from the shooter direction', () => {
+    expect(armorFace(0, 0, 0, 0, -100)).toBe('front'); // shot from ahead
+    expect(armorFace(0, 0, 0, 100, 0)).toBe('side');
+    expect(armorFace(0, 0, 0, 0, 100)).toBe('rear');
+    expect(ARMOR.rear).toBeGreaterThan(ARMOR.front);
+  });
+
+  it('hit location on the mech', () => {
+    expect(hitPart(0, 4.5)).toBe('head');
+    expect(hitPart(0, 3.2)).toBe('torso');
+    expect(hitPart(1.4, 3.2)).toBe('rarm');
+    expect(hitPart(-0.5, 1.0)).toBe('lleg');
+  });
+
+  it('systems behind a struck part can fail', () => {
+    const sys = {};
+    expect(systemHit(sys, 'larm', 15, () => 0)).toBe('missiles');
+    expect(sys.missiles).toBe(true);
+    expect(systemHit(sys, 'larm', 15, () => 0)).toBe(null); // already gone
+    expect(systemHit(sys, 'torso', 15, () => 0.99)).toBe(null);
+  });
+});
+
+describe('enemy tactics', () => {
+  it('the turret tracks while the hull points elsewhere, then fires', () => {
+    // driving sideways to a flank position, gun on the target
+    const e = createEnemy('tank', 0, -400, Math.PI / 2, [0, -400]);
+    e.state = 'flank';
+    e.flankGoal = [-1000, -400];
+    e.flankT = 0;
+    e.reload = 2;
+    let fired = 0;
+    for (let t = 0; t < 4; t += 0.1) fired += stepEnemy(e, 0.1, { player: { x: 0, z: 0 }, colliders: [] }).filter((x) => x.kind === 'fire').length;
+    expect(fired).toBeGreaterThan(0);
+    expect(Math.abs(e.turret)).toBeGreaterThan(0.8); // gun turned well away from the hull
+  });
+
+  it('a badly hit vehicle smokes, takes cover, then flanks', () => {
+    const e = createEnemy('tank', 0, -400, 0, [0, -400]);
+    stepEnemy(e, 0.1, { player: { x: 0, z: 0 } });
+    e.hp = 40;
+    const ev = stepEnemy(e, 0.1, { player: { x: 0, z: 0 }, findCover: () => [80, -500] });
+    expect(ev.some((x) => x.kind === 'smoke')).toBe(true);
+    expect(e.state).toBe('cover');
+    for (let t = 0; t < 14; t += 0.1) stepEnemy(e, 0.1, { player: { x: 0, z: 0 }, rand: () => 0.5 });
+    expect(e.state).toBe('flank');
+    const p = flankPoint({ x: 0, z: -400 }, { x: 0, z: 0 }, Math.PI / 2, 300);
+    expect(Math.hypot(p[0], p[1])).toBeCloseTo(300);
+  });
+});

@@ -179,6 +179,18 @@ export class Effects {
     this.dust.mesh.renderOrder = 2;
     scene.add(this.dust.mesh);
 
+    // white smoke screens laid by the vehicles' grenade dischargers
+    this.screenMat = this.smokeMat.clone();
+    this.screenMat.uniforms.map = { value: assets.fx.smoke };
+    this.screenMat.uniforms.color = { value: new THREE.Color(0.6, 0.61, 0.6) };
+    this.screenMat.uniforms.glow = { value: new THREE.Color(0.75, 0.75, 0.73) };
+    this.screenMat.uniforms.fogColor = fog.fogColor;
+    this.screenMat.uniforms.fogDensity = fog.fogDensity;
+    this.screen = new BillboardSet(360, this.screenMat);
+    this.screen.mesh.renderOrder = 2;
+    scene.add(this.screen.mesh);
+    this.screenParticles = [];
+
     // fireballs and muzzle flashes
     const sprite = (map) =>
       new THREE.ShaderMaterial({
@@ -264,6 +276,35 @@ export class Effects {
       glow,
       alpha,
     });
+  }
+
+  /** a wall of white smoke around (x, z): billows up quickly and hangs for ~20 s */
+  smokeScreen(x, y, z, radius = 16) {
+    for (let i = 0; i < 52; i++) {
+      if (this.screenParticles.length >= this.screen.max) this.screenParticles.shift();
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * radius;
+      this.screenParticles.push({
+        x: x + Math.cos(a) * r,
+        y: y + 1 + Math.random() * 3,
+        z: z + Math.sin(a) * r,
+        vx: Math.cos(a) * (2 + Math.random() * 3),
+        vy: 2 + Math.random() * 1.6,
+        vz: Math.sin(a) * (2 + Math.random() * 3),
+        size: 6 + Math.random() * 4,
+        grow: 0.4 + Math.random() * 0.3,
+        rot: Math.random() * 6.28,
+        vr: (Math.random() - 0.5) * 0.2,
+        age: -Math.random() * 1.2, // the canisters pop one after another
+        life: 18 + Math.random() * 8,
+        seed: Math.random() * 0.4,
+      });
+    }
+  }
+
+  clearScreens() {
+    this.screenParticles.length = 0;
+    this.screen.commit(0);
   }
 
   spawnDust(x, y, z, size, life, rise, alpha = 0.6) {
@@ -509,6 +550,29 @@ export class Effects {
       this.dust.set(di++, p.x, p.y, p.z, p.size + p.grow * p.age, p.rot, a, 0);
     }
     this.dust.commit(di);
+
+    let ci = 0;
+    for (let i = this.screenParticles.length - 1; i >= 0; i--) {
+      const p = this.screenParticles[i];
+      p.age += dt;
+      if (p.age > p.life) {
+        this.screenParticles.splice(i, 1);
+        continue;
+      }
+      if (p.age < 0) continue;
+      const t = p.age / p.life;
+      const drag = Math.exp(-dt * 1.4);
+      p.vx *= drag;
+      p.vz *= drag;
+      p.vy *= Math.exp(-dt * 0.5);
+      p.x += (p.vx + 0.35) * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.rot += p.vr * dt;
+      const a = 0.95 * Math.min(1, p.age * 3) * Math.min(1, (1 - t) * 3);
+      this.screen.set(ci++, p.x, p.y, p.z, p.size + p.grow * p.age * 4, p.rot, a, p.seed);
+    }
+    this.screen.commit(ci);
 
     let bi = 0;
     for (let i = this.balls.length - 1; i >= 0; i--) {

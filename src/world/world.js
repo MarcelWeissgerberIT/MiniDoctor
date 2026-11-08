@@ -63,6 +63,7 @@ export class World {
     this.scene.fog = new THREE.FogExp2(this.haze.clone(), 0.0017);
     this.scene.background = this.haze.clone();
     this.colliders = [];
+    this.smokeScreens = [];
     this.contacts = [];
     this.fires = [];
     this.craters = this.makeCraters();
@@ -697,7 +698,40 @@ export class World {
    * Can a gunner at a see b? Ruins and the ground block the view; small obstacles
    * (sandbags, hedgehogs, drums) do not. a, b: {x, y, z}
    */
-  lineOfSight(a, b) {
+  /** smoke screens block sight (and missile seekers) but not shells */
+  addSmokeScreen(x, z, r, life) {
+    this.smokeScreens.push({ x, z, r, life, age: 0 });
+  }
+
+  updateSmokeScreens(dt) {
+    for (let i = this.smokeScreens.length - 1; i >= 0; i--) {
+      const s = this.smokeScreens[i];
+      s.age += dt;
+      s.x += 0.35 * dt; // drifts with the wind like the particles
+      if (s.age > s.life) this.smokeScreens.splice(i, 1);
+    }
+  }
+
+  /** true when the straight line a→b passes through thick smoke */
+  smokeBlocks(a, b) {
+    for (const s of this.smokeScreens) {
+      if (s.age < 1.2 || s.age > s.life - 2) continue; // still billowing up / thinning out
+      const r = s.r * Math.min(1, s.age / 3);
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const L = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((s.x - a.x) * dx + (s.z - a.z) * dz) / L));
+      const px = a.x + dx * t - s.x;
+      const pz = a.z + dz * t - s.z;
+      if (px * px + pz * pz > r * r) continue;
+      const y = a.y + (b.y - a.y) * t;
+      if (y < this.heightAt(s.x, s.z) + 13) return true;
+    }
+    return false;
+  }
+
+  lineOfSight(a, b, smoke = true) {
+    if (smoke && this.smokeScreens.length && this.smokeBlocks(a, b)) return false;
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dz = b.z - a.z;

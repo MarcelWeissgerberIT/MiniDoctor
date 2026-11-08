@@ -27,7 +27,8 @@ import { HMD } from './combat/hmd.js';
 import { Mission, MISSIONS, MISSION_TEXT } from './missions.js';
 import { Allies, LANCE } from './combat/allies.js';
 import { ORDERS } from './logic/allies.js';
-import { MISSILE, PART_NAMES, createParts, applyHit, mechDestroyed, weaponState, gunInLimits } from './logic/combat.js';
+import { MISSILE, PART_NAMES, createParts, mechDestroyed, weaponState, gunInLimits } from './logic/combat.js';
+import { armorFace, MECH_ARMOR, hitPart, applyHitAt, systemHit, SYSTEMS } from './logic/combat.js';
 import { fitModel } from './geom.js';
 
 const params = new URLSearchParams(location.search);
@@ -97,15 +98,24 @@ class Game {
     this.gunRig.visible = false;
     this.kick = 0; // recoil kick of the view (rad)
     // the player as a target for enemy gunners (kept as one object: they remember it)
+    const game = this;
     this.playerTarget = {
       isPlayer: true,
       x: 0,
       z: 0,
       speed: 0,
       dead: false,
+      // the gunners lead a walking mech
+      get vx() {
+        return -Math.sin(game.mech.heading) * game.mech.speed;
+      },
+      get vz() {
+        return -Math.cos(game.mech.heading) * game.mech.speed;
+      },
       center: (out) => out.copy(this.mechObj.position).add(new THREE.Vector3(0, -0.7, 0)),
-      onHit: (s) => this.onPlayerHit(s),
+      onHit: (s, at) => this.onPlayerHit(s, at),
     };
+    this.failed = {}; // knocked-out systems (optics, sensors, gyro, cooling, missiles, hydraulics)
     this.hmd = new HMD(document.getElementById('hmd'));
     this.parts = createParts();
     this.fire = null;
@@ -427,8 +437,14 @@ class Game {
         get dead() {
           return w.dead;
         },
+        get vx() {
+          return -Math.sin(w.heading) * w.speed;
+        },
+        get vz() {
+          return -Math.cos(w.heading) * w.speed;
+        },
         center: (out) => this.allies.center(w, out),
-        onHit: (s) => this.allies.damage(w, s.dmg),
+        onHit: (s) => this.allies.damage(w, s.dmg * MECH_ARMOR[armorFace(w.heading, w.x, w.z, s.from.x, s.from.z)]),
       };
       targets.push(w.proxy);
     }
@@ -579,11 +595,24 @@ class Game {
     this.sound.one('shell_whizz', 0.75, 0.9 + Math.random() * 0.2, undefined, 0, this.panOf(p));
   }
 
-  onPlayerHit(shell) {
+  /** a shell struck us at `at` (world): which part, how thick the armour is there, what broke */
+  onPlayerHit(shell, at) {
     if (this.dead || this.mission?.ended) return;
-    const part = applyHit(this.parts, shell.dmg);
+    const m = this.mech;
+    let part = 'torso';
+    if (at) {
+      const dx = at.x - m.x;
+      const dz = at.z - m.z;
+      const lx = dx * Math.cos(m.heading) - dz * Math.sin(m.heading); // metres to our right
+      part = hitPart(lx, at.y - this.world.heightAt(m.x, m.z));
+    }
+    const face = armorFace(m.heading, m.x, m.z, shell.from.x, shell.from.z);
+    const dmg = shell.dmg * MECH_ARMOR[face];
+    applyHitAt(this.parts, dmg, part);
+    const sys = systemHit(this.failed, part, dmg);
+    if (sys) this.systemFailed(sys);
     this.stats.hitsTaken++;
-    const strength = clamp(shell.dmg / 15, 0.3, 1.3);
+    const strength = clamp(dmg / 15, 0.3, 1.3);
     const b = Math.atan2(-(shell.from.x - this.mech.x), -(shell.from.z - this.mech.z));
     const view = this.mech.heading + (this.external ? this.ext.yaw : this.yaw);
     const rel = Math.atan2(Math.sin(view - b), Math.cos(view - b)); // + = from the right
@@ -598,11 +627,30 @@ class Game {
     this.cockpit.hit(strength, part);
     ui.damageFlash(false);
     const pct = Math.round(this.parts[part] * 100);
-    this.hmd.notify(`TREFFER ${PART_NAMES[part]} ${pct}%`, pct < 40 ? '#ff5a48' : '#ffc15e', 2.5);
+    this.hmd.notify(`TREFFER ${PART_NAMES[part]}${face === 'rear' ? ' (HECK)' : ''} ${pct}%`, pct < 40 ? '#ff5a48' : '#ffc15e', 2.5);
     if (part === 'rarm' && this.parts.rarm <= 0) this.hmd.notify('KANONE AUSGEFALLEN', '#ff5a48', 3);
     if (this.mech.speed < 2) this.mission?.call('m2_05', 30);
     if (!this.fire && Math.random() < 0.22) this.startFire(part);
     if (mechDestroyed(this.parts)) this.destroyed();
+  }
+
+  /** a system knocked out by a hit: warn, and the rest of the game feels it */
+  systemFailed(k) {
+    this.hmd.notify(`${SYSTEMS[k]} AUSGEFALLEN`, '#ff5a48', 3.5);
+    this.message = `SYS FAIL: ${SYSTEMS[k]}`;
+    this.messageColor = '#ff4a3a';
+    this.sound.alarm();
+    this.sound.one('sparks', 0.5, 0.7);
+    if (k === 'optics') this.hmd.notify('KAMERA / ZOOM AUSGEFALLEN', '#ffc15e', 3);
+    if (k === 'sensors') this.hmd.notify('DATALINK GESTÖRT · RADAR 250 m', '#ffc15e', 3);
+    if (k === 'gyro') this.hmd.notify('STABILISIERUNG AUS', '#ffc15e', 3);
+  }
+
+  /** our round struck an enemy's armour: show where (front plates shrug it off) */
+  onArmorHit(e, face, f, kind) {
+    if (kind === 'mg' && face !== 'rear') return;
+    const name = { front: 'FRONT', side: 'SEITE', rear: 'HECK', turret: 'TURM' }[face];
+    this.hmd.armorHit(`${name} ×${f.toFixed(1)}`, f >= 1.3 ? '#a6ffb8' : f >= 0.9 ? '#effff2' : '#ffc15e');
   }
 
   startFire(part) {
@@ -613,6 +661,8 @@ class Game {
   }
 
   updateFire(dt) {
+    // a holed coolant loop: the reactor runs hot
+    if (this.failed.cooling && this.sys.heat < 0.8) this.sys.heat = Math.min(0.8, this.sys.heat + 0.012 * dt);
     const f = this.fire;
     this.cockpit.fireLevel = f ? 1 : 0;
     ui.smoke(f ? Math.min(0.5, 0.12 + f.t * 0.02) : 0);
@@ -701,6 +751,9 @@ class Game {
     this.arsenal.reset();
     this.gunRig.reset();
     this.parts = createParts();
+    this.failed = {};
+    this.world.smokeScreens.length = 0;
+    this.world.effects.clearScreens();
     this.fire = null;
     this.fireCharges = 3;
     this.dead = false;
@@ -967,7 +1020,7 @@ class Game {
     const vt = free ? 0 : 1;
     this.viewBlend += (vt - this.viewBlend) * Math.min(1, dt * 5.5);
     if (Math.abs(this.viewBlend - vt) < 0.002) this.viewBlend = vt;
-    const zt = free && this.input.rmb ? 1 : 0;
+    const zt = free && this.input.rmb && !this.failed.optics ? 1 : 0;
     this.zoom += (zt - this.zoom) * Math.min(1, dt * 8);
     this.yaw = clamp(this.yaw + dyaw, -LOOK.yaw, LOOK.yaw);
     this.pitch = clamp(this.pitch + dpitch, -LOOK.down, LOOK.up);
@@ -1004,7 +1057,7 @@ class Game {
       const events = stepMech(this.mech, { throttle: thr, turn, stop: stop || this.dead }, dt, this.world.colliders, WORLD.bounds);
       for (const e of events) this.footstep(e);
       // damaged legs cannot carry the full stride
-      const vmax = MECH.maxForward * (0.45 + 0.55 * Math.min(this.parts.lleg, this.parts.rleg));
+      const vmax = MECH.maxForward * (0.45 + 0.55 * Math.min(this.parts.lleg, this.parts.rleg)) * (this.failed.hydraulics ? 0.7 : 1);
       if (this.mech.speed > vmax) this.mech.speed = vmax;
     }
     const target = this.world.heightAt(this.mech.x, this.mech.z);
@@ -1065,7 +1118,7 @@ class Game {
   }
 
   updateCameras(dt, pose) {
-    const stab = this.sw.stab && this.sys.gyro > 0.9;
+    const stab = this.sw.stab && this.sys.gyro > 0.9 && !this.failed.gyro;
     const m = this.mech;
     // the walker's torso (= cockpit) pose from the gait, and the pilot's head inside it
     const b = this.body.update(dt, m, this.groundSlope(), stab);
@@ -1239,18 +1292,18 @@ class Game {
         range: this.range,
         nv: this.sw.nv,
         zoom: 4,
-        contact: this.sw.optics ? this.cameraContact() : 'OPTICS OFF',
+        contact: this.failed.optics ? 'OPTICS FAIL' : this.sw.optics ? this.cameraContact() : 'OPTICS OFF',
         contactColor: '#ff4a3a',
       });
     if (f % 4 === 2)
       drawTactical(c.mfd.tactical, {
         ...m,
         time: this.time,
-        range: this.radarRange,
+        range: this.failed.sensors ? 250 : this.radarRange,
         contacts: this.world.contacts,
         look: this.yaw,
         grid: `${String(Math.round(1000 + m.x / 10)).padStart(4, '0')}-${String(Math.round(1000 - m.z / 10)).padStart(4, '0')}`,
-        hostiles: [...this.world.hostiles.filter((h) => !h.hidden), ...this.enemies.alive()].filter((h) => Math.hypot(h.x - m.x, h.z - m.z) < this.radarRange).length,
+        hostiles: [...this.world.hostiles.filter((h) => !h.hidden), ...this.enemies.alive()].filter((h) => Math.hypot(h.x - m.x, h.z - m.z) < (this.failed.sensors ? 250 : this.radarRange)).length,
       });
   }
 
@@ -1278,6 +1331,8 @@ class Game {
       this.enemies.center(e, v);
       const dist = v.distanceTo(cam.position);
       if (dist > 2400) continue;
+      // no datalink: only what our own eyes see, and not far
+      if (this.failed.sensors && (dist > 600 || e.losPlayer === false)) continue;
       const front = v.clone().sub(cam.position).dot(camDir) > 0;
       const p = v.clone().project(cam);
       const onScreen = front && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.92;
@@ -1355,6 +1410,7 @@ class Game {
             }
           : null,
       parts: this.mode === 'combat' || damaged ? this.parts : null,
+      failed: Object.keys(this.failed).map((k) => SYSTEMS[k]),
       allies: this.hmdAllies(),
       targets: this.hmdTargets(),
       fire: !!this.fire,

@@ -26,6 +26,19 @@ Wer funkt, erscheint als Videoverbindung auf dem linken Display: der Ausbilder a
 
 Geschossen wird nur bei freier Sicht: Gebäuderuinen und Geländekuppen blockieren (Sandsäcke, Panzersperren und Fässer nicht). Panzer ohne Sicht auf ihr Ziel fahren um das Hindernis herum zu einer neuen Schussposition, Flügelmänner treten aus der Deckung, und auch der Raketensucher schaltet nur auf, was der Pilot sehen kann. Nach erfülltem Auftrag stellt der Feind das Feuer ein.
 
+## Realistische Gefechte
+
+- **Echte Granaten:** Panzer und Schützenpanzer schießen keine Würfeltreffer mehr. Jede Granate fliegt mit Mündungsgeschwindigkeit (Kampfpanzer 800 m/s, SPz 1000 m/s) durch die Welt, schlägt in Ruinen und Boden ein und trifft nur, wenn sie den Mech wirklich erwischt. Der Richtschütze hält vor (Flugzeit × geschätzte Geschwindigkeit, ±40 % Schätzfehler), streut mit der Entfernung und führt der Bewegung nur verzögert nach. Wer läuft und die Richtung wechselt, wird etwa halb so oft getroffen wie ein stehender Mech (gemessen auf 350–400 m: ca. 30–37 % stehend, 12–16 % in Bewegung). Knapp vorbeifliegende Granaten hört man pfeifen.
+- **Trefferzonen:** Wo die Granate einschlägt, entscheidet über das Bauteil – Beine unten, Torso in der Mitte, Arme außen, der kleine Sensorkopf oben.
+- **Panzerung nach Richtung:** Der Mech ist vorne dicker gepanzert (×0,8) als hinten (×1,35). Bei den Panzern zählt es noch mehr: Front ×0,5, Seite ×1, Heck ×1,6, Turmfront ×0,6. Lenkraketen (Hohlladung) hängen weniger davon ab. Neben dem Fadenkreuz zeigt das HMD, wo der eigene Treffer saß, z. B. `HECK ×1.6` – flankieren lohnt sich.
+- **Drehbare Türme:** Der Kampfpanzer-Turm ist vom Fahrgestell getrennt und schwenkt eigenständig (0,7 rad/s). Ein Panzer kann seitlich fahren und dabei mit dem Rohr auf dich zielen; gefeuert wird erst, wenn der Turm auf dem Ziel steht.
+- **Taktische Gegner:** Ein angeschlagener Panzer (unter 50 %) wirft eine weiße **Nebelwand**, zieht sich hinter die nächste große Ruine zurück und versucht danach, dich von der Flanke zu fassen. Nebel blockiert die Sicht in beide Richtungen und reißt die Raketenaufschaltung ab, eine schon fliegende Rakete fliegt blind weiter.
+- **Systemschäden:** Treffer können Systeme hinter der Panzerung ausschalten (Ausfälle stehen rot im HMD):
+  - Kopf: **Optik** (Kamera und Zoom tot) oder **Sensoren** (Radar nur noch 250 m, kein Datalink: Zielmarken nur in Sicht und unter 600 m)
+  - Torso: **Gyro** (keine Stabilisierung, die Kanone streut stärker) oder **Kühlung** (Kanone und Reaktor laufen heißer)
+  - linker Arm: **Raketenwerfer** blockiert
+  - Beine: **Hydraulik** (nur noch 70 % Geschwindigkeit)
+
 ## Die Lanze: verbündete Mechs
 
 In den Lanzen-Missionen laufen **Hammer 2** und **Hammer 3** neben dir: dieselben 5-m-Mechs (geriggtes Meshy-Modell mit eigener Gehanimation, leicht anders lackiert), mit grüner IFF-Leuchte, 30-mm-Kanone und Raketen. Sie suchen sich selbst Ziele in Reichweite, melden sich mit eigenen Funkstimmen („Kontakt“, „Ziel zerstört“, „Ich werde getroffen“) und können ausfallen.
@@ -73,7 +86,7 @@ Eine Panzerkolonne rollt auf Sektor Kilo zu. Der Mech steht betriebsbereit an de
 
 **Waffen:** Die 30-mm-Kanone am rechten Arm ist rechts durch die Kanzel zu sehen: Sie schwenkt mit dem Helm (±70° seitlich, mit Servo-Verzögerung), der Lauf fährt bei jedem Schuss zurück, glüht bei Hitze und wirft große Messinghülsen aus, die klirrend auf dem Boden landen. Feuer mit der linken Maustaste (halten = Dauerfeuer, 5 Schuss/s, jede Granate mit Leuchtspur); der Blick wird bei jedem Schuss hochgerissen, die Kabine bebt, das Mündungsfeuer erhellt das Cockpit. Sie überhitzt bei Dauerfeuer. Darüber sitzt ein **Koaxial-MG 7,62 mm** (Schalter MG, Taste **E** halten): 15 Schuss/s, jede dritte Leuchtspur, kleine Hülsen – gegen Schützenpanzer. Lenkraketen aus dem Schulterwerfer: Ziel im gestrichelten Suchkreis halten, bis der Aufschaltton schnell wird (LOCK), dann **F**. Ohne Lock fliegen sie ungelenkt auf den Zielpunkt.
 
-**Gegner** fahren über das Gelände (Hindernissen ausweichend), halten auf Kampfentfernung an, drehen sich zum Mech und feuern. Leuchtspurgeschosse zeigen, woher es kommt; wer stehen bleibt, wird leichter getroffen, Fehlschüsse schlagen neben dir ein oder pfeifen vorbei. Treffer gehen auf Kopf, Torso, Arme oder Beine: das Licht setzt aus, Funken sprühen, die Scheibe kann reißen, ein roter Pfeil zeigt die Richtung. Zerstörter rechter Arm = Kanone tot, beschädigte Beine = langsamer. Mit etwas Pech **brennt es an Bord** (Rauch in der Kabine, Hitze steigt) – dann FIRE SUPPR an der Mittelkonsole umlegen (3 Löschflaschen). Kopf oder Torso auf 0 % = Mech zerstört. Am Ende gibt es eine Auswertung mit Abschüssen, Trefferquote und Einsatzzeit.
+**Gegner** fahren über das Gelände (Hindernissen ausweichend), halten auf Kampfentfernung an, schwenken den Turm zum Mech und feuern echte, fliegende Granaten (siehe *Realistische Gefechte*). Leuchtspurgeschosse zeigen, woher es kommt; wer stehen bleibt, wird leichter getroffen, Fehlschüsse schlagen neben dir ein oder pfeifen vorbei. Treffer gehen dorthin, wo die Granate einschlägt – Kopf, Torso, Arme oder Beine: das Licht setzt aus, Funken sprühen, die Scheibe kann reißen, ein roter Pfeil zeigt die Richtung. Zerstörter rechter Arm = Kanone tot, beschädigte Beine = langsamer. Mit etwas Pech **brennt es an Bord** (Rauch in der Kabine, Hitze steigt) – dann FIRE SUPPR an der Mittelkonsole umlegen (3 Löschflaschen). Kopf oder Torso auf 0 % = Mech zerstört. Am Ende gibt es eine Auswertung mit Abschüssen, Trefferquote und Einsatzzeit.
 
 **Helmdisplay (HMD):** Unabhängig von der Blickrichtung stehen Schub (−30…+100 %, Balken + Zahl), Geschwindigkeit und Fahrtrichtung immer links unten im Bild; rechts unten Munition, Rohrhitze, Raketen und Lock-Status, darüber der Schadenszustand. Feinde werden per Datenlink mit Rahmen und Entfernung markiert, außerhalb des Sichtfelds zeigen Pfeile am Rand in ihre Richtung.
 
@@ -190,10 +203,10 @@ src/
   cockpit/comms.js     Videoverbindung: wer spricht, Clip abspielen
   logic/allies.js      Flügelmann-Logik: Befehle, Formation, Bewegung, Feuer (getestet)
   combat/arsenal.js    Kanone, Leuchtspur, Lenkraketen, Einschläge
-  combat/enemies.js    Panzer/Schützenpanzer im Gelände, Granaten, Wracks
+  combat/enemies.js    Panzer/Schützenpanzer: abgetrennter Drehturm, ballistische Granaten mit Kollision, Nebelwände, Deckungssuche, Wracks
   combat/hmd.js        Helmdisplay (Schub, Waffen, Zielmarken, Trefferrichtung)
   combat/gunrig.js     sichtbarer Waffenarm: Kanone + MG, Schwenken, Rücklauf, Hitzeglühen, Hülsen
-  logic/combat.js      Waffen-, Schadens- und Gegnerlogik (getestet)
+  logic/combat.js      Waffen, Richtschütze (Vorhalt, Streuung), Panzerung nach Richtung, Trefferzonen, Systemschäden, Gegnertaktik (getestet)
   logic/mech.js        reine Bewegungslogik (getestet)
   logic/systems.js     Strom, APU, Hydraulik, Kühlung, Reaktor, Gyro, Beinverriegelung (getestet)
   logic/gait.js        Gang: Gewichtsverlagerung, Nachschwingen, Kopf-Feder, Pendel (getestet)
