@@ -225,6 +225,24 @@ export class HUD {
       g.arc(b.x + Math.cos(a) * R, b.y + Math.sin(a) * R, 2.5, 0, Math.PI * 2);
       g.fill();
     }
+    // a guided missile on its way: a big flashing red chevron outside the ring
+    if (it.missiles?.length && Math.floor(performance.now() / 160) % 2 === 0) {
+      g.strokeStyle = RED;
+      g.lineWidth = 6;
+      for (const mm of it.missiles) {
+        const a = -Math.PI / 2 - mm.rel;
+        for (const r of [R + 34, R + 52]) {
+          const x = b.x + Math.cos(a) * r;
+          const y = b.y + Math.sin(a) * r;
+          g.beginPath();
+          g.moveTo(x - Math.sin(a) * 22 - Math.cos(a) * 12, y + Math.cos(a) * 22 - Math.sin(a) * 12);
+          g.lineTo(x, y);
+          g.lineTo(x + Math.sin(a) * 22 - Math.cos(a) * 12, y - Math.cos(a) * 22 - Math.sin(a) * 12);
+          g.stroke();
+        }
+      }
+      g.lineWidth = 3;
+    }
     for (const t of it.list) {
       const a = -Math.PI / 2 - t.rel;
       const near = t.dist < 300 ? 1.4 : t.dist < 600 ? 1.15 : 0.9;
@@ -340,6 +358,7 @@ export class HUD {
           w.blocked ? 'RAK BLOCKIERT' : `RAK ${String(w.missiles).padStart(2)} ${w.unguided ? 'ZIELPKT' : w.locked ? 'LOCK' : lk ? '▰'.repeat(lk) + '▱'.repeat(4 - lk) : 'SUCHE'}${s.fc ? ` ${{ direct: 'DIR', auto: '', top: 'STEIL' }[s.fc.missileProfile]}${s.fc.salvo > 1 ? '×' + s.fc.salvo : ''}` : ''}`,
           w.blocked ? RED : w.locked ? RED : w.missile ? C : DIM,
         ],
+        w.pod ? [`WERF ${w.pod.auto ? 'AUTO ' : ''}${w.pod.elev}° ${w.pod.az === 0 ? 'MITTE' : (w.pod.az > 0 ? 'L' : 'R') + Math.abs(w.pod.az) + '°'}${w.aps ? ` · ABW ${w.aps.on ? w.aps.left : 'AUS'}` : ''}`, w.pod.auto ? C : WARN, 24] : null,
         w.inLimits ? `ROHR ${yaw === 0 ? 'MITTE' : (yaw > 0 ? 'L' : 'R') + Math.abs(yaw) + '°'} ${pit >= 0 ? '+' : '-'}${Math.abs(pit)}°` : ['AUSSER SCHWENKBEREICH', WARN],
         w.range ? `ENTF ${String(Math.round(w.range)).padStart(4, '0')} m` : null,
       ],

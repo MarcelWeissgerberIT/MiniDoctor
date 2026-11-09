@@ -17,6 +17,7 @@ const html = `
   <div class="t-right">
     <button class="t-btn t-small" data-key="Tab" data-tap="1">ZIEL</button>
     <button class="t-btn t-small" data-key="KeyF" data-tap="1">RAKETE</button>
+    <button class="t-btn t-small" data-key="Semicolon" data-tap="1">WINKEL</button>
     <button class="t-btn t-mg" data-hold="KeyE">MG</button>
     <button class="t-btn t-fire" data-fire="1">FEUER</button>
     <button class="t-btn t-small t-zoom" data-zoom="1">ZOOM</button>

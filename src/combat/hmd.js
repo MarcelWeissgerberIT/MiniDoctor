@@ -118,7 +118,7 @@ export class HMD {
     // with touch controls the lever and the fire buttons sit in the corners instead
     if (!s.touch) this.drawThrottle(s, 26, h - 130);
     if (s.weapons && !s.touch) this.drawWeapons(s, w - 26, h - 60);
-    const py = s.touch ? h - 360 : h - (s.weapons ? 230 : 100);
+    const py = s.touch ? h - 360 : h - (s.weapons ? 300 : 100);
     if (s.parts) this.drawParts(s.parts, w - 26, py);
     if (s.failed?.length) s.failed.forEach((f, i) => this.text(`✕ ${f}`, w - 26, py - 130 - i * 18, { size: 13, color: RED, align: 'right' }));
     if (s.allies) this.drawLance(s.allies, 26, s.touch ? h - 470 : h - 400);
@@ -243,7 +243,20 @@ export class HMD {
     const g = this.g;
     const w = s.weapons;
     g.fillStyle = 'rgba(0,12,6,0.38)';
-    g.fillRect(x - 210, y - 150, 220, 160);
+    g.fillRect(x - 210, y - 222, 220, 232);
+    // the launcher (angle, bearing) and the missile defence
+    if (w.pod) {
+      const p = w.pod;
+      const az = p.az === 0 ? 'MITTE' : `${p.az > 0 ? 'L' : 'R'}${Math.abs(p.az)}°`;
+      this.text('WERFER', x - 200, y - 204, { size: 14, color: w.missile ? G : DIM });
+      this.text(`${p.auto ? 'AUTO ' : ''}${p.elev}° · ${az}`, x, y - 204, { size: 14, color: p.auto ? G : AMBER, align: 'right' });
+      if (!p.auto) this.text(`ohne Lock ≈ ${p.range}  ·  I = AUTO`, x, y - 187, { size: 11, color: DIM, align: 'right', weight: 'normal' });
+    }
+    if (w.aps) {
+      const a = w.aps;
+      this.text('ABWEHR', x - 200, y - 164, { size: 14, color: a.on ? G : DIM });
+      this.text(a.on ? `${a.left}/${a.max} ${'▮'.repeat(Math.min(10, a.left))}` : 'AUS', x, y - 164, { size: 14, color: !a.on ? DIM : a.left ? (a.left <= 2 ? AMBER : G) : RED, align: 'right' });
+    }
     if (!w.master) {
       this.text('WAFFEN GESICHERT', x, y - 130, { size: 15, color: AMBER, align: 'right' });
       this.text('Overhead (2): WEAPONS ARM', x, y - 108, { size: 12, color: DIM, align: 'right', weight: 'normal' });

@@ -184,7 +184,7 @@ export const PARTS = {
     ecm: {
       name: 'Störsender ECM',
       short: 'ECM',
-      desc: 'Feindliche Richtschützen treffen ein Viertel seltener.',
+      desc: 'Feindliche Richtschützen treffen ein Viertel seltener, ihre Lenkraketen lenken schlechter.',
       t: 3,
       unlock: 4,
       stats: { ecm: 0.75 },
@@ -196,6 +196,14 @@ export const PARTS = {
       t: 5,
       unlock: 3,
       stats: { front: 0.75 },
+    },
+    aps: {
+      name: 'Abwehr-Magazin',
+      short: 'ABWEHR+',
+      desc: 'Doppeltes Magazin für die Raketenabwehr: 12 statt 6 Abfangladungen gegen Lenkraketen und Raketen.',
+      t: 2,
+      unlock: 3,
+      stats: { aps: 12 },
     },
     battery: {
       name: 'Drohnen-Akku XL',
@@ -288,6 +296,7 @@ export function effects(l) {
     lights: { id: l.lights, ...P('lights').stats },
     smoke: extra.smoke ?? 0,
     ecm: extra.ecm ?? 1,
+    aps: extra.aps ?? 6,
     droneFlight: extra.droneFlight ?? 1,
     paint: P('paint').stats,
     emblem: P('emblem').stats.shape ?? null,

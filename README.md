@@ -72,7 +72,8 @@ Missionen bringen ihr eigenes Wetter mit: **Nacht** (Mondlicht, Nachtsicht N, Sc
 | **Flakpanzer** | Vierlingskanone, holt die Drohne im Umkreis von 950 m nach kurzer Zielverfolgung herunter |
 | **Kampfhubschrauber** | Kreist in 380 m um sein Ziel, dreht zu Raketenanflügen ein, stürzt brennend ab |
 | **Lastwagen** | Unbewaffnet, fährt eine Route ab und flieht, wenn er getroffen wird; entkommene LKW zählen gegen dich |
-| **Kampfmech** | Gegnerischer Mech mit eigener Gehanimation, 320 Strukturpunkte, schwere Kanone – „Schwarzer Ritter“, „Jaguar“, „Titan“, „Goliath“ |
+| **Kampfmech** | Gegnerischer Mech mit eigener Gehanimation, 320 Strukturpunkte (Ritter 240), schwere Kanone und Lenkraketen – „Schwarzer Ritter“, „Jaguar“, „Titan“, „Goliath“ |
+| **Schützenpanzer** (neu bewaffnet) | Zusätzlich zur Maschinenkanone alle 26–38 s eine Panzerabwehr-Lenkrakete auf 200–900 m |
 
 Eigene LKW im Geleitzug fahren nur, solange BB-07 in 170 m Nähe ist (Anzeige „WARTET“), und werden vom Gegner beschossen wie die Mechs. Gehen zu viele verloren oder entkommen zu viele feindliche LKW, ist die Mission gescheitert. Die Auftragszeile im HUD zeigt Countdown, LKW-Zahl oder Entkommene.
 
@@ -170,7 +171,9 @@ Auf der Außenseite der Front- und der beiden Seitenscheiben sammelt sich Schmut
 
 ## Aufklärungsdrohne
 
-Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung, alternativ schickst du sie über die Karte oder die Zielliste zu einem Punkt bzw. Ziel.
+Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung: Liegt dort ein bekanntes Fahrzeug (±15°), fliegt sie direkt dorthin, sonst mindestens 400 m weit. **Shift+Q** schickt die fliegende Drohne zu einem neuen Ziel, auf der Taktikkarte (M) genügt ein Klick auf die Stelle. Alternativ über die Zielliste zu einem Ziel.
+
+**Aus der Deckung kämpfen:** Hinter einer Ruine stehen bleiben, Q in Richtung Gegner – sobald die Drohne ein Fahrzeug markiert, genügt **F**: Ist nichts zugewiesen, nimmt der Feuerleitrechner das nächste markierte Ziel, die Rakete schaltet über den Laserpunkt der Drohne sofort auf (0,3 s statt 1,2 s) und fliegt im Steilangriff über die Deckung – auch wenn der Mech seitlich oder mit dem Rücken zum Ziel steht. **Tab** blättert zuerst durch die markierten, dann durch die sichtbaren Ziele. Ohne Ziel und mit dem Blick auf die eigene Deckung verweigert F den Schuss mit einem Hinweis, statt die Rakete in die Wand zu jagen.
 
 - **Flug:** Sie steigt auf, fliegt mit 26 m/s hin und kreist in 70 m Höhe (Radius 110 m) über dem Gebiet.
 - **Modi** (Bordcomputer, Seite FEUERLEITUNG oder DROHNE): **KREISEN** über einem Punkt, **BEGLEITEN** in 70 m Radius über dem Mech (zieht mit), **VORAUS** 380 m vor dem Mech in Laufrichtung, **MANUELL** = Handflug.
@@ -180,6 +183,24 @@ Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung, 
 - **Abschuss:** Schützenpanzer in der Nähe können sie abschießen; eine Ersatzdrohne wird nach 45 s montiert.
 - **Steilangriff:** Ein markiertes Ziel ohne eigene Sicht greift die Rakete von oben an. Sie steigt erst steil 40 m vom Werfer weg (frei von Ruinen um den Mech), dann auf bis zu 95 m, fliegt langsamer (170 m/s) und stürzt auf das dünne Dach (×1,5). Mit Profil STEIL fliegt sie immer so, außer auf ein sichtbares Ziel näher als 140 m.
 - **Mission 5:** Dort ist die Drohne durch einen Störsender gesperrt.
+
+## Raketenwerfer: Schwenken und Startwinkel
+
+Der Werfer schwenkt ±110° zur Seite und richtet sich selbst aus: auf das zugewiesene oder aufgeschaltete Ziel, sonst in Blickrichtung. Ab 55° Startwinkel kann die Rakete in jede Richtung, auch nach hinten.
+
+- **AUTO** (Standard): flach (7°) auf Ziele in Sicht, steil (64°) im Steilangriff.
+- **Von Hand:** **Mausrad** oder **, / .** stellen den Startwinkel in 5°-Schritten von 0 bis 85°, **I** gibt ihn an den Rechner zurück (Tablet: Taste WINKEL schaltet AUTO → 20° → 40° → 60° → 80°).
+  - Mit Aufschaltung: Die Rakete verlässt den Werfer im eingestellten Winkel und fliegt ab 30° einen Bogen über die Deckung, je steiler, desto höher (bis 180 m).
+  - Ohne Aufschaltung: Sie fliegt ballistisch wie eine Granate (130 m/s, ungelenkte RW-24 mit 150 m/s). Das Helmdisplay zeigt die Reichweite für den Winkel, z. B. 10° ≈ 590 m, 25° ≈ 1,3 km, 45° ≈ 1,7 km (gemessen: Einschlag auf wenige Prozent genau) – indirektes Feuer auf Gebiete hinter Deckung.
+- Anzeige im Helmdisplay (WERFER) und im Scheiben-HUD (WERF): Winkel, Seitenrichtung, AUTO oder Hand.
+
+## Raketenwarner und Raketenabwehr
+
+Schützenpanzer und feindliche Kampfmechs feuern jetzt **Panzerabwehr-Lenkraketen** (150 m/s, sichtbar mit Rauchspur). Der **Raketenwarner** piept doppelt und meldet Richtung und Entfernung („RAKETE! 10 UHR · 380 m“), im HUD blinken rote Pfeile am Bedrohungsring.
+
+- **Raketenabwehr** (aktives Schutzsystem, automatisch): Eine Lenkrakete im Anflug innerhalb 70 m oder eine Hubschrauberrakete, die in der nächsten halben Sekunde treffen würde, bekommt eine Abfangladung (9 von 10 wirken, eine Ladung alle 0,45 s). **6 Ladungen** pro Einsatz, mit dem Hangar-Zusatz **Abwehr-Magazin** 12. Anzeige ABWEHR im Helmdisplay; **Shift+J** schaltet sie aus und ein (Ladungen sparen).
+- **Nebelwand (J)** zwischen Rakete und Mech: Der Lenkschütze verliert das Ziel, die Rakete fliegt blind weiter.
+- **ECM** (Hangar) lässt ihre Lenkraketen schlechter lenken.
 
 ## Pause, Einstellungen, Erfolge
 
@@ -338,19 +359,21 @@ Die Ansichten 1 bis 9 liegen in der Leiste unten. Im Touch-Modus übernehmen die
 | X / Leertaste | Schub auf null |
 | A / D | Mech drehen |
 | Linksklick | Schalter unter dem Fadenkreuz betätigen · sonst Kanone feuern (Waffen scharf) |
-| F | Rakete starten |
+| F | Rakete starten (markiertes Ziel: sofort, auch aus der Deckung) |
+| Mausrad / , . / I | Startwinkel des Werfers von Hand / AUTO |
 | E (halten) | Koaxial-MG |
 | B / V / T | Lanze: folgen / Position halten / Ziel angreifen |
 | Leertaste | Einstiegssequenz überspringen |
 | L / H / N / O | Kabinenlicht / HUD / Nachtsicht / Optik |
 | R | Radarreichweite |
 | G | Gyro-Stabilisator (dämpft Schwanken und Erschütterungen) |
-| Q | Drohne starten / zurückrufen |
-| Tab | nächstes Ziel zuweisen |
+| Q / Shift+Q | Drohne starten / zurückrufen · neu einweisen |
+| Tab | nächstes Ziel zuweisen (markierte zuerst) |
 | Drohne im Handflug | W/S Tempo · A/D drehen · R/F Höhe (Bordcomputer auf DROHNE offen, Modus MANUELL) |
 | K | Scheibenwischer an/aus |
 | U | Scheinwerfer an/aus (wenn verbaut) |
 | J | Nebelwand (Nebelwurfanlage) |
+| Shift+J | Raketenabwehr aus / ein |
 | C | Blick zentrieren |
 | M | Taktikkarte |
 | P / Esc | Pause |

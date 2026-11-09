@@ -59,3 +59,18 @@ describe('new enemy types', () => {
     expect(e.speed).toBeGreaterThan(v0 * 1.2);
   });
 });
+
+import { closingOn, ATGM } from '../src/logic/combat.js';
+
+describe('missile defence geometry', () => {
+  it('sees a rocket that will hit, ignores one that misses or flies away', () => {
+    const c = { x: 0, y: 3, z: 0 };
+    expect(closingOn({ x: 0, y: 3, z: -100 }, { x: 0, y: 0, z: 300 }, c, 4, 0.5)).toBeCloseTo(1 / 3, 2);
+    expect(closingOn({ x: 20, y: 3, z: -100 }, { x: 0, y: 0, z: 300 }, c, 4, 0.5)).toBe(-1);
+    expect(closingOn({ x: 0, y: 3, z: -100 }, { x: 0, y: 0, z: -300 }, c, 4, 0.5)).toBe(-1);
+    expect(closingOn({ x: 0, y: 3, z: -400 }, { x: 0, y: 0, z: 300 }, c, 4, 0.5)).toBe(-1); // later than the horizon
+  });
+  it('has enemy missiles slow enough to react to', () => {
+    expect(ATGM.speed).toBeLessThan(200);
+  });
+});
