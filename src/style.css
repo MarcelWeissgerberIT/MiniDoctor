@@ -1243,6 +1243,20 @@ body.touchmode #lockhint {
   height: calc(46px * var(--ts));
   padding: 0 10px;
 }
+/* phones: the top row stays one row */
+@media (max-width: 900px) {
+  .t-util {
+    gap: 5px;
+    max-width: calc(100vw - 250px);
+  }
+  #touch .t-u {
+    min-width: 0;
+    height: calc(38px * var(--ts));
+    padding: 0 7px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+}
 .t-lance {
   display: none;
   gap: 8px;
