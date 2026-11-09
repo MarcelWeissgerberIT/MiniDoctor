@@ -1051,7 +1051,7 @@ export class World {
     this.fog0 ??= this.scene.fog.density;
     this.fogColor0 ??= this.scene.fog.color.clone();
     this.scene.fog.density = kind === 'rain' ? this.fog0 * 2.2 : kind === 'sandstorm' ? 0.011 : this.fog0;
-    if (kind === 'sandstorm') this.scene.fog.color.setRGB(0.55, 0.38, 0.22, THREE.SRGBColorSpace);
+    if (kind === 'sandstorm') this.scene.fog.color.setRGB(0.6, 0.4, 0.22, THREE.SRGBColorSpace);
     else if (!this.night) this.scene.fog.color.copy(this.fogColor0);
     if (kind === 'rain') this.scene.fog.color.multiplyScalar(0.7);
     this.effects.setWeather?.(kind);

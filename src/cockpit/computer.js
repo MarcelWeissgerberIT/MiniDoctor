@@ -17,7 +17,7 @@ export const COMP_PAGES = [
 
 const DRONE_STATE = { docked: 'ANGEDOCKT', launch: 'START', transit: 'ANFLUG', orbit: 'SUCHE', return: 'RÜCKKEHR', land: 'LANDUNG', lost: 'VERLOREN', manual: 'HANDFLUG' };
 const DRONE_MODE = { orbit: 'KREISEN', escort: 'BEGLEITEN', ahead: 'VORAUS', manual: 'MANUELL' };
-const TYPE_LONG = { tank: 'KAMPFPANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOT' };
+const TYPE_LONG = { tank: 'KAMPFPANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOT', bunker: 'BUNKER', artillery: 'HAUBITZE', aa: 'FLAKPANZER', heli: 'KAMPFHUBSCHRAUBER', truck: 'LASTWAGEN', mech: 'KAMPFMECH' };
 
 /** feed rectangle for the display shader (uv, y up) */
 export function pageFeedRect() {

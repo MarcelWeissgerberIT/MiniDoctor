@@ -777,20 +777,23 @@ export class Cockpit {
   rainGlass(amount) {
     for (const G of Object.values(this.panes)) {
       const g = G.g;
-      const n = Math.round(amount * 600 * (G.cv.width / 512));
+      const n = Math.round(amount * 260 * (G.cv.width / 512));
       for (let k = 0; k < n; k++) {
         const x = Math.random() * G.cv.width;
         const y = Math.random() * G.cv.height;
-        const r = 1.5 + Math.random() * 3.5;
-        const grd = g.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
-        grd.addColorStop(0, 'rgba(225,232,240,0.38)');
-        grd.addColorStop(0.7, 'rgba(120,135,150,0.24)');
-        grd.addColorStop(1, 'rgba(60,70,80,0)');
+        const r = 1.2 + Math.random() * 2.6;
+        // a lens of water: dark rim, clear body, a pin of light on top
+        const grd = g.createRadialGradient(x, y, 0, x, y, r);
+        grd.addColorStop(0, 'rgba(170,185,200,0.10)');
+        grd.addColorStop(0.75, 'rgba(70,80,90,0.16)');
+        grd.addColorStop(1, 'rgba(20,24,28,0)');
         g.fillStyle = grd;
         g.beginPath();
         g.arc(x, y, r, 0, Math.PI * 2);
         g.fill();
-        this.grimeAdd(G, x, y, r, 0.04);
+        g.fillStyle = 'rgba(235,240,245,0.35)';
+        g.fillRect(x - r * 0.35, y - r * 0.45, 1, 1);
+        this.grimeAdd(G, x, y, r, 0.03);
       }
       G.dirty = true;
     }

@@ -51,7 +51,8 @@ import { fitModel } from './geom.js';
 const params = new URLSearchParams(location.search);
 const DEG = Math.PI / 180;
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-const TYPE_NAME = { tank: 'KAMPFPANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOT' };
+const TYPE_NAME = { tank: 'KAMPFPANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOT', bunker: 'BUNKER', artillery: 'HAUBITZE', aa: 'FLAKPANZER', heli: 'KAMPFHUBSCHRAUBER', truck: 'LASTWAGEN', mech: 'KAMPFMECH' };
+const KILL_NAME = { tank: 'PANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOTZIEL', bunker: 'BUNKER', artillery: 'HAUBITZE', aa: 'FLAKPANZER', heli: 'HUBSCHRAUBER', truck: 'LKW', mech: 'KAMPFMECH' };
 const TYPE_SHORT = { tank: 'PZ', apc: 'SPZ', depot: 'DEP' };
 const FACE_NAME = { front: 'FRONT', side: 'SEITE', rear: 'HECK' };
 const STATE_NAME = { advance: 'VORRÜCKEN', engage: 'GEFECHT', cover: 'DECKUNG', flank: 'FLANKE', dead: 'ZERSTÖRT' };
@@ -727,7 +728,7 @@ class Game {
       if (e.lastFace === 'rear') this.ach.unlock('rear');
       if (e.lastFace === 'top') this.ach.unlock('top');
     }
-    const what = e.type === 'tank' ? 'PANZER' : e.type === 'apc' ? 'SCHÜTZENPANZER' : 'DEPOTZIEL';
+    const what = e.type === 'mech' ? e.label : KILL_NAME[e.type] || 'ZIEL';
     this.hmd.notify(`${what} ZERSTÖRT${by ? ' · ' + by.name : ''}`, '#a6ffb8', 2.5);
     if (!by && this.mission?.def.id === 'm2') this.mission.call('m2_04', 12);
   }
