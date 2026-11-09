@@ -23,8 +23,12 @@ import { Tutorial, VOICE_TEXT, TRAINING_TEXT } from './tutorial.js';
 import { Range } from './training.js';
 import { loadSettings, Achievements, Menu } from './menu.js';
 import { TouchControls, isTouchDevice } from './touch.js';
+import { Hangar, loadLoadout } from './hangar.js';
 import { FIRE_CONTROL, pickTarget, leadPoint } from './logic/firecontrol.js';
-import { GUN } from './logic/combat.js';
+import { GUN, MG } from './logic/combat.js';
+import { DRONE } from './logic/drone.js';
+import { effects as loadoutEffects, defaultLoadout } from './logic/loadout.js';
+import { Livery, paintMaterial, setPaint } from './world/livery.js';
 import { EntrySequence } from './entry.js';
 import { UI } from './ui.js';
 import { VIEWS, VIEW_ORDER, CONTROL_VIEW, ZOOM_FOV } from './cockpit/views.js';
@@ -77,6 +81,10 @@ const assets = new Assets(renderer);
 assets.onProgress = (p) => ui.progress(p);
 
 /* ----------------------------------------------------------------- game */
+
+// the factory numbers: every fit starts from these
+const FACTORY = { GUN: { ...GUN }, MG: { ...MG }, MISSILE: { ...MISSILE }, MECH: { ...MECH }, droneFlight: DRONE.flight };
+const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 
 class Game {
   constructor() {
@@ -362,6 +370,8 @@ class Game {
     body.visible = false;
     // procedural walk: planted feet and two-bone leg IK, driven by the simulated steps
     this.rig = { body, walker: new MechWalker(body, this.world.playerMech) };
+    // paint, markings and the fitted parts from the hangar
+    this.rig.livery = new Livery(body);
   }
 
   setExternal(on) {
@@ -454,7 +464,17 @@ class Game {
         }
       }
     }
-    this.gunRig.update(dt, { mechObj: this.mechObj, aim: this.aimPt, heat: this.arsenal.w.gun.heat, show: !this.external });
+    const firingNow = this.input.lmb && !this.dead && live.gun && this.view === 'front';
+    this.gunRig.update(dt, { mechObj: this.mechObj, aim: this.aimPt, heat: this.arsenal.w.gun.heat, show: !this.external, firing: firingNow });
+    this.rig?.livery?.update(dt, { firing: firingNow });
+    // the flamethrower roars while it burns
+    if (this.arsenal.flaming && !this.flamerLoop) this.flamerLoop = this.sound.loop('flamer', 0.5);
+    if (!this.arsenal.flaming && this.flamerLoop) {
+      try {
+        this.flamerLoop.src.stop();
+      } catch {}
+      this.flamerLoop = null;
+    }
     const flying = this.droneHands();
     this.arsenal.update(dt, {
       live,
@@ -647,11 +667,23 @@ class Game {
       if (Math.random() < 0.3) this.cockpit.gunFlash();
       return;
     }
-    // 30 mm: the whole cabin takes the blow, the view kicks up and settles
-    this.sound.one('gun_shot', 0.6, 0.92 + Math.random() * 0.1, undefined, 0, pan);
-    this.sound.thump(62, 0.35, 0.18);
-    this.shake += 0.32;
-    this.kick += 0.011;
+    // the fitted gun: the whole cabin takes the blow, the view kicks up and settles
+    const id = this.kit?.gun.id ?? 'ac30';
+    if (id === 'gat20') {
+      this.sound.one('gun_shot', 0.22, 1.55 + Math.random() * 0.12, undefined, 0, pan);
+      this.shake += 0.08;
+      this.kick += 0.002;
+      this.headVel.z += 0.012;
+      if (Math.random() < 0.3) this.cockpit.gunFlash();
+      return;
+    }
+    const big = id === 'ac40' || id === 'rail';
+    if (id === 'rail') this.sound.one('rail_shot', 0.75, 0.95 + Math.random() * 0.1, undefined, 0, pan);
+    else if (id === 'ac40') this.sound.one('cannon_heavy', 0.75, 0.95 + Math.random() * 0.08, undefined, 0, pan);
+    else this.sound.one('gun_shot', 0.6, 0.92 + Math.random() * 0.1, undefined, 0, pan);
+    this.sound.thump(big ? 48 : 62, big ? 0.55 : 0.35, big ? 0.3 : 0.18);
+    this.shake += big ? 0.55 : 0.32;
+    this.kick += big ? 0.018 : 0.011;
     this.headVel.z += 0.07;
     this.headVel.x -= 0.02;
     this.cockpit.gunFlash();
@@ -733,7 +765,9 @@ class Game {
       part = hitPart(lx, at.y - this.world.heightAt(m.x, m.z));
     }
     const face = armorFace(m.heading, m.x, m.z, shell.from.x, shell.from.z);
-    const dmg = shell.dmg * MECH_ARMOR[face];
+    // the hangar fit: armour class and bolted-on front plates
+    const kit = this.kit;
+    const dmg = (shell.dmg * MECH_ARMOR[face] * (face === 'front' ? kit?.front ?? 1 : 1)) / (kit?.armor ?? 1);
     applyHitAt(this.parts, dmg, part);
     const sys = systemHit(this.failed, part, dmg);
     if (sys) this.systemFailed(sys);
@@ -896,8 +930,87 @@ class Game {
     this.input.unlock();
   }
 
+  /**
+   * The hangar fit goes live: weapon numbers, armour and speed, drone battery, kit, and
+   * the looks of the outside model and the parked mech. factory: keep the stock weapons
+   * (basic training), only the looks are the pilot's.
+   */
+  applyLoadout(factory = false) {
+    const won = Object.values(loadProgress()).filter((p) => p.done).length;
+    const mine = loadLoadout(won);
+    this.loadout = factory ? { ...defaultLoadout(), paint: mine.paint, emblem: mine.emblem, callsign: mine.callsign, lights: mine.lights } : mine;
+    const e = (this.kit = loadoutEffects(this.loadout));
+    Object.assign(GUN, FACTORY.GUN, pick(e.gun, ['rpm', 'ammo', 'speed', 'damage', 'heatPerShot', 'cool', 'spread']));
+    Object.assign(MG, FACTORY.MG, pick(e.mg, ['rpm', 'ammo', 'speed', 'damage', 'spread', 'flamer', 'range', 'dps']));
+    Object.assign(MISSILE, FACTORY.MISSILE, pick(e.missile, ['count', 'damage', 'lockTime', 'lockRange', 'reload', 'guided', 'burst']));
+    for (const k of ['maxForward', 'maxReverse', 'accel']) MECH[k] = FACTORY.MECH[k] * e.speed;
+    DRONE.flight = FACTORY.droneFlight * e.droneFlight;
+    this.smokeLeft = e.smoke;
+    this.gunRig.setLook?.(e.gun, e.mg);
+    this.rig?.livery?.apply(e);
+    // the mech in the base gets its paint too
+    const base = this.world.mechBody;
+    if (base) {
+      base.traverse((o) => {
+        if (o.isMesh && !o.material.userData.paint) o.material = paintMaterial(o.material, 1.1);
+        if (o.isMesh) setPaint(o.material, e.paint);
+      });
+    }
+    this.buildLamps(e.lights);
+  }
+
+  /** the lamps' light: two spots on the mech (the IR one only shows in the night vision) */
+  buildLamps(L) {
+    for (const s of this.lampSpots || []) s.removeFromParent();
+    this.lampSpots = [];
+    this.lightsOn = false;
+    if (!L?.id || L.id === 'none') return;
+    const holder = this.world.playerMech;
+    for (const side of [-1, 1]) {
+      const ir = L.visible === false;
+      const sp = new THREE.SpotLight(new THREE.Color(...L.color), 0, L.range * 1.5, L.angle, 0.5, 1.1);
+      sp.position.set(side * 0.55, 3.55, -1.1);
+      sp.target.position.set(side * 0.8, 0, -L.range * 0.7);
+      sp.userData = { full: ir ? 160 : L.intensity, ir };
+      sp.visible = false;
+      holder.add(sp, sp.target);
+      this.lampSpots.push(sp);
+    }
+  }
+
+  /** U: lamps on/off */
+  toggleLamps() {
+    if (!this.lampSpots?.length) return this.hmd.notify('KEINE SCHEINWERFER VERBAUT', '#ffc15e', 1.5);
+    if (!this.sys.mainBus) return;
+    this.lightsOn = !this.lightsOn;
+    const ir = this.kit?.lights.visible === false;
+    for (const s of this.lampSpots) {
+      s.visible = this.lightsOn && !ir;
+      s.intensity = s.visible ? s.userData.full : 0;
+    }
+    this.sound.click('toggle');
+    this.hmd.notify(`${ir ? 'IR-STRAHLER' : 'SCHEINWERFER'} ${this.lightsOn ? 'AN' : 'AUS'}`, '#a6ffb8', 1.4);
+  }
+
+  /** J: a wall of smoke around the mech, as long as charges last */
+  fireSmoke() {
+    if (!this.smokeLeft) return this.hmd.notify(this.kit?.smoke ? 'NEBEL VERBRAUCHT' : 'KEINE NEBELWURFANLAGE', '#ffc15e', 1.5);
+    this.smokeLeft--;
+    const m = this.mech;
+    const fx = -Math.sin(m.heading);
+    const fz = -Math.cos(m.heading);
+    const cx = m.x + fx * 14;
+    const cz = m.z + fz * 14;
+    this.world.effects.smokeScreen(cx, this.world.heightAt(cx, cz), cz, 20);
+    this.world.addSmokeScreen(cx, cz, 20, 26);
+    this.sound.thump(90, 0.5, 0.2);
+    this.sound.one('missile_launch', 0.35, 1.6);
+    this.hmd.notify(`NEBELWAND · ${this.smokeLeft} ÜBRIG`, '#a6ffb8', 2);
+  }
+
   /** clean slate for a new fight */
   resetCombat() {
+    this.applyLoadout();
     this.enemies.clear();
     this.allies.clear();
     this.arsenal.reset();
@@ -1037,6 +1150,9 @@ class Game {
     ui.fade(1, 0);
     ui.fade(0, 1.5);
     this.mode = 'mission';
+    // basic training flies the factory weapons (the lessons need them); the looks are the pilot's
+    this.applyLoadout(true);
+    this.arsenal.reset();
     this.state = 'entry';
     this.entry = new EntrySequence(this);
     this.stats.start = this.time;
@@ -1054,6 +1170,8 @@ class Game {
     this.goHot();
     this.setSwitches({ wpnArm: true, gun: true, missile: true, mg: true });
     this.sys.prev = { ...this.switchSnapshot() };
+    this.applyLoadout();
+    this.arsenal.reset();
     this.mode = 'free';
     this.enterCockpitState();
     ui.comms('HQ: BB-07, Sektor Kilo ist feindlich. Freies Manöver.');
@@ -1480,6 +1598,8 @@ class Game {
     if (I.hit('KeyP')) this.pause();
     if (I.hit('KeyM')) this.toggleDisplay('tactical');
     if (I.hit('Digit7') || I.hit('Numpad7')) this.toggleDisplay('computer');
+    if (I.hit('KeyU')) this.toggleLamps();
+    if (I.hit('KeyJ')) this.fireSmoke();
     if (I.hit('Tab')) this.nextTarget();
     if (I.hit('KeyQ')) this.drone.toggle(this.droneGoal());
   }
@@ -2014,6 +2134,10 @@ class Game {
               gunDamaged: this.parts.rarm <= 0,
               ammo: w.gun.ammo,
               mgAmmo: w.mg.ammo,
+              gunName: { ac30: 'KANONE 30mm', ac40: 'KANONE 40mm', gat20: 'GATLING 20mm', rail: 'RAILGUN EM-9' }[this.kit?.gun.id] ?? 'KANONE 30mm',
+              mgName: this.kit?.mg.flamer ? 'FLAMMEN' : this.kit?.mg.id === 'hmg127' ? 'sMG' : 'MG',
+              flamer: !!this.kit?.mg.flamer,
+              unguided: MISSILE.guided === false,
               mg: live.mg,
               heat: w.gun.heat,
               overheated: w.gun.overheated,
@@ -2154,6 +2278,11 @@ class Game {
     this.dt = dt;
     this.time += dt;
     this.frame++;
+    if (this.state === 'hangar') {
+      this.input.consume();
+      this.hangar.update(dt);
+      return;
+    }
     const inp = this.input.consume();
     let pose = null;
     if (this.state === 'title') {
@@ -2201,7 +2330,10 @@ class Game {
         mg: live.mg,
         missile: live.missile,
         ammo: w.gun.ammo,
-        mgAmmo: w.mg.ammo,
+        mgAmmo: Math.ceil(w.mg.ammo),
+        gunShort: this.kit?.gun.short ?? 'KAN 30mm',
+        unguided: MISSILE.guided === false,
+        missileShort: this.kit?.missile.short ?? 'LR ×12',
         heat: w.gun.heat,
         overheated: w.gun.overheated,
         missiles: w.missiles.count,
@@ -2252,15 +2384,37 @@ class Game {
     ui.update(this);
   }
 
+  /** the hangar from the title screen: fit parts, then back to the title */
+  openHangar() {
+    if (this.state !== 'title') return;
+    const won = Object.values(loadProgress()).filter((p) => p.done).length;
+    this.hangar ??= new Hangar({ assets, renderer, won, onClose: () => this.closeHangar() });
+    this.hangar.won = won;
+    this.state = 'hangar';
+    ui.title.classList.add('hidden');
+    this.hangar.open();
+  }
+
+  closeHangar() {
+    this.state = 'title';
+    ui.title.classList.remove('hidden');
+    this.applyLoadout(true);
+  }
+
   render() {
+    if (this.state === 'hangar') return this.hangar.render();
     // the boarding video covers the screen: no need to draw the world behind it
     if (this.state === 'entry' && this.entry.phase === 'video') return;
     const live = this.sys.mainBus && this.state === 'cockpit' && !this.external;
     // hull camera on even frames, the drone's picture (board computer) on odd ones
     if (this.frame % 2 === 0 && live && this.sw.optics && !this.failed.optics) {
+      // an IR lamp lights the scene for the night-vision camera only
+      const ir = this.lightsOn && this.kit?.lights.visible === false && this.sw.nv;
+      if (ir) for (const s of this.lampSpots) (s.visible = true), (s.intensity = s.userData.full);
       renderer.setRenderTarget(this.feedRT);
       renderer.render(this.world.scene, this.feedCam);
       renderer.setRenderTarget(null);
+      if (ir) for (const s of this.lampSpots) (s.visible = false), (s.intensity = 0);
     }
     const droneFeed = this.compPage === 'drone' && this.drone.airborne && (this.openMfd === 'computer' ? this.frame % 2 === 1 : this.frame % 4 === 1);
     if (droneFeed && live) {
@@ -2353,6 +2507,10 @@ Promise.all([assets.loadAll(), loadFonts()])
     } else
       ui.ready(MISSIONS, loadProgress(), (def) => (def.kind === 'tutorial' ? game.startMission() : game.startCombatMission(def)), () => game.startFree());
       document.getElementById('opts').onclick = () => game.menu.show('settings', { inGame: false });
+      document.getElementById('hangarbtn').onclick = () => game.openHangar();
+      // the parked mech behind the title wears the pilot's paint
+      if (game.state === 'title') game.applyLoadout(true);
+      if (params.has('hangar')) game.openHangar();
       document.getElementById('achbtn').onclick = () => game.menu.show('ach', { inGame: false });
     renderer.compile(game.world.scene, game.worldCam);
     renderer.compile(game.cockpit.scene, game.cockpitCam);

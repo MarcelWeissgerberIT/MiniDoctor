@@ -250,7 +250,7 @@ export class HMD {
       return;
     }
     // gun
-    this.text('KANONE 30mm', x - 200, y - 130, { size: 14, color: w.gun ? G : DIM });
+    this.text(w.gunName || 'KANONE 30mm', x - 200, y - 130, { size: 14, color: w.gun ? G : DIM });
     this.text(String(w.ammo), x, y - 130, { size: 20, color: w.ammo < 40 ? AMBER : W, align: 'right' });
     g.strokeStyle = DIM;
     g.lineWidth = 2;
@@ -263,7 +263,7 @@ export class HMD {
     // missiles
     this.text('RAKETEN', x - 200, y - 64, { size: 14, color: w.missile ? G : DIM });
     this.text(String(w.missiles), x, y - 64, { size: 20, color: w.missiles ? W : AMBER, align: 'right' });
-    let lock = w.missile ? 'SUCHE' : 'MISSILE AUS';
+    let lock = w.missile ? (w.unguided ? 'ZIELPUNKT' : 'SUCHE') : 'MISSILE AUS';
     let col = w.missile ? DIM : AMBER;
     if (w.locked) {
       lock = 'LOCK  ·  F';
@@ -273,8 +273,8 @@ export class HMD {
       col = AMBER;
     }
     this.text(lock, x - 200, y - 40, { size: 14, color: col });
-    this.text(`MG ${w.mg ? w.mgAmmo : 'AUS'}`, x, y - 40, { size: 13, color: w.mg ? G : DIM, align: 'right' });
-    this.text('LMB Kanone · E MG · F Rakete', x - 200, y - 14, { size: 12, color: DIM, weight: 'normal' });
+    this.text(`${w.mgName || 'MG'} ${w.mg ? (w.flamer ? `${Math.ceil(w.mgAmmo)} s` : w.mgAmmo) : 'AUS'}`, x, y - 40, { size: 13, color: w.mg ? G : DIM, align: 'right' });
+    this.text(`LMB ${w.gunName?.startsWith('GATLING') ? 'Gatling' : w.gunName?.startsWith('RAIL') ? 'Railgun' : 'Kanone'} · E ${w.flamer ? 'Flammen' : 'MG'} · F Rakete`, x - 200, y - 14, { size: 12, color: DIM, weight: 'normal' });
   }
 
   drawParts(p, x, y) {

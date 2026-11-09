@@ -124,7 +124,8 @@ export class Arsenal {
       } else if (w.gun.overheated || !ctx.live.gun) this.trig.burstLeft = 0;
       if (w.gun.overheated && !wasHot) this.g.onGunOverheat?.();
     }
-    if (ctx.triggerMG && ctx.inLimits && fireMG(w, ctx.live.mg)) this.shoot(ctx, true);
+    if (MG.flamer) this.updateFlamer(dt, ctx);
+    else if (ctx.triggerMG && ctx.inLimits && fireMG(w, ctx.live.mg)) this.shoot(ctx, true);
     if (ctx.launch && failed.missiles) {
       this.g.sound.beep(260, 0.18, 0.08);
       this.g.hmd?.notify('RAKETENWERFER BLOCKIERT', '#ff5a48', 1.5);
@@ -132,10 +133,13 @@ export class Arsenal {
       const m = fireMissile(w, ctx.live.missile);
       if (m) {
         this.launch(m.target, ctx);
-        // a salvo: the second rail fires a moment later on the same target
-        if ((fc.salvo || 1) > 1) {
-          this.salvoLeft = fc.salvo - 1;
-          this.salvoT = 0.3;
+        // a salvo: the second rail fires a moment later on the same target; an unguided
+        // launcher ripples its whole burst at the aim point
+        const n = MISSILE.guided === false ? MISSILE.burst : fc.salvo || 1;
+        this.salvoGap = MISSILE.guided === false ? 0.12 : 0.3;
+        if (n > 1) {
+          this.salvoLeft = n - 1;
+          this.salvoT = this.salvoGap;
         }
       } else if (ctx.live.missile) this.g.sound.beep(300, 0.12, 0.06);
     }
@@ -146,7 +150,7 @@ export class Arsenal {
         const m = fireMissile(w, ctx.live.missile && !failed.missiles);
         if (m) this.launch(m.target, ctx);
         this.salvoLeft = m ? this.salvoLeft - 1 : 0;
-        this.salvoT = 0.3;
+        this.salvoT = this.salvoGap ?? 0.3;
       }
     }
     this.updateRounds(dt);
@@ -257,6 +261,73 @@ export class Arsenal {
     this.tracers.instanceMatrix.needsUpdate = true;
   }
 
+  /**
+   * Flamethrower in the secondary slot: while E is held a jet of burning fuel leaves the
+   * nozzle (MG.range metres), everything in the cone takes MG.dps. Fuel in seconds.
+   */
+  updateFlamer(dt, ctx) {
+    const w = this.w;
+    const on = ctx.triggerMG && ctx.inLimits && ctx.live.mg && w.mg.ammo > 0 && !this.g.dead;
+    if (on) w.mg.ammo = Math.max(0, w.mg.ammo - dt);
+    this.flaming = on;
+    if (!this.flames) {
+      const mat = new THREE.SpriteMaterial({ map: this.g.assets?.fx?.fire ?? null, color: 0xffb070, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+      this.flames = Array.from({ length: 90 }, () => {
+        const s = new THREE.Sprite(mat.clone());
+        s.visible = false;
+        this.world.scene.add(s);
+        return { s, life: 0, v: new THREE.Vector3() };
+      });
+      this.flameT = 0;
+    }
+    const muzzle = ctx.rig.muzzle(_a, true);
+    const fwd = ctx.rig.forward(_b);
+    if (on) {
+      this.flameT += dt;
+      while (this.flameT > 0.012) {
+        this.flameT -= 0.012;
+        const f = this.flames.find((q) => q.life <= 0);
+        if (!f) break;
+        f.life = f.max = (MG.range || 70) / 38;
+        f.s.position.copy(muzzle);
+        f.v.copy(fwd).multiplyScalar(36 + Math.random() * 6);
+        f.v.x += (Math.random() - 0.5) * 3.5;
+        f.v.y += (Math.random() - 0.5) * 2.5 + 1;
+        f.v.z += (Math.random() - 0.5) * 3.5;
+        f.s.visible = true;
+      }
+      // what is in the jet burns
+      const range = MG.range || 70;
+      for (const e of this.g.enemies.list) {
+        if (e.state === 'dead') continue;
+        const c = this.g.enemies.center(e, _c);
+        const to = c.clone().sub(muzzle);
+        const d = to.length();
+        if (d > range + e.radius || to.normalize().dot(fwd) < Math.cos(0.12 + e.radius / Math.max(d, 1))) continue;
+        this.w.mg.hits += dt;
+        this.g.enemies.damage(e, (MG.dps || 10) * dt * (1 - (d / range) * 0.5), { x: muzzle.x, z: muzzle.z }, c, 'mg');
+        if (Math.random() < dt * 6) this.fx.spawnSmoke(c.x, c.y + 1, c.z, 2.5, 3, 1.4, 1.2, 0.5);
+      }
+    }
+    for (const f of this.flames) {
+      if (f.life <= 0) continue;
+      f.life -= dt;
+      f.v.y += dt * 4; // hot gas rises
+      f.s.position.addScaledVector(f.v, dt);
+      const k = 1 - f.life / f.max;
+      f.s.scale.setScalar(0.5 + k * 5);
+      f.s.material.opacity = Math.max(0, (1 - k) * 0.9);
+      f.s.material.rotation += dt * 2;
+      const g = this.world.heightAt(f.s.position.x, f.s.position.z);
+      if (f.s.position.y < g + 0.3) {
+        f.s.position.y = g + 0.3;
+        f.v.y = Math.abs(f.v.y) * 0.2;
+        f.v.multiplyScalar(0.6);
+      }
+      if (f.life <= 0) f.s.visible = false;
+    }
+  }
+
   launch(targetId, ctx) {
     const p = ctx.mechObj.localToWorld(POD.clone());
     const tg = targetId != null ? this.g.enemies.list.find((e) => e.id === targetId) : null;
@@ -274,6 +345,16 @@ export class Arsenal {
     }
     dir.y = Math.max(dir.y, 0.08);
     dir.normalize();
+    // unguided rockets leave towards the aim point, each a little off
+    const unguided = MISSILE.guided === false;
+    let aim = this.aimPoint(ctx.origin, ctx.dir);
+    if (unguided) {
+      const d = aim.distanceTo(p);
+      aim = aim.clone().add(new THREE.Vector3((Math.random() - 0.5) * d * 0.035, (Math.random() - 0.5) * d * 0.015, (Math.random() - 0.5) * d * 0.035));
+      dir.copy(aim).sub(p).normalize();
+      dir.y += 0.02;
+      dir.normalize();
+    }
     const mesh = new THREE.Group();
     mesh.add(new THREE.Mesh(this.missileBody, this.missileMat));
     const glow = new THREE.Mesh(this.glowGeo, this.glowMat);
@@ -300,8 +381,8 @@ export class Arsenal {
       loft: tg ? Math.min(MISSILE.loft, Math.max(45, Math.hypot(tg.x - p.x, tg.z - p.z) * 0.4)) : MISSILE.loft,
       dir: dir.toArray(),
       speed: MISSILE.speed0,
-      target: targetId,
-      aim: this.aimPoint(ctx.origin, ctx.dir),
+      target: unguided ? null : targetId,
+      aim,
       age: 0,
       smoke: 0,
     });

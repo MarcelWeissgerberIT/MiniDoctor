@@ -67,6 +67,12 @@ export class GunRig {
     mgBody.position.set(-0.05, 0.22, -0.05);
     this.mgSlide.add(mgBody);
 
+    // the stock 30 mm and MG parts, swapped out when the hangar fits something else
+    this.stockGun = [...this.slide.children];
+    this.stockMg = [...this.mgSlide.children];
+    this.mats = { metal, dark, cyl };
+    this.spin = null;
+
     this.yaw = 0;
     this.pitch = 0;
     this.recoil = 0;
@@ -86,6 +92,67 @@ export class GunRig {
       this.world.scene.add(c.mesh);
     }
     this.tinks = 0;
+  }
+
+  /**
+   * The fitted weapons on the arm: gun look from the hangar (40 mm jacket and brake,
+   * gatling barrel cluster, railgun rails) and the secondary (heavy MG, flamethrower).
+   */
+  setLook(gun = {}, mg = {}) {
+    const { metal, dark, cyl } = this.mats;
+    for (const o of [this.gunExtra, this.mgExtra]) o?.removeFromParent();
+    const look = gun.look || {};
+    const custom = look.gatling || look.rail;
+    for (const o of this.stockGun) o.visible = !custom;
+    this.spin = null;
+    const g = (this.gunExtra = new THREE.Group());
+    if (look.gatling) {
+      const spin = new THREE.Group();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        spin.add(cyl(0.034, 0.034, BARREL, this.barrelMat, -BARREL / 2 - 0.3, Math.sin(a) * 0.085, Math.cos(a) * 0.085));
+      }
+      for (const z of [-0.5, -1.3, -BARREL - 0.2]) spin.add(cyl(0.14, 0.14, 0.06, dark, z));
+      g.add(spin, cyl(0.16, 0.16, 0.5, dark, -0.35));
+      this.spin = spin;
+    } else if (look.rail) {
+      const coil = new THREE.MeshStandardMaterial({ color: 0x0c2a33, metalness: 0.6, roughness: 0.4, emissive: new THREE.Color(0.05, 0.55, 0.85), emissiveIntensity: 0.9 });
+      for (const s of [-1, 1]) {
+        const r = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, BARREL + 0.3), this.barrelMat);
+        r.position.set(s * 0.09, 0, -BARREL / 2 - 0.35);
+        g.add(r);
+      }
+      for (let i = 0; i < 6; i++) {
+        const c = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, 0.05), coil);
+        c.position.z = -0.45 - i * 0.32;
+        g.add(c);
+      }
+      this.railCoil = coil;
+    } else if (gun.id === 'ac40') {
+      g.add(cyl(0.12, 0.12, 1.3, dark, -1.0), cyl(0.18, 0.165, 0.34, metal, -BARREL - 0.3));
+      for (const s of [-1, 1]) {
+        const slot = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.14), dark);
+        slot.position.set(s * 0.17, 0, -BARREL - 0.3);
+        g.add(slot);
+      }
+    }
+    this.slide.add(g);
+    // the secondary
+    const flamer = !!mg.flamer;
+    for (const o of this.stockMg) o.visible = !flamer && mg.id !== 'hmg127';
+    const m = (this.mgExtra = new THREE.Group());
+    if (flamer) {
+      m.add(cyl(0.05, 0.065, 0.9, metal, -0.7, 0.22, -0.05), cyl(0.08, 0.08, 0.5, dark, -0.05, 0.22, -0.05));
+      this.pilot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.2, 0.3) }));
+      this.pilot.position.set(-0.05, 0.22, -1.2);
+      m.add(this.pilot);
+    } else if (mg.id === 'hmg127') {
+      m.add(cyl(0.038, 0.038, 1.3, metal, -0.9, 0.22, -0.05), cyl(0.065, 0.065, 0.16, dark, -1.5, 0.22, -0.05));
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.56), metal);
+      body.position.set(-0.05, 0.22, -0.05);
+      m.add(body);
+    }
+    this.mgSlide.add(m);
   }
 
   reset() {
@@ -158,6 +225,12 @@ export class GunRig {
     this.slide.position.z = this.recoil;
     this.mgRecoil = Math.max(0, this.mgRecoil - dt * 1.5);
     this.mgSlide.position.z = this.mgRecoil;
+    // the gatling cluster spins up while the trigger is held
+    if (this.spin) {
+      this.spinV = THREE.MathUtils.lerp(this.spinV ?? 0, ctx.firing ? 45 : 0, Math.min(1, dt * (ctx.firing ? 6 : 1.5)));
+      this.spin.rotation.z += this.spinV * dt;
+    }
+    if (this.pilot) this.pilot.scale.setScalar(0.8 + Math.random() * 0.5);
     // a hot barrel glows from the muzzle end
     const h = Math.max(0, (ctx.heat - 0.35) / 0.65);
     this.barrelMat.emissive.setRGB(1.6 * h * h, 0.35 * h * h * h, 0);

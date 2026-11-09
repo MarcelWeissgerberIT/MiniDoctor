@@ -312,11 +312,11 @@ export class HUD {
       600,
       [
         ['WAFFEN', DIM, 24],
-        [w.gunDead ? 'KANONE AUSGEFALLEN' : `KAN ${String(w.ammo).padStart(3)} ${'▮'.repeat(heat)}${'▯'.repeat(6 - heat)}`, w.gunDead || w.overheated ? RED : w.gun ? C : DIM],
+        [w.gunDead ? 'KANONE AUSGEFALLEN' : `${(w.gunShort || 'KAN').split(' ')[0]} ${String(w.ammo).padStart(3)} ${'▮'.repeat(heat)}${'▯'.repeat(6 - heat)}`, w.gunDead || w.overheated ? RED : w.gun ? C : DIM],
         [`MG  ${String(w.mgAmmo).padStart(4)}`, w.mg ? C : DIM],
         s.fc ? [`${{ single: 'EINZEL', burst: 'STOSS', auto: 'DAUER' }[s.fc.gunMode]} · ${{ manual: 'FREI', lead: 'VORHALT', auto: 'ROHR AUTO' }[s.fc.gunAim]}`, s.gunAuto ? C : DIM, 24] : null,
         [
-          w.blocked ? 'RAK BLOCKIERT' : `RAK ${String(w.missiles).padStart(2)} ${w.locked ? 'LOCK' : lk ? '▰'.repeat(lk) + '▱'.repeat(4 - lk) : 'SUCHE'}${s.fc ? ` ${{ direct: 'DIR', auto: '', top: 'STEIL' }[s.fc.missileProfile]}${s.fc.salvo > 1 ? '×' + s.fc.salvo : ''}` : ''}`,
+          w.blocked ? 'RAK BLOCKIERT' : `RAK ${String(w.missiles).padStart(2)} ${w.unguided ? 'ZIELPKT' : w.locked ? 'LOCK' : lk ? '▰'.repeat(lk) + '▱'.repeat(4 - lk) : 'SUCHE'}${s.fc ? ` ${{ direct: 'DIR', auto: '', top: 'STEIL' }[s.fc.missileProfile]}${s.fc.salvo > 1 ? '×' + s.fc.salvo : ''}` : ''}`,
           w.blocked ? RED : w.locked ? RED : w.missile ? C : DIM,
         ],
         w.inLimits ? `ROHR ${yaw === 0 ? 'MITTE' : (yaw > 0 ? 'L' : 'R') + Math.abs(yaw) + '°'} ${pit >= 0 ? '+' : '-'}${Math.abs(pit)}°` : ['AUSSER SCHWENKBEREICH', WARN],

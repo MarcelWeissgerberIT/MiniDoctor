@@ -378,7 +378,9 @@ export class Enemies {
     // the gunner leads the target and scatters; whether it hits is up to the flying shell
     const c = victim.center(new THREE.Vector3());
     const moving = Math.abs(e.speed) > 1 ? 0.7 : 1; // firing on the move is less accurate
-    const aim = gunnerAim(muzzle, { x: c.x, y: c.y - 0.25, z: c.z, vx: e.tvx ?? 0, vz: e.tvz ?? 0 }, T.shellSpeed, T.skill * moving);
+    // our ECM spoils their fire-control solution
+    const ecm = victim === this.g.playerTarget ? this.g.kit?.ecm ?? 1 : 1;
+    const aim = gunnerAim(muzzle, { x: c.x, y: c.y - 0.25, z: c.z, vx: e.tvx ?? 0, vz: e.tvz ?? 0 }, T.shellSpeed, T.skill * moving * ecm);
     const dir = new THREE.Vector3(aim.x - muzzle.x, aim.y - muzzle.y, aim.z - muzzle.z).normalize();
     this.shells.push({
       p: muzzle.clone(),

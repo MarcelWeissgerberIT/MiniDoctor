@@ -23,6 +23,9 @@ export const MG = {
   damage: 1.6,
   spread: 0.0045,
   tracerEvery: 3, // every third round glows
+  flamer: false, // the hangar can fit a flamethrower in this slot instead
+  range: 0,
+  dps: 0,
 };
 
 export const MISSILE = {
@@ -41,6 +44,8 @@ export const MISSILE = {
   life: 12,
   gimbal: (75 * Math.PI) / 180, // a designated target may lie this far off the hull axis
   loft: 95, // m a top-attack missile climbs over the cover
+  guided: true, // false: unguided rockets that fly to the aim point (hangar: RW-24)
+  burst: 1, // rockets per press of an unguided launcher
   speedTop: 170, // m/s a top-attack missile cruises at
   climbOut: 40, // m it first climbs steeply off the pod before it turns toward the target
 };
@@ -135,7 +140,7 @@ export function fireMG(w, live) {
  */
 export function stepLock(w, candidates, dt, live) {
   const m = w.missiles;
-  if (!live || m.count <= 0) {
+  if (!live || m.count <= 0 || MISSILE.guided === false) {
     m.lockT = 0;
     m.target = null;
     m.locked = false;
