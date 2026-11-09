@@ -243,6 +243,25 @@ export class HUD {
       }
       g.lineWidth = 3;
     }
+    // where the defence just met a missile: a green star (amber: missed) outside the ring
+    for (const k of it.intercepts ?? []) {
+      const a = -Math.PI / 2 - k.rel;
+      const x = b.x + Math.cos(a) * (R + 44);
+      const y = b.y + Math.sin(a) * (R + 44);
+      const r = 10 + k.t * 14;
+      g.globalAlpha = Math.max(0, 1 - k.t / 1.8);
+      g.strokeStyle = k.ok ? '#a6ffb8' : '#ffc15e';
+      g.lineWidth = 4;
+      g.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const q = (i * Math.PI) / 4;
+        g.moveTo(x + Math.cos(q) * r * 0.35, y + Math.sin(q) * r * 0.35);
+        g.lineTo(x + Math.cos(q) * r, y + Math.sin(q) * r);
+      }
+      g.stroke();
+      g.globalAlpha = 1;
+    }
+    g.lineWidth = 3;
     for (const t of it.list) {
       const a = -Math.PI / 2 - t.rel;
       const near = t.dist < 300 ? 1.4 : t.dist < 600 ? 1.15 : 0.9;

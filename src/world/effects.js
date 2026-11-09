@@ -164,9 +164,25 @@ export class Effects {
       depthWrite: false,
       depthTest: true,
     });
-    this.flashes = new BillboardSet(8, this.flashMat);
+    this.flashes = new BillboardSet(16, this.flashMat);
     this.flashes.mesh.renderOrder = 4;
     scene.add(this.flashes.mesh);
+
+    // hot fragments (missile defence bursts): glowing dots with a short streak behind each
+    this.sparkDots = new BillboardSet(240, this.flashMat.clone());
+    this.sparkDots.mesh.renderOrder = 5;
+    scene.add(this.sparkDots.mesh);
+    this.sparkPos = new Float32Array(240 * 6);
+    this.sparkCol = new Float32Array(240 * 6);
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(this.sparkPos, 3).setUsage(THREE.DynamicDrawUsage));
+    sg.setAttribute('color', new THREE.BufferAttribute(this.sparkCol, 3).setUsage(THREE.DynamicDrawUsage));
+    sg.setDrawRange(0, 0);
+    this.sparkLines = new THREE.LineSegments(sg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    this.sparkLines.frustumCulled = false;
+    this.sparkLines.renderOrder = 5;
+    scene.add(this.sparkLines);
+    this.sparkList = [];
 
     // light-brown dust kicked up by impacts and tracks
     this.dustMat = this.smokeMat.clone();
@@ -186,7 +202,7 @@ export class Effects {
     this.screenMat.uniforms.glow = { value: new THREE.Color(0.75, 0.75, 0.73) };
     this.screenMat.uniforms.fogColor = fog.fogColor;
     this.screenMat.uniforms.fogDensity = fog.fogDensity;
-    this.screen = new BillboardSet(360, this.screenMat);
+    this.screen = new BillboardSet(520, this.screenMat);
     this.screen.mesh.renderOrder = 2;
     scene.add(this.screen.mesh);
     this.screenParticles = [];
@@ -370,6 +386,75 @@ export class Effects {
       this.balls.push({ x, y, z, size: 2.2 * scale, rot: Math.random() * 6, vr: 0, vy: 0, age: 0, life: 0.14 });
       this.spawnSmoke(x, y, z, 1.2 * scale, 1.5, 1.5, 0.5, 0.5);
     }
+  }
+
+  /** a small puff of white-grey smoke (the defence charge's trail, the burst cloud) */
+  puff(x, y, z, size, life, grow = 0.3, vy = 0.4) {
+    if (this.screenParticles.length >= this.screen.max) this.screenParticles.shift();
+    this.screenParticles.push({
+      x,
+      y,
+      z,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: vy * (0.6 + Math.random() * 0.8),
+      vz: (Math.random() - 0.5) * 0.6,
+      size,
+      grow,
+      rot: Math.random() * 6.28,
+      vr: (Math.random() - 0.5) * 0.4,
+      age: 0,
+      life,
+      seed: 0.15 + Math.random() * 0.25,
+    });
+  }
+
+  /** one glowing fragment; a burning one (smoke) trails smoke as it falls */
+  spark(x, y, z, vx, vy, vz, life, size = 0.7, smoke = false) {
+    if (this.sparkList.length >= this.sparkDots.max) this.sparkList.shift();
+    this.sparkList.push({ x, y, z, vx, vy, vz, age: 0, life, size, smoke, emit: 0, drag: smoke ? 0.6 : 2.2 });
+  }
+
+  /**
+   * The defence charge meets a missile in the air (strength 1; a miss or a stray charge less):
+   * a white-hot flash, a ball of fire, a spray of fragments, burning pieces falling with smoke,
+   * and a grey cloud that hangs for a few seconds where it happened.
+   */
+  interceptBurst(x, y, z, strength = 1) {
+    const s = strength;
+    this.flashList.push({ x, y, z, size: 34 * s, age: 0, life: 0.35 });
+    for (let i = 0; i < 3 + Math.round(3 * s); i++) {
+      if (this.balls.length >= this.fireballs.max) this.balls.shift();
+      this.balls.push({
+        x: x + (Math.random() - 0.5) * 1.5,
+        y: y + (Math.random() - 0.5) * 1.5,
+        z: z + (Math.random() - 0.5) * 1.5,
+        size: (3 + Math.random() * 2.5) * (0.6 + 0.4 * s),
+        rot: Math.random() * 6.28,
+        vr: (Math.random() - 0.5) * 1.5,
+        vy: 1 + Math.random() * 2,
+        age: -i * 0.03,
+        life: 0.45 + Math.random() * 0.3,
+      });
+    }
+    // fragments in every direction
+    const n = Math.round(46 * s);
+    for (let i = 0; i < n; i++) {
+      const u = Math.random() * 2 - 1;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(1 - u * u);
+      const v = 22 + Math.random() * 48;
+      this.spark(x, y, z, Math.cos(a) * r * v, u * v + 6, Math.sin(a) * r * v, 0.45 + Math.random() * 0.6, 1 + Math.random() * 0.8);
+    }
+    // the pieces of the missile, burning, falling with a smoke trail
+    for (let i = 0; i < Math.round(5 * s); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = 5 + Math.random() * 9;
+      this.spark(x, y, z, Math.cos(a) * v, 4 + Math.random() * 7, Math.sin(a) * v, 1.4 + Math.random() * 1, 1.5, true);
+    }
+    // the cloud: grey-white, hangs and drifts
+    for (let i = 0; i < Math.round(12 * s) + 2; i++)
+      this.puff(x + (Math.random() - 0.5) * 3, y + (Math.random() - 0.5) * 2.5, z + (Math.random() - 0.5) * 3, 2.2 + Math.random() * 2, 4 + Math.random() * 3, 0.4, 0.5);
+    this.blastLight(x, y, z, 1400 * s, 0.45);
   }
 
   muzzle(x, y, z, size = 2) {
@@ -603,6 +688,57 @@ export class Effects {
       this.screen.set(ci++, p.x, p.y, p.z, p.size + p.grow * p.age * 4, p.rot, a, p.seed);
     }
     this.screen.commit(ci);
+
+    // fragments: fly, fall, glow out; burning ones smoke
+    let ki = 0;
+    const sp = this.sparkPos;
+    const sc = this.sparkCol;
+    for (let i = this.sparkList.length - 1; i >= 0; i--) {
+      const s = this.sparkList[i];
+      s.age += dt;
+      if (s.age > s.life || s.y < this.world.heightAt(s.x, s.z)) {
+        this.sparkList.splice(i, 1);
+        continue;
+      }
+      const drag = Math.exp(-dt * s.drag);
+      s.vx *= drag;
+      s.vz *= drag;
+      s.vy = s.vy * drag - 9.8 * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.z += s.vz * dt;
+      const f = 1 - s.age / s.life;
+      this.sparkDots.set(ki, s.x, s.y, s.z, s.size * (0.4 + 0.6 * f), 0, f * (s.smoke ? 0.7 : 1), 0);
+      const k = 0.06;
+      const o = ki * 6;
+      sp[o] = s.x;
+      sp[o + 1] = s.y;
+      sp[o + 2] = s.z;
+      sp[o + 3] = s.x - s.vx * k;
+      sp[o + 4] = s.y - s.vy * k;
+      sp[o + 5] = s.z - s.vz * k;
+      const c = 4 * f;
+      sc[o] = c;
+      sc[o + 1] = c * 0.62;
+      sc[o + 2] = c * 0.28;
+      sc[o + 3] = c * 0.4;
+      sc[o + 4] = c * 0.14;
+      sc[o + 5] = c * 0.03;
+      if (s.smoke) {
+        s.emit += dt;
+        while (s.emit > 0.045) {
+          s.emit -= 0.045;
+          this.spawnSmoke(s.x, s.y, s.z, 0.55, 1.6 + Math.random(), 0.4, 0.8, 0.5);
+        }
+      }
+      ki++;
+    }
+    this.sparkDots.commit(ki);
+    this.sparkLines.geometry.setDrawRange(0, ki * 2);
+    if (ki) {
+      this.sparkLines.geometry.attributes.position.needsUpdate = true;
+      this.sparkLines.geometry.attributes.color.needsUpdate = true;
+    }
 
     let bi = 0;
     for (let i = this.balls.length - 1; i >= 0; i--) {
