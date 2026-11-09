@@ -253,7 +253,7 @@ export class Mission {
   /**
    * A group of enemies under one name. specs: { t: type, b: bearing°, d: distance from the
    * centre, goal: 'here' (dug in / parked) | 'player' | 'convoy' | [bearing, distance] |
-   * default (drive at the centre), path (trucks), label, tint, speed, engage }.
+   * default (drive at the centre), path (trucks), label, tint, speed, engage, hp, dmg, skill }.
    * Adds to the group if it exists, so a step can top up a group spawned earlier.
    */
   spawnGroup(name, specs, center) {
@@ -279,6 +279,10 @@ export class Mission {
       const e = E.spawn(s.t, x, z, goal, name, { heading, engage: s.engage, label: s.label, tint: s.tint, path, speed: s.t === 'truck' ? s.speed : undefined });
       if (hold) e.hold = true;
       if (s.t === 'mech' && s.speed) e.speedMul = s.speed / T.speed;
+      // a boss of its own: armour (hp), punch (dmg ×) and aim (skill ×)
+      if (s.hp) e.hp = e.hpMax = s.hp;
+      if (s.dmg) e.dmgMul = s.dmg;
+      if (s.skill) e.skillMul = s.skill;
       list.push(e);
     }
     return list;
@@ -298,7 +302,7 @@ export class Mission {
   bossHp(name) {
     const b = (this.waves[name] || []).find((e) => e.type === 'mech');
     if (!b) return 1;
-    return b.state === 'dead' ? 0 : b.hp / ENEMY_TYPES.mech.hp;
+    return b.state === 'dead' ? 0 : b.hp / (b.hpMax ?? ENEMY_TYPES.mech.hp);
   }
 
   /* ------------------------------------------------ hold out */

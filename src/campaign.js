@@ -247,9 +247,9 @@ const CITY = [
     tag: 'LANZE · ENDKAMPF',
     diff: 3,
     lance: 2,
-    desc: 'Ein feindlicher Kampfmech, der Schwarze Ritter, greift mit Begleitschutz an. Schwer gepanzert, gefährliche Kanone. Die Lanze muss ihn stoppen.',
+    desc: 'Ein feindlicher Kampfmech, der Schwarze Ritter, greift mit zwei Begleitfahrzeugen an. Gut gepanzert, gefährliche Kanone. Die Lanze muss ihn stoppen.',
     allies: ['h2', 'h3'],
-    total: 7,
+    total: 5,
     steps: [
       brief('c10', 'Feindlicher Kampfmech aus Nordwest. Lanze: B folgen, T angreifen.'),
       fight(
@@ -257,7 +257,7 @@ const CITY = [
         'Schwarzen Ritter vernichten',
         'Er hält viel aus: Raketen in die Seite, nicht stehen bleiben.',
         null,
-        [U('mech', 315, 760, { label: 'RITTER', tint: [0.12, 0.12, 0.14] }), U('tank', 305, 800), U('tank', 325, 820), U('apc', 300, 840), U('apc', 330, 780)],
+        [U('mech', 315, 760, { label: 'RITTER', tint: [0.12, 0.12, 0.14], hp: 240, dmg: 0.7, skill: 0.8 }), U('tank', 305, 800), U('apc', 330, 780)],
         { also: ['late'] },
       ),
       finish('c10', 'Der Ritter ist gefallen'),

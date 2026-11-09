@@ -646,14 +646,14 @@ export class Enemies {
     const moving = Math.abs(e.speed) > 1 ? 0.7 : 1; // firing on the move is less accurate
     // our ECM spoils their fire-control solution
     const ecm = victim === this.g.playerTarget ? this.g.kit?.ecm ?? 1 : 1;
-    const aim = gunnerAim(muzzle, { x: c.x, y: c.y - 0.25, z: c.z, vx: e.tvx ?? 0, vz: e.tvz ?? 0 }, T.shellSpeed, T.skill * moving * ecm);
+    const aim = gunnerAim(muzzle, { x: c.x, y: c.y - 0.25, z: c.z, vx: e.tvx ?? 0, vz: e.tvz ?? 0 }, T.shellSpeed, T.skill * (e.skillMul ?? 1) * moving * ecm);
     const dir = new THREE.Vector3(aim.x - muzzle.x, aim.y - muzzle.y, aim.z - muzzle.z).normalize();
     this.shells.push({
       p: muzzle.clone(),
       prev: muzzle.clone(),
       v: dir.multiplyScalar(T.shellSpeed),
       life: 3,
-      dmg: T.damage[0] + Math.random() * (T.damage[1] - T.damage[0]),
+      dmg: (T.damage[0] + Math.random() * (T.damage[1] - T.damage[0])) * (e.dmgMul ?? 1),
       type: e.type,
       from: new THREE.Vector3(e.x, gy, e.z),
       whizzed: false,

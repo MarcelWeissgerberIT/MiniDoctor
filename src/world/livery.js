@@ -155,6 +155,85 @@ const _q = new THREE.Quaternion();
  * A mech model with paint, markings and fitted parts. body: the fitted (skinned) model,
  * as returned by fitModel. Call apply(effects) whenever the loadout changes.
  */
+const ANCHORS = new Map();
+
+/**
+ * The hull as plain triangles in the holder's frame (skinning applied once), with an x/y
+ * grid of cells so a ray along z only tests the triangles under it.
+ */
+function bakeHull(body, holder) {
+  const inv = holder.matrixWorld.clone().invert();
+  const v = new THREE.Vector3();
+  const tris = [];
+  body.updateMatrixWorld(true);
+  body.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.isSkinnedMesh) o.skeleton.update();
+    const pos = o.geometry.attributes.position;
+    const idx = o.geometry.index;
+    const m = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+    const P = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      o.getVertexPosition(i, v).applyMatrix4(m);
+      P[i * 3] = v.x;
+      P[i * 3 + 1] = v.y;
+      P[i * 3 + 2] = v.z;
+    }
+    const n = idx ? idx.count : pos.count;
+    for (let k = 0; k + 2 < n; k += 3) {
+      for (const j of [k, k + 1, k + 2]) {
+        const a = idx ? idx.getX(j) : j;
+        tris.push(P[a * 3], P[a * 3 + 1], P[a * 3 + 2]);
+      }
+    }
+  });
+  const T = new Float32Array(tris);
+  const count = T.length / 9;
+  const C = 0.12; // cell size (m)
+  const cells = new Map();
+  const cell = (x, y) => `${Math.floor(x / C)},${Math.floor(y / C)}`;
+  for (let t = 0; t < count; t++) {
+    const o = t * 9;
+    const x0 = Math.min(T[o], T[o + 3], T[o + 6]);
+    const x1 = Math.max(T[o], T[o + 3], T[o + 6]);
+    const y0 = Math.min(T[o + 1], T[o + 4], T[o + 7]);
+    const y1 = Math.max(T[o + 1], T[o + 4], T[o + 7]);
+    for (let i = Math.floor(x0 / C); i <= Math.floor(x1 / C); i++)
+      for (let j = Math.floor(y0 / C); j <= Math.floor(y1 / C); j++) {
+        const k = `${i},${j}`;
+        let l = cells.get(k);
+        if (!l) cells.set(k, (l = []));
+        l.push(t);
+      }
+  }
+  const ray = new THREE.Ray();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const p = new THREE.Vector3();
+  const test = (t, best) => {
+    const o = t * 9;
+    a.fromArray(T, o);
+    b.fromArray(T, o + 3);
+    c.fromArray(T, o + 6);
+    // front faces only, as the raycaster does for single-sided materials
+    if (!ray.intersectTriangle(a, b, c, true, p)) return best;
+    const d = p.distanceTo(ray.origin);
+    return !best || d < best.d ? { d, point: p.clone() } : best;
+  };
+  return {
+    /** nearest hit from `from` along `dir` (holder frame), or null */
+    cast(from, dir) {
+      ray.set(from, dir.normalize());
+      let best = null;
+      if (Math.abs(dir.x) < 1e-6 && Math.abs(dir.y) < 1e-6) {
+        for (const t of cells.get(cell(from.x, from.y)) || []) best = test(t, best);
+      } else for (let t = 0; t < count; t++) best = test(t, best);
+      return best ? best.point : null;
+    },
+  };
+}
+
 export class Livery {
   constructor(body) {
     this.body = body;
@@ -218,7 +297,7 @@ export class Livery {
   apply(e, { spots = false } = {}) {
     for (const m of this.mats) setPaint(m, e.paint);
     this.clearParts();
-    const P = this.anchor || (this.anchor = this.measure());
+    const P = this.anchor || (this.anchor = this.measured());
     const F = P.fwd; // +1: the model looks along +z of its holder
     const face = [0, F > 0 ? Math.PI : 0, 0]; // turns a part's -z (its front) to the mech's front
     const cyl = (r0, r1, len, mat, seg = 14) => new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, len, seg).rotateX(Math.PI / 2), mat);
@@ -373,9 +452,23 @@ export class Livery {
     }
   }
 
+  /** the anchors depend on the model and how it sits in its holder: measured once per pair */
+  measured() {
+    let key = null;
+    this.body.updateMatrix();
+    const place = this.body.matrix.elements.map((v) => v.toFixed(3)).join(',');
+    this.body.traverse((o) => o.isMesh && !key && (key = `${o.geometry.uuid}|${place}`));
+    if (key && ANCHORS.has(key)) return ANCHORS.get(key);
+    const P = this.measure();
+    if (key) ANCHORS.set(key, P);
+    return P;
+  }
+
   /**
    * where the parts go, in the holder's frame, found on the model itself: rays from the
-   * front, the sides and above hit the hull where a part should sit
+   * front, the sides and above hit the hull where a part should sit. The skinned hull is
+   * baked into plain triangles once (three.js would re-skin every vertex for every ray),
+   * and the rays from the front only test the triangles in their cell of an x/y grid.
    */
   measure() {
     const holder = this.body.parent || this.body;
@@ -384,17 +477,9 @@ export class Livery {
     const head = local('Head');
     const hf = local('headfront');
     const fwd = hf.z >= head.z ? 1 : -1;
-    const meshes = [];
-    this.body.traverse((o) => o.isMesh && meshes.push(o));
-    const ray = new THREE.Raycaster();
+    const hull = bakeHull(this.body, holder);
     // first hull point from a direction (holder frame), or null
-    const hit = (from, dir) => {
-      const o = holder.localToWorld(new THREE.Vector3(...from));
-      const d = new THREE.Vector3(...dir).transformDirection(holder.matrixWorld);
-      ray.set(o, d);
-      const h = ray.intersectObjects(meshes, false)[0];
-      return h ? holder.worldToLocal(h.point.clone()) : null;
-    };
+    const hit = (from, dir) => hull.cast(new THREE.Vector3(...from), new THREE.Vector3(...dir));
     const front = (x, y) => hit([x, y, fwd * 8], [0, 0, -fwd]);
     const hand = local('RightHand');
     const lh = local('LeftHand');
