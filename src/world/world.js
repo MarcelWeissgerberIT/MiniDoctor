@@ -3,6 +3,7 @@ import { rng, rbox, cyl, tube, StaticBatcher, projectUV, fitModel } from '../geo
 import { Effects } from './effects.js';
 import { MECH } from '../logic/mech.js';
 import { WAYPOINTS } from '../tutorial.js';
+import { THEMES } from './themes.js';
 
 /* ------------------------------------------------------------------ noise */
 
@@ -56,13 +57,17 @@ export class World {
   constructor(assets) {
     this.assets = assets;
     this.m = assets.materials;
+    // city, jungle or desert: floor, sky, relief, props, light and particles
+    this.theme = THEMES[assets.theme] ?? THEMES.city;
     this.scene = new THREE.Scene();
     const meta = assets.skyMeta;
     this.haze = new THREE.Color().setRGB(...meta.haze, THREE.SRGBColorSpace);
     this.skyTop = new THREE.Color().setRGB(...meta.top, THREE.SRGBColorSpace);
-    this.scene.fog = new THREE.FogExp2(this.haze.clone(), 0.0017);
+    this.scene.fog = new THREE.FogExp2(this.haze.clone(), this.theme.fog);
     this.scene.background = this.haze.clone();
     this.colliders = [];
+    // undergrowth: does not stop a mech, but two thickets between two vehicles hide them
+    this.foliage = [];
     this.smokeScreens = [];
     this.contacts = [];
     this.fires = [];
@@ -82,7 +87,7 @@ export class World {
   makeCraters() {
     const r = rng(42);
     const list = [];
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < (this.theme?.craters ?? 260); i++) {
       const d = 40 + Math.sqrt(r()) * 1000;
       const a = r() * Math.PI * 2;
       list.push({ x: Math.cos(a) * d, z: Math.sin(a) * d, r: 5 + r() * r() * 16, depth: 1 + r() * 2.5 });
@@ -92,9 +97,23 @@ export class World {
     return list;
   }
 
+  /** the relief of the world: city plain, jungle hills, desert dunes */
+  baseHeight(x, z) {
+    const t = this.theme?.terrain;
+    if (t === 'jungle') return fbm(x * 0.0026, z * 0.0026) * 34 + fbm(x * 0.011 + 3, z * 0.011) * 4.5 + fbm(x * 0.04, z * 0.04) * 0.8;
+    if (t === 'desert') {
+      // dunes: sharp crests across the wind, a warped field so they meander; a broad swell below
+      const warp = fbm(x * 0.0016, z * 0.0016) * 5;
+      const ridge = Math.abs(Math.sin((x * 0.8 + z * 0.6) * 0.0105 + warp));
+      const dune = Math.pow(1 - ridge, 2.2) * 12 * (0.45 + 0.55 * fbm(x * 0.002 + 7, z * 0.002));
+      return dune + fbm(x * 0.0028, z * 0.0028) * 11 + fbm(x * 0.035, z * 0.035) * 0.4;
+    }
+    return fbm(x * 0.0035, z * 0.0035) * 14 + fbm(x * 0.02 + 5, z * 0.02) * 1.6;
+  }
+
   heightAt(x, z) {
     const d = Math.hypot(x, z);
-    let h = fbm(x * 0.0035, z * 0.0035) * 14 + fbm(x * 0.02 + 5, z * 0.02) * 1.6;
+    let h = this.baseHeight(x, z);
     h *= THREE.MathUtils.smoothstep(d, 20, 160) * 0.85 + 0.15;
     // the forward base around the parked mech is levelled
     h *= THREE.MathUtils.smoothstep(d, 16, 40);
@@ -135,9 +154,12 @@ export class World {
       uv.setXY(i, x / 7, z / 7);
       const sc = this.scorchAt(x, z);
       const v = 1 - sc * 0.55 + (noise2(x * 0.05, z * 0.05) * 0.12);
-      col[i * 3] = v;
-      col[i * 3 + 1] = v * (1 - sc * 0.05);
-      col[i * 3 + 2] = v * (1 - sc * 0.08);
+      // jungle floor: mossy patches; desert: lighter crests, darker troughs
+      const tint = this.theme.terrain === 'jungle' ? noise2(x * 0.012, z * 0.012) * 0.18 : 0;
+      const sun = this.theme.terrain === 'desert' ? (pos.getY(i) - 6) * 0.012 : 0;
+      col[i * 3] = (v + sun) * (1 - tint * 0.5);
+      col[i * 3 + 1] = (v + sun) * (1 - sc * 0.05) * (1 + tint * 0.4);
+      col[i * 3 + 2] = (v + sun) * (1 - sc * 0.08) * (1 - tint * 0.3);
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.computeVertexNormals();
@@ -250,11 +272,13 @@ export class World {
   /* -------------------------------------------------------------- lights */
 
   buildLights() {
-    this.hemi = new THREE.HemisphereLight(this.skyTop, 0x3a2e24, 1.3);
+    const T = this.theme;
+    this.hemi = new THREE.HemisphereLight(this.skyTop, T.hemi.ground, T.hemi.intensity);
     this.scene.add(this.hemi);
-    // diffuse sun behind the overcast, slightly warm from the fires
-    this.sun = new THREE.DirectionalLight(0xffe2c4, 1.1);
-    this.sun.position.set(-400, 600, -300);
+    // the city: a diffuse sun behind the overcast, warm from the fires; jungle and desert
+    // have their own sun
+    this.sun = new THREE.DirectionalLight(T.sun.color, T.sun.intensity);
+    this.sun.position.set(...T.sun.pos);
     this.scene.add(this.sun);
     this.flashLight = new THREE.DirectionalLight(0xff9a50, 0);
     this.scene.add(this.flashLight, this.flashLight.target);
@@ -266,7 +290,7 @@ export class World {
    * Instanced copies of a Meshy model. Instances are grouped into clusters
    * (one InstancedMesh each) so whole clusters outside the view get culled.
    */
-  instanced(name, perCluster = 24) {
+  instanced(name, perCluster = 24, { cull = false } = {}) {
     const src = this.assets.models[name];
     if (!src) return null;
     let mesh = null;
@@ -300,6 +324,8 @@ export class World {
         im.count = 0;
         this.scene.add(im);
         clusters.set(key, im);
+        // vegetation: hundreds of copies; whole clusters out of view range are switched off
+        if (cull) (this.cullClusters ??= []).push(im);
       }
       return clusters.get(key);
     };
@@ -315,7 +341,9 @@ export class World {
         m4.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(scale, scale, scale));
         im.setMatrixAt(im.count++, m4);
         im.instanceMatrix.needsUpdate = true;
-        im.computeBoundingSphere();
+        if (!cull) im.computeBoundingSphere();
+        else im.boundingSphere = null; // computed once when the world is built
+        return true;
       },
     };
   }
@@ -335,8 +363,12 @@ export class World {
       return null;
     };
 
+    const city = this.theme.id === 'city';
+    if (this.theme.id === 'jungle') this.buildJungle(r, spot);
+    if (this.theme.id === 'desert') this.buildDesert(r, spot);
+
     // Meshy ruins
-    const ruins = this.instanced('ruin', 1);
+    const ruins = city ? this.instanced('ruin', 1) : null;
     if (ruins) {
       const fixed = [
         [-60, -210],
@@ -364,7 +396,8 @@ export class World {
         [-22, -95],
         [34, -150],
       ];
-      for (let i = 0; i < 11; i++) {
+      const nTanks = { city: 11, jungle: 6, desert: 14 }[this.theme.id] ?? 11;
+      for (let i = 0; i < nTanks; i++) {
         const p = i < fixed.length ? fixed[i] : spot(70, 700, 8);
         if (!p) continue;
         const s = 10.2 / Math.max(tanks.size.x, tanks.size.z);
@@ -375,8 +408,8 @@ export class World {
       }
     }
 
-    // anti-tank hedgehog lines
-    const hog = this.instanced('hedgehog', 16);
+    // anti-tank hedgehog lines (not in the jungle)
+    const hog = this.theme.id !== 'jungle' ? this.instanced('hedgehog', 16) : null;
     if (hog) {
       const s = 1.9 / hog.size.y;
       const lines = [
@@ -398,9 +431,11 @@ export class World {
       }
     }
 
-    this.buildConcreteRuins(r, spot);
-    this.buildRubble(r);
-    this.buildTrees(r);
+    if (city) {
+      this.buildConcreteRuins(r, spot);
+      this.buildRubble(r);
+      this.buildTrees(r);
+    } else this.buildRubble(r, this.theme.id === 'desert' ? 0xb08a5c : 0x5a5a48);
 
     // simulated hostile radar contacts far away (no models yet: they hide in the haze)
     this.hostiles = [];
@@ -411,6 +446,168 @@ export class World {
     }
     this.contacts.push(...this.hostiles);
     for (const f of this.fires) this.contacts.push({ x: f.x, z: f.z, type: 'fire' });
+  }
+
+  /**
+   * The jungle: forest patches of tall trees with clearings between them, palms along the
+   * edges, undergrowth that hides vehicles, mossy rocks and a few temple ruins.
+   */
+  buildJungle(r, spot) {
+    const cell = (x, z) => `${Math.floor(x / 220)},${Math.floor(z / 220)}`;
+    const forest = (x, z) => fbm(x * 0.0042 + 11, z * 0.0042 - 4); // > 0.05: forest
+    // temples first: they are the landmarks the missions refer to
+    const temple = this.instanced('temple', 1);
+    if (temple) {
+      const fixed = [
+        [-180, -420],
+        [380, -640],
+        [-520, 160],
+        [620, 260],
+        [60, -900],
+      ];
+      for (const [i, [x, z]] of fixed.entries()) {
+        const height = 20 + r() * 8;
+        const s = height / temple.size.y;
+        temple.add(x, z, r() * Math.PI * 2, s, 0.04, 0, i);
+        const rad = Math.max(temple.size.x, temple.size.z) * s * 0.42;
+        this.colliders.push({ x, z, r: rad, h: height * 0.8 });
+        this.contacts.push({ x, z, type: 'struct' });
+      }
+    }
+    const rock = this.instanced('rock', 8);
+    if (rock) {
+      for (let i = 0; i < 26; i++) {
+        const p = spot(80, 1000, 6);
+        if (!p) continue;
+        const height = 3 + r() * 7;
+        const s = height / rock.size.y;
+        rock.add(p[0], p[1], r() * Math.PI * 2, s, 0.15, 0.2, cell(p[0], p[1]));
+        const rad = Math.max(rock.size.x, rock.size.z) * s * 0.42;
+        this.colliders.push({ x: p[0], z: p[1], r: rad, h: height * 0.9 });
+      }
+    }
+    // tall trees in the forest patches, kept off the base and the first stretch north
+    const tree = this.instanced('jungle_tree', 160, { cull: true });
+    const palm = this.instanced('palm', 80, { cull: true });
+    const bush = this.instanced('bush', 200, { cull: true });
+    const clear = (x, z) => Math.hypot(x, z) < 75 || (Math.abs(x) < 26 && z < 0 && z > -260);
+    let trees = 0;
+    for (let k = 0; k < 12000 && trees < 1400 && tree; k++) {
+      const a = r() * Math.PI * 2;
+      const d = 70 + Math.sqrt(r()) * 950;
+      const x = Math.cos(a) * d;
+      const z = Math.sin(a) * d;
+      if (clear(x, z) || forest(x, z) < -0.08 + r() * 0.16) continue;
+      if (this.colliders.some((c) => Math.abs(c.x - x) < c.r + 5 && Math.abs(c.z - z) < c.r + 5 && Math.hypot(c.x - x, c.z - z) < c.r + 5)) continue;
+      const height = 18 + r() * 14;
+      const s = height / tree.size.y;
+      tree.add(x, z, r() * Math.PI * 2, s, 0.02, 0.08, cell(x, z));
+      this.colliders.push({ x, z, r: 1.5 });
+      this.foliage.push({ x, z, r: 5.5, h: height });
+      trees++;
+    }
+    // palms where the forest thins out
+    for (let k = 0, n = 0; k < 4000 && n < 240 && palm; k++) {
+      const a = r() * Math.PI * 2;
+      const d = 60 + Math.sqrt(r()) * 1000;
+      const x = Math.cos(a) * d;
+      const z = Math.sin(a) * d;
+      const f = forest(x, z);
+      if (clear(x, z) || f < -0.12 || f > 0.12) continue;
+      const height = 12 + r() * 8;
+      palm.add(x, z, r() * Math.PI * 2, height / palm.size.y, 0.02, 0.25, cell(x, z));
+      this.colliders.push({ x, z, r: 0.8 });
+      n++;
+    }
+    // undergrowth: walk through it, but it hides what stands behind it
+    for (let k = 0, n = 0; k < 8000 && n < 1800 && bush; k++) {
+      const a = r() * Math.PI * 2;
+      const d = 40 + Math.sqrt(r()) * 950;
+      const x = Math.cos(a) * d;
+      const z = Math.sin(a) * d;
+      if (Math.hypot(x, z) < 50 || forest(x, z) < -0.1 + r() * 0.1) continue;
+      const height = 2.4 + r() * 2.6;
+      bush.add(x, z, r() * Math.PI * 2, height / bush.size.y, 0.1, 0.15, cell(x, z));
+      this.foliage.push({ x, z, r: 3.2, h: height });
+      n++;
+    }
+    // a couple of burning wrecks of an earlier fight
+    for (let i = 0; i < 3; i++) {
+      const p = spot(120, 600, 6);
+      if (p) this.fires.push({ x: p[0], z: p[1], scale: 3 + r() * 2, smoke: 1 });
+    }
+  }
+
+  /**
+   * The desert: sandstone mesas and boulders, mud-brick villages, two oases with palms.
+   */
+  buildDesert(r, spot) {
+    const cell = (x, z) => `${Math.floor(x / 260)},${Math.floor(z / 260)}`;
+    const rock = this.instanced('rock', 6);
+    if (rock) {
+      // a few big mesas far out, many boulders nearer
+      for (let i = 0; i < 48; i++) {
+        const big = i < 12;
+        const p = big ? spot(420, 1050, 30) : spot(90, 900, 8);
+        if (!p) continue;
+        const height = big ? 22 + r() * 22 : 3 + r() * 8;
+        const s = height / rock.size.y;
+        rock.add(p[0], p[1], r() * Math.PI * 2, s, 0.12, big ? 0 : 0.2, cell(p[0], p[1]));
+        const rad = Math.max(rock.size.x, rock.size.z) * s * 0.42;
+        this.colliders.push({ x: p[0], z: p[1], r: rad, h: height * 0.95 });
+        if (big) this.contacts.push({ x: p[0], z: p[1], type: 'struct' });
+      }
+    }
+    // villages: a handful of houses around a square
+    const house = this.instanced('adobe', 12);
+    const villages = [
+      [-320, -520],
+      [460, -380],
+      [-620, 300],
+      [260, 640],
+    ];
+    if (house) {
+      for (const [vi, [vx, vz]] of villages.entries()) {
+        const n = 7 + Math.floor(r() * 4);
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + r() * 0.4;
+          const d = 24 + r() * 26;
+          const x = vx + Math.cos(a) * d;
+          const z = vz + Math.sin(a) * d;
+          if (this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 6)) continue;
+          const height = 6 + r() * 3;
+          const s = height / house.size.y;
+          house.add(x, z, -a + Math.PI / 2 + (r() - 0.5) * 0.4, s, 0.05, 0, vi);
+          const rad = Math.max(house.size.x, house.size.z) * s * 0.45;
+          this.colliders.push({ x, z, r: rad, h: height });
+          this.contacts.push({ x, z, type: 'struct' });
+          if (r() < 0.15) this.fires.push({ x, z, scale: 3 + r() * 2, smoke: 1, y: 2 });
+        }
+      }
+    }
+    // oases and lone palms
+    const palm = this.instanced('palm', 40);
+    if (palm) {
+      for (const [ox, oz] of [
+        [180, -260],
+        [-420, -160],
+      ]) {
+        for (let i = 0; i < 14; i++) {
+          const a = r() * Math.PI * 2;
+          const d = 6 + r() * 30;
+          const x = ox + Math.cos(a) * d;
+          const z = oz + Math.sin(a) * d;
+          palm.add(x, z, r() * Math.PI * 2, (11 + r() * 7) / palm.size.y, 0.02, 0.3, cell(x, z));
+          this.colliders.push({ x, z, r: 0.8 });
+        }
+      }
+      for (let i = 0; i < 20; i++) {
+        const p = spot(120, 900, 4);
+        if (p) palm.add(p[0], p[1], r() * Math.PI * 2, (9 + r() * 6) / palm.size.y, 0.02, 0.35, cell(p[0], p[1]));
+      }
+    }
+    // a burning oil well on the horizon side
+    this.fires.push({ x: 640, z: -720, scale: 9, smoke: 2.2 });
   }
 
   /** Shells of concrete apartment blocks: walls with window holes and broken tops. */
@@ -473,11 +670,11 @@ export class World {
     b.finalize();
   }
 
-  buildRubble(r) {
+  buildRubble(r, tint = 0x8f8a84) {
     const geo = new THREE.IcosahedronGeometry(1, 0);
     projectUV(geo, 1.2);
     const rubbleMat = this.m.concrete.clone();
-    rubbleMat.color.set(0x8f8a84);
+    rubbleMat.color.set(tint);
     const im = new THREE.InstancedMesh(geo, rubbleMat, 700);
     const m4 = new THREE.Matrix4();
     for (let i = 0; i < im.count; i++) {
@@ -742,6 +939,10 @@ export class World {
     const z0 = Math.min(a.z, b.z) - 20;
     const z1 = Math.max(a.z, b.z) + 20;
     const blockers = this.colliders.filter((c) => c.r > 2.5 && c.x > x0 && c.x < x1 && c.z > z0 && c.z < z1);
+    // undergrowth: one thicket can be looked through, the second one closes the view
+    const leaves = this.foliage.length ? this.foliage.filter((c) => c.x > x0 && c.x < x1 && c.z > z0 && c.z < z1) : [];
+    let thick = 0;
+    let lastLeaf = null;
     const n = Math.ceil(len / 6);
     for (let i = 1; i < n; i++) {
       const t = i / n;
@@ -753,6 +954,12 @@ export class World {
       for (const c of blockers) {
         if ((x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r * 0.8 && y < g + (c.h ?? Math.min(10, c.r * 2))) return false;
       }
+      for (const c of leaves) {
+        if (c !== lastLeaf && (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r && y < g + c.h) {
+          lastLeaf = c;
+          if (++thick >= 2) return false;
+        }
+      }
     }
     return true;
   }
@@ -760,36 +967,109 @@ export class World {
   /* ------------------------------------------------------------- beacons */
 
   buildBeacons() {
-    this.beacons = WAYPOINTS.map((wp) => {
-      const g = new THREE.Group();
-      const y = this.heightAt(wp.x, wp.z);
-      g.position.set(wp.x, y, wp.z);
-      const pole = new THREE.Mesh(cyl(0.08, 0.1, 6, 8, 0.5), this.m.hazard);
-      pole.position.y = 3;
-      const lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 6, 1.2) });
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), lampMat);
-      lamp.position.y = 6.2;
-      g.add(pole, lamp);
-      g.visible = false;
-      this.scene.add(g);
-      this.contacts.push({ x: wp.x, z: wp.z, type: 'wp', hidden: true });
-      return { ...wp, y, group: g, lampMat, contact: this.contacts[this.contacts.length - 1] };
-    });
+    this.beacons = WAYPOINTS.map((wp) => this.makeBeacon(wp));
     this.activeBeacon = -1;
   }
 
+  makeBeacon(wp) {
+    const g = new THREE.Group();
+    const y = this.heightAt(wp.x, wp.z);
+    g.position.set(wp.x, y, wp.z);
+    const pole = new THREE.Mesh(cyl(0.08, 0.1, 6, 8, 0.5), this.m.hazard);
+    pole.position.y = 3;
+    const lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 6, 1.2) });
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), lampMat);
+    lamp.position.y = 6.2;
+    g.add(pole, lamp);
+    g.visible = false;
+    this.scene.add(g);
+    const contact = { x: wp.x, z: wp.z, type: 'wp', hidden: true };
+    this.contacts.push(contact);
+    return { ...wp, y, group: g, lampMat, contact };
+  }
+
+  /**
+   * i: index of a fixed waypoint, or {x, z, label} for one a mission sets anywhere.
+   * Returns the active index (or null).
+   */
   setWaypoint(i) {
+    if (i && typeof i === 'object') {
+      if (!this.customBeacon) {
+        this.customBeacon = this.makeBeacon(i);
+        this.beacons.push(this.customBeacon);
+      }
+      const b = this.customBeacon;
+      b.x = i.x;
+      b.z = i.z;
+      b.label = i.label || 'ZIEL';
+      b.y = this.heightAt(i.x, i.z);
+      b.group.position.set(i.x, b.y, i.z);
+      b.contact.x = i.x;
+      b.contact.z = i.z;
+      i = this.beacons.indexOf(b);
+    }
     this.activeBeacon = i ?? -1;
     this.beacons.forEach((b, k) => {
       b.group.visible = k === this.activeBeacon;
       b.contact.hidden = k !== this.activeBeacon;
     });
+    return this.activeBeacon >= 0 ? this.activeBeacon : null;
+  }
+
+  /* ------------------------------------------------------ night, weather */
+
+  /**
+   * Night: a dark sky and haze, a little moonlight; our lamps and the night vision matter.
+   */
+  setNight(on) {
+    this.day ??= {
+      hemi: this.hemi.intensity,
+      sun: this.sun.intensity,
+      sunColor: this.sun.color.clone(),
+      fog: this.scene.fog.color.clone(),
+      bg: this.scene.background.clone(),
+      exposure: this.skyUniforms.exposure.value,
+      env: this.scene.environmentIntensity ?? 1,
+    };
+    const d = this.day;
+    this.night = on;
+    this.hemi.intensity = on ? d.hemi * 0.07 : d.hemi;
+    this.sun.intensity = on ? 0.16 : d.sun;
+    this.sun.color.copy(on ? new THREE.Color(0.55, 0.65, 1) : d.sunColor);
+    this.scene.fog.color.copy(on ? d.fog.clone().multiplyScalar(0.06) : d.fog);
+    this.scene.background.copy(on ? d.bg.clone().multiplyScalar(0.06) : d.bg);
+    this.skyUniforms.exposure.value = on ? 0.07 : d.exposure;
+    this.scene.environmentIntensity = on ? 0.08 : d.env;
+  }
+
+  /**
+   * Weather: 'rain' (jungle downpour: thick air, rain streaks), 'sandstorm' (desert: a
+   * brown wall, sand everywhere), or null. The effects own the particles, the game the sound.
+   */
+  setWeather(kind) {
+    this.weather = kind;
+    this.fog0 ??= this.scene.fog.density;
+    this.fogColor0 ??= this.scene.fog.color.clone();
+    this.scene.fog.density = kind === 'rain' ? this.fog0 * 2.2 : kind === 'sandstorm' ? 0.011 : this.fog0;
+    if (kind === 'sandstorm') this.scene.fog.color.setRGB(0.6, 0.4, 0.22, THREE.SRGBColorSpace);
+    else if (!this.night) this.scene.fog.color.copy(this.fogColor0);
+    if (kind === 'rain') this.scene.fog.color.multiplyScalar(0.7);
+    this.effects.setWeather?.(kind);
   }
 
   /* -------------------------------------------------------------- update */
 
   update(dt, time, camPos) {
     this.sky.position.set(camPos.x, camPos.y, camPos.z);
+    // vegetation clusters beyond the haze are not drawn
+    if (this.cullClusters && (this.cullT = (this.cullT ?? 0) - dt) <= 0) {
+      this.cullT = 0.4;
+      for (const im of this.cullClusters) {
+        if (!im.boundingSphere) im.computeBoundingSphere();
+        const s = im.boundingSphere;
+        im.visible = im.count > 0 && Math.hypot(s.center.x - camPos.x, s.center.z - camPos.z) - s.radius < 820;
+      }
+    }
     const b = this.beacons[this.activeBeacon];
     if (b) {
       const on = Math.sin(time * 6) > 0.3;

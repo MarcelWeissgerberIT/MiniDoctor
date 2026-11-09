@@ -10,6 +10,7 @@ import { Cockpit } from './cockpit/cockpit.js';
 import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms } from './cockpit/displays.js';
 import { drawBoardComputer } from './cockpit/computer.js';
 import { Drone } from './combat/drone.js';
+import { Convoy } from './combat/convoy.js';
 import { MechWalker } from './world/mechwalk.js';
 import { Comms, speakerOf } from './cockpit/comms.js';
 import { World, WORLD } from './world/world.js';
@@ -24,6 +25,10 @@ import { Range } from './training.js';
 import { loadSettings, Achievements, Menu } from './menu.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { Hangar, loadLoadout } from './hangar.js';
+import { THEMES, THEME_ORDER, currentTheme, chooseTheme } from './world/themes.js';
+
+// the battlefield this page builds (title screen tabs switch it with a reload)
+const THEME = currentTheme();
 import { FIRE_CONTROL, pickTarget, leadPoint } from './logic/firecontrol.js';
 import { GUN, MG } from './logic/combat.js';
 import { DRONE } from './logic/drone.js';
@@ -46,7 +51,8 @@ import { fitModel } from './geom.js';
 const params = new URLSearchParams(location.search);
 const DEG = Math.PI / 180;
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-const TYPE_NAME = { tank: 'KAMPFPANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOT' };
+const TYPE_NAME = { tank: 'KAMPFPANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOT', bunker: 'BUNKER', artillery: 'HAUBITZE', aa: 'FLAKPANZER', heli: 'KAMPFHUBSCHRAUBER', truck: 'LASTWAGEN', mech: 'KAMPFMECH' };
+const KILL_NAME = { tank: 'PANZER', apc: 'SCHÜTZENPANZER', depot: 'DEPOTZIEL', bunker: 'BUNKER', artillery: 'HAUBITZE', aa: 'FLAKPANZER', heli: 'HUBSCHRAUBER', truck: 'LKW', mech: 'KAMPFMECH' };
 const TYPE_SHORT = { tank: 'PZ', apc: 'SPZ', depot: 'DEP' };
 const FACE_NAME = { front: 'FRONT', side: 'SEITE', rear: 'HECK' };
 const STATE_NAME = { advance: 'VORRÜCKEN', engage: 'GEFECHT', cover: 'DECKUNG', flank: 'FLANKE', dead: 'ZERSTÖRT' };
@@ -90,6 +96,7 @@ class Game {
   constructor() {
     this.ui = ui;
     this.world = new World(assets);
+    this.theme = THEMES[THEME];
     this.feedRT = new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType });
     // the drone's picture for the board computer
     this.droneRT = new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType });
@@ -111,6 +118,7 @@ class Game {
     this.post = new Post(renderer, this.world.scene, this.worldCam, this.cockpit.scene, this.cockpitCam);
     this.input = new Input(canvas);
     this.sound = new Sound(assets.audio);
+    this.sound.worldLoop = this.theme.ambience;
     this.radio = new Radio(this.sound, ui);
     this.voiceText = { ...VOICE_TEXT, ...TRAINING_TEXT, ...EXTRA_VOICE, ...MISSION_TEXT };
     this.firingRange = new Range(this);
@@ -167,6 +175,7 @@ class Game {
     };
     this.failed = {}; // knocked-out systems (optics, sensors, gyro, cooling, missiles, hydraulics)
     this.drone = new Drone(this);
+    this.convoy = new Convoy(this);
     // fire-control computer settings (kept between sessions)
     this.fc = { ...FIRE_CONTROL };
     try {
@@ -575,6 +584,9 @@ class Game {
       };
       targets.push(w.proxy);
     }
+    // our trucks on an escort: they drive while we are close, the enemy shoots at them too
+    this.convoy.update(dt);
+    for (const t of this.convoy.targets()) targets.push(t);
     this.enemies.update(dt, { targets, playerCenter: pt.center(new THREE.Vector3()) });
     this.mission?.update();
     this.updateFire(dt);
@@ -633,10 +645,15 @@ class Game {
     if (kind === 'down') this.hmd.notify(`${w.name} AUSGEFALLEN`, '#ff5a48', 3);
   }
 
-  onAllyKill(w, e) {
-    this.stats.lanceKills = (this.stats.lanceKills ?? 0) + 1;
-    this.onEnemyKilled(e, w);
+  /** a wingman's kill (already counted in onEnemyKilled): his radio call */
+  onAllyKill(w) {
     this.wingCall(w, 'kill', 12);
+  }
+
+  /** an artillery shell coming in: the whistle, louder the closer it lands */
+  artilleryWhistle(p) {
+    const d = p.distanceTo(this.mechObj.position);
+    if (d < 900) this.sound.one('arty_whistle', clamp(60 / (d + 30), 0.06, 0.9), 1, this.sound.outside, 0, this.panOf(p));
   }
 
   allyFootstep(w) {
@@ -702,15 +719,17 @@ class Game {
     this.cockpit.jolt(0.3);
   }
 
-  onEnemyKilled(e, by = null) {
+  onEnemyKilled(e, by = this.enemies.killer ?? null) {
     this.stats.kills++;
+    if (by) this.stats.lanceKills = (this.stats.lanceKills ?? 0) + 1;
+    if (!by && e.type === 'heli') this.ach.count('helis');
     if (!by && !e.training) this.ach.count('kills');
     // how the killing round struck (set by onArmorHit just before)
     if (!by && e.type === 'tank' && this.time - (e.lastFaceT ?? -9) < 0.2) {
       if (e.lastFace === 'rear') this.ach.unlock('rear');
       if (e.lastFace === 'top') this.ach.unlock('top');
     }
-    const what = e.type === 'tank' ? 'PANZER' : e.type === 'apc' ? 'SCHÜTZENPANZER' : 'DEPOTZIEL';
+    const what = e.type === 'mech' ? e.label : KILL_NAME[e.type] || 'ZIEL';
     this.hmd.notify(`${what} ZERSTÖRT${by ? ' · ' + by.name : ''}`, '#a6ffb8', 2.5);
     if (!by && this.mission?.def.id === 'm2') this.mission.call('m2_04', 12);
   }
@@ -897,7 +916,36 @@ class Game {
     setTimeout(() => this.showResult(false), 5400);
   }
 
-  showResult(win) {
+  /** the objective is lost although the mech still stands (convoy gone, trucks escaped) */
+  failMission(reason) {
+    if (this.dead || this.inResult || this.failing) return;
+    this.failing = true;
+    this.tutorial.active = false;
+    ui.checklist(null);
+    this.sound.alarm();
+    ui.comms(`HQ: ${reason}`);
+    this.hmd.notify('MISSION GESCHEITERT', '#ff7a6a', 4);
+    setTimeout(() => ui.fade(1, 2.5), 2600);
+    setTimeout(() => {
+      this.failing = false;
+      this.showResult(false, reason);
+    }, 5200);
+  }
+
+  /** our convoy: a truck hit, lost, through */
+  onConvoyHit() {
+    this.mission?.call('convoy_hit', 25);
+  }
+
+  onConvoyLost(t) {
+    this.hmd.notify(`LKW ${t.i + 1} VERLOREN`, '#ff7a6a', 3);
+  }
+
+  onConvoyArrived() {
+    this.hmd.notify(`LKW AM ZIEL ${this.convoy.arrived}/${this.convoy.trucks.length}`, '#a6ffb8', 2.5);
+  }
+
+  showResult(win, reason = null) {
     const w = this.arsenal.w;
     const def = this.mission?.def ?? (this.mode === 'mission' ? MISSIONS[0] : null);
     const t = Math.max(0, this.time - this.stats.start);
@@ -907,13 +955,19 @@ class Game {
       this.ach.unlock(def.kind === 'tutorial' ? 'training' : `win_${def.id}`);
       if (def.kind !== 'tutorial' && this.stats.hitsTaken === 0) this.ach.unlock('untouched');
       if (lance.length && !lance.some((x) => x.dead)) this.ach.unlock('lance');
+      if (def.convoy && this.convoy.arrived === this.convoy.trucks.length) this.ach.unlock('escort');
+      // a whole world won
+      const prog = loadProgress();
+      const world = def.world ?? 'city';
+      if (MISSIONS.filter((m) => (m.world ?? 'city') === world).every((m) => prog[m.id]?.done)) this.ach.unlock(`world_${world}`);
     }
     this.inResult = true;
     ui.result(
       {
         win,
         tag: def ? `MISSION ${def.num} · ${def.name.toUpperCase()}` : '',
-        sub: win ? def?.winText : 'BB-07 ist ausgefallen. Mission fehlgeschlagen.',
+        head: !win && reason ? 'MISSION GESCHEITERT' : null,
+        sub: win ? def?.winText : reason || 'BB-07 ist ausgefallen. Mission fehlgeschlagen.',
         rows: [
           ['Abschüsse', `${this.stats.kills - (this.stats.lanceKills ?? 0)}${lance.length ? ` (+${this.stats.lanceKills ?? 0} Lanze)` : ''} / ${def?.total ?? '-'}`],
           ...(lance.length ? [['Lanze', lance.map((x) => `${x.name.replace('HAMMER', 'H')} ${x.dead ? '✕' : Math.round((x.hp / 200) * 100) + '%'}`).join(' · ')]] : []),
@@ -1012,6 +1066,7 @@ class Game {
   resetCombat() {
     this.applyLoadout();
     this.enemies.clear();
+    this.convoy.clear();
     this.allies.clear();
     this.arsenal.reset();
     this.gunRig.reset();
@@ -1032,8 +1087,16 @@ class Game {
     ui.smoke(0);
   }
 
+  /** the mission's own radio lines (the campaign loads them per mission) */
+  missionVoices(def) {
+    const keys = Object.keys(this.voiceText).filter((k) => k.startsWith(`${def.id}_`));
+    if (def.convoy) keys.push('convoy_hit');
+    return this.sound.loadVoices(keys);
+  }
+
   async startCombatMission(def) {
     await this.sound.init();
+    await this.missionVoices(def);
     this.applySettings(this.settings);
     this.sound.startAmbience();
     this.input.enabled = true;
@@ -1054,7 +1117,12 @@ class Game {
     this.groundY = this.world.heightAt(0, 0);
     this.body = new BodyDynamics();
     for (const h of this.world.hostiles) h.hidden = true;
-    this.world.setWaypoint(null);
+    this.setWaypoint(null);
+    // night and weather belong to the mission
+    this.night = !!def.night;
+    this.world.setNight(this.night);
+    this.world.setWeather(def.weather ?? null);
+    this.sound.setWeather?.(def.weather ?? null);
     this.mission = new Mission(this, def);
     // the lance waits in front of the base gate
     (def.allies || []).forEach((key, i) => this.allies.spawn(key, (i ? 1 : -1) * 16, -42, 0));
@@ -1199,8 +1267,7 @@ class Game {
   }
 
   setWaypoint(i) {
-    this.waypoint = i;
-    this.world.setWaypoint(i);
+    this.waypoint = this.world.setWaypoint(i);
   }
 
   updateMix() {
@@ -1947,6 +2014,16 @@ class Game {
         this.dustAcc = 0;
       }
     }
+    // rain beads and sand settle on the glass: the wipers earn their keep
+    const wx = this.world.weather;
+    if (wx && this.state === 'cockpit') {
+      this.wxAcc = (this.wxAcc ?? 0) + dt;
+      if (this.wxAcc > 0.25) {
+        if (wx === 'rain') this.cockpit.rainGlass(this.wxAcc * 0.12);
+        else this.cockpit.dustGlass(this.wxAcc * 0.02);
+        this.wxAcc = 0;
+      }
+    }
     const on = !!this.sw.wiper && this.sys.mainBus && !this.dead;
     if (this.cockpit.updateWipers(dt, on)) this.sound.one('wiper', 0.55, 0.95 + Math.random() * 0.1);
   }
@@ -2266,7 +2343,7 @@ class Game {
     const def = this.mission?.def;
     const t = Math.max(0, this.time - (this.stats.start ?? 0));
     return {
-      objective: st?.title || (def ? def.name : ''),
+      objective: [st?.title || (def ? def.name : ''), this.mission?.status()].filter(Boolean).join(' · '),
       step: this.tutorial.active ? `${this.tutorial.index + 1}/${this.tutorial.steps.length}` : '',
       kills: def ? this.stats.kills : null,
       total: def?.total ?? null,
@@ -2478,7 +2555,7 @@ function loadFonts() {
   return Promise.all(faces.map((f) => document.fonts?.load(f).catch(() => null)));
 }
 
-Promise.all([assets.loadAll(), loadFonts()])
+Promise.all([assets.loadAll(THEME), loadFonts()])
   .then(() => {
     game = new Game();
     window.__game = game;
@@ -2501,11 +2578,17 @@ Promise.all([assets.loadAll(), loadFonts()])
     } else if (params.has('m2') || params.has('m')) {
       // test hook: straight into a combat mission (?m=3 ...)
       const def = MISSIONS.find((d) => d.num === +(params.get('m') || 2));
+      game.missionVoices(def);
       game.input.enabled = true;
       ui.hideTitle();
       game.beginMission(def);
     } else
-      ui.ready(MISSIONS, loadProgress(), (def) => (def.kind === 'tutorial' ? game.startMission() : game.startCombatMission(def)), () => game.startFree());
+      ui.ready(MISSIONS, loadProgress(), (def) => (def.kind === 'tutorial' ? game.startMission() : game.startCombatMission(def)), () => game.startFree(), {
+        current: THEME,
+        order: THEME_ORDER,
+        themes: THEMES,
+        choose: chooseTheme,
+      });
       document.getElementById('opts').onclick = () => game.menu.show('settings', { inGame: false });
       document.getElementById('hangarbtn').onclick = () => game.openHangar();
       // the parked mech behind the title wears the pilot's paint
@@ -2515,6 +2598,8 @@ Promise.all([assets.loadAll(), loadFonts()])
     renderer.compile(game.world.scene, game.worldCam);
     renderer.compile(game.cockpit.scene, game.cockpitCam);
     if (params.has('manual')) {
+      window.__THREE = THREE;
+      window.__fitModel = fitModel;
       // test hook: advance the simulation by hand (headless screenshots)
       window.__step = (n = 1, dt = 1 / 30, renderLast = true) => {
         for (let i = 0; i < n; i++) {

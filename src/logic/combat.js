@@ -71,6 +71,18 @@ export const ENEMY_TYPES = {
   // static supply depot targets (fuel, generators, ammunition)
   depot: { hp: 70, speed: 0, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.6, height: 2.2, static: true },
   apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4, traverse: 1.4, skill: 0.7 },
+  // dug in: a concrete pillbox with a heavy machine gun; it turns its gun, not itself
+  bunker: { hp: 150, speed: 0, engage: 450, reload: [3.5, 5], shellSpeed: 950, damage: [1.5, 3], burst: 4, radius: 3.6, height: 3.0, traverse: 1.6, skill: 0.5, emplaced: true },
+  // a howitzer far behind the line: it needs no sight of us, its shells walk in salvo by salvo
+  artillery: { hp: 70, speed: 0, engage: 2400, reload: [7, 10], shellSpeed: 0, damage: [16, 24], burst: 1, radius: 3.4, height: 2.6, traverse: 0.6, skill: 1, emplaced: true, indirect: true },
+  // twin-gun anti-aircraft tank with radar: shoots drones down from far away, and at us
+  aa: { hp: 80, speed: 8, engage: 520, reload: [3, 4.5], shellSpeed: 1100, damage: [3, 5], burst: 4, radius: 3.2, height: 3.0, traverse: 2.0, skill: 0.75, antiAir: 950 },
+  // gunship: flies its own circuit (combat/enemies.js), rocket salvos on attack runs
+  heli: { hp: 70, speed: 32, engage: 650, reload: [5, 7], shellSpeed: 520, damage: [7, 11], burst: 4, radius: 4.5, height: 3.4, traverse: 3, skill: 0.7, air: true },
+  // unarmed supply truck on a road: drives its route, flees when shot at
+  truck: { hp: 35, speed: 11, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.8, height: 3.0, traverse: 0, skill: 0, unarmed: true },
+  // an enemy battle mech: tough, a fast-turning torso, cannon bursts
+  mech: { hp: 320, speed: 6, engage: 700, reload: [3.2, 4.2], shellSpeed: 1150, damage: [6.5, 9.5], burst: 3, radius: 2.6, height: 5.0, traverse: 2.4, skill: 1.1, walker: true },
 };
 
 export const PARTS = ['head', 'torso', 'larm', 'rarm', 'lleg', 'rleg'];
@@ -270,9 +282,12 @@ export function flankPoint(e, target, angle, range) {
  */
 export function stepEnemy(e, dt, ctx) {
   const ev = [];
-  if (e.state === 'dead' || !ctx.player) return ev;
+  if (e.state === 'dead') return ev;
   const T = ENEMY_TYPES[e.type];
   if (T.static) return ev;
+  // a supply truck drives its route and does not care who is around
+  if (T.unarmed) return stepTruck(e, dt, ev);
+  if (!ctx.player) return ev;
   const rand = ctx.rand || Math.random;
   const engage = e.engage ?? T.engage;
   const px = ctx.player.x;
@@ -304,27 +319,37 @@ export function stepEnemy(e, dt, ctx) {
   }
 
   // where to drive: the rally point while advancing, slowly closing in while engaging
+  // a guard (e.hold) stays at its post until it sees something; speedMul: a faster boss
+  const spd = T.speed * (e.speedMul ?? 1);
   let tx = e.goal[0];
   let tz = e.goal[1];
-  let want = T.speed;
+  let want = spd;
   if (e.state === 'engage') {
     tx = px;
     tz = pz;
-    want = dist > engage * 0.7 ? T.speed * 0.35 : 0;
+    want = dist > engage * 0.7 && !e.hold ? spd * 0.35 : 0;
   } else if (e.state === 'cover') {
     [tx, tz] = e.coverGoal;
-    want = Math.hypot(tx - e.x, tz - e.z) > 5 ? T.speed : 0;
+    want = Math.hypot(tx - e.x, tz - e.z) > 5 ? spd : 0;
   } else if (e.state === 'flank') {
     [tx, tz] = e.flankGoal;
-    want = T.speed * 0.8;
+    want = spd * 0.8;
   } else if (Math.hypot(tx - e.x, tz - e.z) < 15) {
     tx = px;
     tz = pz;
+    if (e.hold) want = 0;
   }
   // no line of sight to the target: drive round the obstacle to a new firing position
   if (e.state === 'engage' && e.noLos) {
-    want = T.speed * 0.6;
+    want = spd * 0.6;
     e.flank ??= Math.random() < 0.5 ? -0.7 : 0.7;
+  }
+  if (T.emplaced) {
+    // dug in: it does not drive or flank, it only lays its gun
+    want = 0;
+    tx = e.x - Math.sin(e.heading);
+    tz = e.z - Math.cos(e.heading);
+    if (e.state === 'cover' || e.state === 'flank') e.state = 'engage';
   }
   let desired = Math.atan2(-(tx - e.x), -(tz - e.z)) + (e.state === 'engage' && e.noLos ? e.flank : 0);
   // keep clear of obstacles ahead
@@ -338,7 +363,7 @@ export function stepEnemy(e, dt, ctx) {
     const side = Math.cos(e.heading) * dx - Math.sin(e.heading) * dz; // + = obstacle on the right
     desired += side > 0 ? 0.8 : -0.8;
   }
-  const turn = clamp(wrap(desired - e.heading), -0.5 * dt, 0.5 * dt);
+  const turn = T.emplaced ? 0 : clamp(wrap(desired - e.heading), -0.5 * dt, 0.5 * dt);
   e.heading = wrap(e.heading + turn);
   e.speed += clamp(want - e.speed, -3 * dt, 2 * dt);
   e.x += -Math.sin(e.heading) * e.speed * dt;
@@ -363,6 +388,43 @@ export function stepEnemy(e, dt, ctx) {
     }
   }
   return ev;
+}
+
+/**
+ * A supply truck on its route (e.path: [[x, z], ...]): drives point to point, faster when
+ * it has been shot at; at the end it is gone (event 'escaped').
+ */
+export function stepTruck(e, dt, ev = []) {
+  const T = ENEMY_TYPES.truck;
+  if (!e.path || e.escaped) return ev;
+  e.pi ??= 0;
+  const [tx, tz] = e.path[Math.min(e.pi, e.path.length - 1)];
+  if (Math.hypot(tx - e.x, tz - e.z) < 12) {
+    e.pi++;
+    if (e.pi >= e.path.length) {
+      e.escaped = true;
+      e.speed = 0;
+      ev.push({ kind: 'escaped', id: e.id });
+      return ev;
+    }
+  }
+  const fleeing = e.hp < T.hp;
+  const want = (e.pathSpeed ?? T.speed) * (fleeing ? 1.35 : 1);
+  const desired = Math.atan2(-(tx - e.x), -(tz - e.z));
+  e.heading = wrap(e.heading + clamp(wrap(desired - e.heading), -0.7 * dt, 0.7 * dt));
+  e.speed += clamp(want - e.speed, -4 * dt, 3 * dt);
+  e.x += -Math.sin(e.heading) * e.speed * dt;
+  e.z += -Math.cos(e.heading) * e.speed * dt;
+  return ev;
+}
+
+/**
+ * Where an artillery salvo lands: the battery corrects after each salvo, so the scatter
+ * shrinks from about 45 m to 10 m. salvo: how many it fired at this target before.
+ */
+export function artilleryImpact(target, salvo, rand = Math.random) {
+  const sigma = Math.max(10, 45 - salvo * 9);
+  return { x: target.x + gauss(rand) * sigma, z: target.z + gauss(rand) * sigma, sigma };
 }
 
 /* ---------------------------------------------------------- ballistics */

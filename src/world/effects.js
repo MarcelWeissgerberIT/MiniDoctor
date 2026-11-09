@@ -386,18 +386,22 @@ export class Effects {
     }
   }
 
+  /** what drifts in the air: ash and embers (city), pollen and fireflies (jungle), sand (desert) */
   buildAsh(scene) {
-    const n = 1600;
+    const kind = (this.particleKind = this.world.theme?.particles ?? 'ash');
+    const n = kind === 'sand' ? 2200 : 1600;
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       pos[i * 3] = (Math.random() - 0.5) * 120;
       pos[i * 3 + 1] = (Math.random() - 0.5) * 60;
       pos[i * 3 + 2] = (Math.random() - 0.5) * 120;
-      const ember = Math.random() < 0.06;
-      col[i * 3] = ember ? 3.0 : 0.55;
-      col[i * 3 + 1] = ember ? 1.1 : 0.53;
-      col[i * 3 + 2] = ember ? 0.3 : 0.5;
+      const glow = Math.random() < 0.06;
+      const c =
+        kind === 'mist' ? (glow ? [1.4, 2.6, 0.5] : [0.62, 0.66, 0.42]) : kind === 'sand' ? [0.86, 0.72, 0.52] : glow ? [3.0, 1.1, 0.3] : [0.55, 0.53, 0.5];
+      col[i * 3] = c[0];
+      col[i * 3 + 1] = c[1];
+      col[i * 3 + 2] = c[2];
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -408,6 +412,32 @@ export class Effects {
     );
     this.ash.frustumCulled = false;
     scene.add(this.ash);
+  }
+
+  /** rain streaks around the camera (jungle downpour); a sandstorm drives the sand harder */
+  setWeather(kind) {
+    this.weather = kind;
+    if (kind === 'rain' && !this.rain) {
+      const n = 2600;
+      const pos = new Float32Array(n * 6);
+      for (let i = 0; i < n; i++) {
+        const x = (Math.random() - 0.5) * 90;
+        const y = (Math.random() - 0.5) * 50;
+        const z = (Math.random() - 0.5) * 90;
+        pos.set([x, y, z, x + 0.12, y + 1.1, z + 0.05], i * 6);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      this.rain = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x9fb0b8, transparent: true, opacity: 0.38, depthWrite: false }));
+      this.rain.frustumCulled = false;
+      this.world.scene.add(this.rain);
+    }
+    if (this.rain) this.rain.visible = kind === 'rain';
+    this.gust = kind === 'sandstorm' ? 18 : 0;
+    if (this.ash) {
+      this.ash.material.size = kind === 'sandstorm' ? 0.14 : 0.09;
+      this.ash.material.opacity = kind === 'sandstorm' ? 1 : 0.8;
+    }
   }
 
   buildTracers(scene) {
@@ -676,13 +706,33 @@ export class Effects {
     const dz = camPos.z - this.lastCam.z;
     this.lastCam.copy(camPos);
     const wrap = (v, h) => (v > h ? v - 2 * h : v < -h ? v + 2 * h : v);
+    const kind = this.particleKind;
+    // sand races along the ground with the wind; pollen hangs and wanders; ash falls
+    const fall = kind === 'sand' ? 0.15 : kind === 'mist' ? -0.05 : 0.5;
+    const drift = kind === 'sand' ? 9 + (this.gust ?? 0) : kind === 'mist' ? 0.2 : wind * 0.6;
     for (let i = 0; i < pos.count; i++) {
-      const y = pos.getY(i) - dy - dt * (0.5 + (i % 7) * 0.12);
-      const x = pos.getX(i) - dx + dt * (wind * 0.6 + Math.sin(time * 0.7 + i) * 0.4);
-      const z = pos.getZ(i) - dz;
+      const y = pos.getY(i) - dy - dt * (fall + (i % 7) * (kind === 'mist' ? 0.02 : 0.12)) + (kind === 'mist' ? Math.sin(time * 0.9 + i) * dt * 0.3 : 0);
+      const x = pos.getX(i) - dx + dt * (drift * (kind === 'sand' ? 0.7 + (i % 5) * 0.15 : 1) + Math.sin(time * 0.7 + i) * 0.4);
+      const z = pos.getZ(i) - dz + (kind === 'mist' ? Math.cos(time * 0.6 + i * 1.7) * dt * 0.3 : kind === 'sand' ? dt * 2.5 : 0);
       pos.setXYZ(i, wrap(x, 60), wrap(y, 30), wrap(z, 60));
     }
     pos.needsUpdate = true;
     this.ash.position.copy(camPos);
+    // rain: streaks falling fast in a box that follows the camera
+    if (this.rain?.visible) {
+      const rp = this.rain.geometry.attributes.position;
+      for (let i = 0; i < rp.count; i += 2) {
+        let y = rp.getY(i) - dy - dt * 24;
+        let x = rp.getX(i) - dx;
+        let z = rp.getZ(i) - dz;
+        if (y < -25) y += 50;
+        x = wrap(x, 45);
+        z = wrap(z, 45);
+        rp.setXYZ(i, x, y, z);
+        rp.setXYZ(i + 1, x + 0.12, y + 1.1, z + 0.05);
+      }
+      rp.needsUpdate = true;
+      this.rain.position.copy(camPos);
+    }
   }
 }

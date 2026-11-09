@@ -1,13 +1,22 @@
 import * as THREE from 'three';
-import { ENEMY_TYPES, createEnemy, stepEnemy, damageEnemy, chooseTarget, gunnerAim, armorFace, ARMOR, observe } from '../logic/combat.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { ENEMY_TYPES, createEnemy, stepEnemy, damageEnemy, chooseTarget, gunnerAim, armorFace, ARMOR, observe, artilleryImpact } from '../logic/combat.js';
 import { fitModel } from '../geom.js';
+import { MECH, stepLength } from '../logic/mech.js';
+import { MechWalker } from '../world/mechwalk.js';
 
 // model fitting: the Meshy vehicles lie along X with the front at -X; turn them to face -Z.
 // turretCut: height (m) above which the tank mesh is the turret with its gun
 const MODEL = {
   tank: { name: 'enemy_tank', length: 8.2, rotY: -Math.PI / 2, turretCut: 1.6 },
   apc: { name: 'enemy_apc', length: 7.4, rotY: -Math.PI / 2 },
+  bunker: { name: 'bunker', height: 3.2, rotY: 0 },
+  artillery: { name: 'artillery', length: 8.5, rotY: -Math.PI / 2 },
+  aa: { name: 'aa', length: 7.6, rotY: -Math.PI / 2, turretCut: 1.9 },
+  truck: { name: 'truck', length: 9, rotY: -Math.PI / 2 },
+  heli: { name: 'heli', length: 16, rotY: -Math.PI / 2 },
 };
+const LABEL = { tank: 'PZ', apc: 'SPZ', bunker: 'BNK', artillery: 'ART', aa: 'FLAK', heli: 'HELI', truck: 'LKW', mech: 'MECH' };
 
 /**
  * Cut a single-mesh vehicle into hull and turret (by triangle height) so the turret can
@@ -108,11 +117,12 @@ export class Enemies {
     this.fx = game.world.effects;
     this.list = [];
     this.shells = [];
+    this.strikes = []; // artillery salvos in the air
     this.templates = {};
     for (const [type, def] of Object.entries(MODEL)) {
       const src = game.assets.models[def.name] || game.assets.models.tank;
       if (!src) continue;
-      let t = fitModel(src.clone(true), { length: def.length, rotY: def.rotY });
+      let t = fitModel(src.clone(true), { length: def.length, height: def.height, rotY: def.rotY });
       t.traverse((o) => {
         if (o.isMesh) {
           o.material = o.material.clone();
@@ -146,6 +156,7 @@ export class Enemies {
     }
     this.list = [];
     this.shells = [];
+    this.strikes = [];
     this.tracers.count = 0;
   }
 
@@ -173,11 +184,54 @@ export class Enemies {
       });
       e.fuel = opts.model !== 'crates';
       e.label = opts.model === 'generator' ? 'GEN' : opts.model === 'crates' ? 'MUN' : 'TREIB';
+    } else if (type === 'mech') {
+      // an enemy battle mech: the rigged model in dark paint, walking like ours
+      e.length = 4;
+      e.label = opts.label || 'MECH';
+      e.obj = new THREE.Group();
+      const src = this.g.assets.models.mech_rigged;
+      if (src) {
+        const body = fitModel(cloneSkinned(src), { height: MECH.height, rotY: Math.PI });
+        const tint = opts.tint || [0.42, 0.16, 0.14];
+        body.traverse((o) => {
+          if (!o.isMesh) return;
+          o.material = o.material.clone();
+          o.material.color.setRGB(...tint);
+          o.material.envMapIntensity = 0.45;
+          o.frustumCulled = false;
+          o.castShadow = true;
+        });
+        e.obj.add(body);
+        e.obj.updateMatrixWorld(true);
+        e.walker = new MechWalker(body, e.obj);
+        e.stepPhase = 0;
+        e.foot = 1;
+        e.turn = 0;
+      }
     } else {
-      e.length = MODEL[type].length;
-      e.label = type === 'tank' ? 'PZ' : 'SPZ';
+      e.length = MODEL[type]?.length ?? 6;
+      e.label = LABEL[type] || type.toUpperCase();
       e.obj = this.templates[type] ? this.templates[type].clone(true) : new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 7), new THREE.MeshStandardMaterial({ color: 0x555a4a }));
       if (this.templates[type]) e.obj.traverse((o) => o.isMesh && (o.material = o.material.clone()));
+    }
+    if (type === 'truck') {
+      e.path = opts.path;
+      e.pathSpeed = opts.speed;
+    }
+    if (type === 'heli') {
+      // flying: its own height and a rotor disc
+      e.alt = opts.alt ?? 38 + Math.random() * 16;
+      e.y = this.world.heightAt(x, z) + e.alt;
+      e.vx = 0;
+      e.vz = 0;
+      e.bank = 0;
+      e.runT = 6 + Math.random() * 6;
+      e.orbitDir = Math.random() < 0.5 ? -1 : 1;
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(7.2, 28), new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.y = 4.1;
+      e.obj.add(disc);
+      e.rotor = disc;
     }
     e.obj.rotation.order = 'YXZ';
     e.turretObj = e.obj.getObjectByName('turret');
@@ -195,11 +249,12 @@ export class Enemies {
   }
 
   alive() {
-    return this.list.filter((e) => e.state !== 'dead');
+    return this.list.filter((e) => e.state !== 'dead' && !e.escaped);
   }
 
   /** centre of the hull in world space */
   center(e, out = new THREE.Vector3()) {
+    if (e.y != null) return out.set(e.x, e.y + e.height * 0.5, e.z); // in the air
     return out.set(e.x, this.world.heightAt(e.x, e.z) + e.height * 0.5, e.z);
   }
 
@@ -213,8 +268,18 @@ export class Enemies {
     const roll = Math.atan2(h(-fz * 1.6, fx * 1.6) - h(fz * 1.6, -fx * 1.6), 3.2);
     e.pitch += (pitch - e.pitch) * k;
     e.roll += (roll - e.roll) * k;
+    if (e.y != null) {
+      // a helicopter: nose down when fast, banked into the turn
+      e.obj.position.set(e.x, e.y, e.z);
+      e.obj.rotation.set(-Math.min(0.3, Math.hypot(e.vx, e.vz) * 0.01) + (e.wreckTilt || 0), e.heading, e.bank + (e.wreckRoll || 0));
+      e.contact.x = e.x;
+      e.contact.z = e.z;
+      return;
+    }
     e.obj.position.set(e.x, h(0, 0) - 0.05, e.z);
-    e.obj.rotation.set(e.pitch + (e.wreckTilt || 0), e.heading, e.roll + (e.wreckRoll || 0));
+    // a mech stands upright on its feet
+    if (e.walker) e.obj.rotation.set(0, e.heading, 0);
+    else e.obj.rotation.set(e.pitch + (e.wreckTilt || 0), e.heading, e.roll + (e.wreckRoll || 0));
     if (e.turretObj) e.turretObj.rotation.y = e.turret || 0;
     e.contact.x = e.x;
     e.contact.z = e.z;
@@ -226,7 +291,9 @@ export class Enemies {
    */
   damage(e, dmg, from = null, at = null, kind = 'gun') {
     if (e.state === 'dead') return false;
-    if (kind === 'top' && e.type !== 'depot') {
+    // a helicopter or a truck has no armour worth the name
+    if (e.type === 'heli' || e.type === 'truck') from = null;
+    if (kind === 'top' && e.type !== 'depot' && e.type !== 'heli') {
       dmg *= 1.5;
       this.g.onArmorHit?.(e, 'top', 1.5, kind);
     } else if (from && e.type !== 'depot') {
@@ -245,6 +312,15 @@ export class Enemies {
   }
 
   destroy(e) {
+    // a shot-down helicopter spins and falls; it blows up on the ground
+    if (e.type === 'heli' && !e.crashed) {
+      e.falling = { vy: 0, spin: (Math.random() < 0.5 ? -1 : 1) * 2.5 };
+      this.fx.explosion(e.x, e.y + 2, e.z, 5, { smoke: 0.6, light: 0.4 });
+      this.g.explosionSound(this.center(e), 0.7);
+      e.contact.type = 'fire';
+      this.g.onEnemyKilled?.(e);
+      return;
+    }
     const c = this.center(e);
     // fuel goes up in a much bigger ball
     this.fx.explosion(c.x, c.y + 0.5, c.z, e.type === 'tank' ? 11 : e.fuel ? 16 : 9);
@@ -271,8 +347,10 @@ export class Enemies {
   update(dt, ctx) {
     const rand = Math.random;
     this.world.updateSmokeScreens(dt);
+    this.updateStrikes(dt, ctx);
     for (const e of this.list) {
-      if (e.state === 'dead' || ENEMY_TYPES[e.type].static) continue;
+      if (e.falling) this.fall(e, dt);
+      if (e.state === 'dead' || ENEMY_TYPES[e.type].static || e.escaped) continue;
       // training targets (old hulls on the range) stand still and never shoot
       if (e.frozen) {
         e.speed = 0;
@@ -281,6 +359,11 @@ export class Enemies {
       // only the obstacles close by matter to the driver
       const near = this.world.colliders.filter((c) => Math.abs(c.x - e.x) < 40 && Math.abs(c.z - e.z) < 40);
       const tgt = chooseTarget(e, ctx.targets, dt, rand);
+      const T = ENEMY_TYPES[e.type];
+      if (T.air) {
+        this.updateHeli(e, dt, tgt);
+        continue;
+      }
       // the gunner tracks the target's motion with a lag: a mech that zigzags spoils the lead
       if (tgt) {
         const k = Math.min(1, dt / 1.4);
@@ -288,7 +371,13 @@ export class Enemies {
         e.tvz = (e.tvz ?? 0) + ((tgt.vz ?? 0) - (e.tvz ?? 0)) * k;
       }
       const was = e.state;
+      // at night they see us late, unless our lamps give us away
+      const night = this.g.night && !(this.g.lightsOn && this.g.kit?.lights.visible !== false);
+      const engage0 = e.engage;
+      if (night && !T.indirect) e.engage = (engage0 ?? T.engage) * 0.6;
       const ev = stepEnemy(e, dt, { player: tgt, colliders: near, rand, findCover: (x) => this.findCover(x, tgt) });
+      e.engage = engage0;
+      if (e.walker) this.walk(e, dt);
       if (was !== 'engage' && e.state === 'engage') this.g.onEnemyEngaged?.(e);
       this.place(e, Math.min(1, dt * 4));
       // dust behind the tracks
@@ -306,7 +395,18 @@ export class Enemies {
           this.smoke(e);
           continue;
         }
+        if (f.kind === 'escaped') {
+          e.obj.visible = false;
+          e.contact.type = 'gone';
+          this.g.mission?.onEscaped?.(e);
+          continue;
+        }
         if (f.kind !== 'fire' || this.g.mission?.ended) continue;
+        // a howitzer fires on the reported position: no sight needed
+        if (T.indirect) {
+          this.fireIndirect(e, tgt);
+          continue;
+        }
         // the gunner needs to see the target: ruins and ridges give cover
         const muzzle = this.muzzle(e, new THREE.Vector3());
         if (!this.world.lineOfSight(muzzle, tgt.center(new THREE.Vector3()).add(_s.set(0, 1.2, 0)))) {
@@ -322,6 +422,165 @@ export class Enemies {
     this.updateShells(dt, ctx);
   }
 
+  /** an enemy mech's legs: planted feet in step with its speed (like our lance) */
+  walk(e, dt) {
+    const sp = Math.abs(e.speed);
+    e.turn = e.lastHeading == null ? 0 : (e.heading - e.lastHeading) / Math.max(dt, 1e-3);
+    e.lastHeading = e.heading;
+    const stride = sp * dt + Math.abs(e.turn) * dt * 2.2;
+    if (stride > 0.0005) {
+      e.stepPhase += stride / stepLength(Math.max(sp, 0.5));
+      while (e.stepPhase >= 1) {
+        e.stepPhase -= 1;
+        e.foot = -e.foot;
+        if (sp > 0.5) this.g.allyFootstep?.(e);
+      }
+    }
+    e.obj.updateMatrixWorld(true);
+    e.walker.update(dt, e, (x, z) => this.world.heightAt(x, z));
+  }
+
+  /**
+   * A gunship: circles the target at a few hundred metres, then turns in for an attack
+   * run, rippling rockets when its nose points at the target; banks through the turns.
+   */
+  updateHeli(e, dt, tgt) {
+    const T = ENEMY_TYPES.heli;
+    if (e.rotor) e.rotor.rotation.z += dt * 30;
+    let gx = e.goal[0];
+    let gz = e.goal[1];
+    const d = tgt ? Math.hypot(tgt.x - e.x, tgt.z - e.z) : 1e9;
+    if (tgt) {
+      e.runT -= dt;
+      if (e.runT < 0 && !e.run) {
+        e.run = true;
+        e.runT = 9;
+      }
+      if (e.run) {
+        // straight at it, firing from the engage range, break off close in
+        gx = tgt.x;
+        gz = tgt.z;
+        if (d < 170 || e.runT < 0) {
+          e.run = false;
+          e.runT = 8 + Math.random() * 6;
+          e.orbitDir = -e.orbitDir;
+        }
+      } else {
+        // the circuit: a ring of 380 m around the target, flown in one direction
+        const a = Math.atan2(e.z - tgt.z, e.x - tgt.x) + e.orbitDir * 0.5;
+        gx = tgt.x + Math.cos(a) * 380;
+        gz = tgt.z + Math.sin(a) * 380;
+      }
+    }
+    const want = Math.atan2(-(gx - e.x), -(gz - e.z));
+    const err = Math.atan2(Math.sin(want - e.heading), Math.cos(want - e.heading));
+    const turn = Math.max(-0.9 * dt, Math.min(0.9 * dt, err));
+    e.heading += turn;
+    e.bank += ((-turn / Math.max(dt, 1e-3)) * 0.5 - e.bank) * Math.min(1, dt * 3);
+    e.speed += Math.max(-8 * dt, Math.min(6 * dt, T.speed * (e.run ? 1 : 0.8) - e.speed));
+    e.vx = -Math.sin(e.heading) * e.speed;
+    e.vz = -Math.cos(e.heading) * e.speed;
+    e.x += e.vx * dt;
+    e.z += e.vz * dt;
+    const ground = this.world.heightAt(e.x, e.z);
+    const hy = ground + (e.run ? Math.max(22, e.alt * 0.6) : e.alt);
+    e.y += Math.max(-6 * dt, Math.min(6 * dt, hy - e.y));
+    e.y = Math.max(e.y, ground + 8);
+    this.place(e, 1);
+    // rockets on the attack run, when the nose points at the target and it can be seen
+    e.reload -= dt;
+    if (!tgt || this.g.mission?.ended || !e.run || d > T.engage || Math.abs(err) > 0.18) return;
+    if (e.reload <= 0) {
+      const muzzle = this.muzzle(e, new THREE.Vector3());
+      if (!this.world.lineOfSight(muzzle, tgt.center(new THREE.Vector3()).add(_s.set(0, 1.2, 0)))) return;
+      this.fire(e, d, tgt);
+      e.burstLeft = (e.burstLeft ?? T.burst) - 1;
+      e.reload = e.burstLeft > 0 ? 0.22 : T.reload[0] + Math.random() * (T.reload[1] - T.reload[0]);
+      if (e.burstLeft <= 0) e.burstLeft = T.burst;
+    }
+  }
+
+  /** the flak's tracers climbing towards the drone (looks only) */
+  aaBurst(e, d) {
+    const m = this.muzzle(e, new THREE.Vector3());
+    const dir = new THREE.Vector3(d.x - m.x, d.y - m.y, d.z - m.z).normalize();
+    this.fx.muzzle(m.x, m.y, m.z, 1.4);
+    this.shells.push({ p: m.clone(), prev: m.clone(), v: dir.multiplyScalar(900), life: 1.4, dmg: 0, type: 'aa', from: new THREE.Vector3(e.x, 0, e.z), whizzed: true, aa: true });
+  }
+
+  /** a shot-down helicopter: spins down, burns where it hits the ground */
+  fall(e, dt) {
+    const f = e.falling;
+    f.vy -= 9.81 * dt;
+    e.y += f.vy * dt;
+    e.x += e.vx * dt * 0.6;
+    e.z += e.vz * dt * 0.6;
+    e.heading += f.spin * dt;
+    if (Math.random() < 0.7) this.fx.spawnSmoke(e.x, e.y + 1, e.z, 2.2, 3, 0.4, 1.0, 0.7);
+    const g = this.world.heightAt(e.x, e.z);
+    if (e.y <= g + 0.5) {
+      e.y = g + 0.3;
+      e.falling = null;
+      e.crashed = true;
+      e.wreckTilt = 0.25;
+      e.wreckRoll = 0.6;
+      if (e.rotor) e.rotor.visible = false;
+      this.fx.explosion(e.x, g + 1, e.z, 10);
+      e.fire = this.fx.addFire({ x: e.x, z: e.z, y: 1.5, scale: 3.5, smoke: 1.2 });
+      this.g.explosionSound(new THREE.Vector3(e.x, g, e.z), 1.2);
+      e.obj.traverse((o) => {
+        if (!o.isMesh || o === e.rotor) return;
+        o.material.color.multiplyScalar(0.16);
+        o.material.roughness = 1;
+      });
+    }
+    this.place(e, 1);
+  }
+
+  /**
+   * A howitzer fires on where the target is reported: the salvo lands a few seconds later,
+   * announced by its whistle, scattered less with every salvo it has fired at it.
+   */
+  fireIndirect(e, tgt) {
+    if (!tgt) return;
+    const muzzle = this.muzzle(e, new THREE.Vector3());
+    this.fx.muzzle(muzzle.x, muzzle.y + 1, muzzle.z, 6);
+    this.fx.spawnSmoke(muzzle.x, muzzle.y + 1, muzzle.z, 4, 5, 0.8, 0.5, 0.6);
+    this.g.distantGun(muzzle, 1.4);
+    e.salvo = (e.salvo ?? 0) + 1;
+    const T = ENEMY_TYPES.artillery;
+    const hit = artilleryImpact(tgt, e.salvo - 1);
+    const dist = Math.hypot(tgt.x - e.x, tgt.z - e.z);
+    this.strikes.push({ x: hit.x, z: hit.z, t: 4 + dist / 500, whistled: false, dmg: T.damage[0] + Math.random() * (T.damage[1] - T.damage[0]), from: new THREE.Vector3(e.x, 0, e.z) });
+  }
+
+  /** artillery shells coming down: the whistle, then the blast hurts whatever is close */
+  updateStrikes(dt, ctx) {
+    for (let i = this.strikes.length - 1; i >= 0; i--) {
+      const s = this.strikes[i];
+      s.t -= dt;
+      const gy = this.world.heightAt(s.x, s.z);
+      if (!s.whistled && s.t < 3.3) {
+        s.whistled = true;
+        this.g.artilleryWhistle?.(new THREE.Vector3(s.x, gy, s.z));
+      }
+      if (s.t > 0) continue;
+      this.strikes.splice(i, 1);
+      this.fx.explosion(s.x, gy + 0.5, s.z, 11);
+      for (let k = 0; k < 8; k++) this.fx.spawnDust(s.x + (Math.random() - 0.5) * 10, gy + 0.5, s.z + (Math.random() - 0.5) * 10, 5, 5 + Math.random() * 3, 5, 0.8);
+      this.g.explosionSound(new THREE.Vector3(s.x, gy, s.z), 1.6);
+      for (const tg of ctx.targets) {
+        if (tg.dead) continue;
+        const d = Math.hypot(tg.x - s.x, tg.z - s.z);
+        if (d > 16) continue;
+        const at = new THREE.Vector3(tg.x, gy + 2, tg.z);
+        tg.onHit({ dmg: s.dmg * (1 - d / 16) * 1.2, from: s.from, type: 'artillery' }, at);
+      }
+      // it also wrecks our own vehicles caught in the open... and theirs
+      for (const e of this.list) if (e.state !== 'dead' && Math.hypot(e.x - s.x, e.z - s.z) < 10) this.damage(e, 30);
+    }
+  }
+
   /** world position of the gun muzzle (turret direction for tanks) */
   muzzle(e, out) {
     const mz = e.turretObj?.userData.muzzle;
@@ -330,7 +589,14 @@ export class Enemies {
       return e.turretObj.localToWorld(out.set(mz[0], mz[1], mz[2] - 0.3));
     }
     const h = e.heading + (e.turret || 0);
+    if (e.type === 'heli') return out.set(e.x - Math.sin(e.heading) * 5, e.y - 0.6, e.z - Math.cos(e.heading) * 5);
     const gy = this.world.heightAt(e.x, e.z);
+    if (e.type === 'mech') {
+      // the gun arm on its right side
+      const r = 1.5;
+      return out.set(e.x - Math.sin(h) * 2.2 + Math.cos(h) * r, gy + 3.3, e.z - Math.cos(h) * 2.2 - Math.sin(h) * r);
+    }
+    if (e.type === 'bunker') return out.set(e.x - Math.sin(h) * 3.6, gy + 1.6, e.z - Math.cos(h) * 3.6);
     const reach = e.type === 'tank' ? 5.6 : e.length * 0.35;
     return out.set(e.x - Math.sin(h) * reach, gy + e.height * (e.type === 'tank' ? 0.78 : 0.95), e.z - Math.cos(h) * reach);
   }
@@ -419,8 +685,8 @@ export class Enemies {
       s.life -= dt;
       let hit = null;
       let ht = 2;
-      // mechs: legs, torso, head
-      for (const tg of ctx.targets) {
+      // mechs: legs, torso, head (the flak's tracers at the drone hit nothing down here)
+      for (const tg of s.aa ? [] : ctx.targets) {
         if (tg.dead) continue;
         const gy = this.world.heightAt(tg.x, tg.z);
         for (const [y, r] of [
@@ -436,6 +702,7 @@ export class Enemies {
         }
       }
       const tank = s.type === 'tank';
+      if (s.type === 'heli' && Math.random() < 0.8) this.fx.spawnSmoke(s.p.x, s.p.y, s.p.z, 0.7, 1.5, 0.2, 0.9, 0.5);
       if (hit) {
         const at = s.prev.clone().lerp(s.p, ht);
         this.shells.splice(i, 1);

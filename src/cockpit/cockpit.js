@@ -773,6 +773,32 @@ export class Cockpit {
     }
   }
 
+  /** rain: clear drops beading on every screen; they blur the view like dirt */
+  rainGlass(amount) {
+    for (const G of Object.values(this.panes)) {
+      const g = G.g;
+      const n = Math.round(amount * 260 * (G.cv.width / 512));
+      for (let k = 0; k < n; k++) {
+        const x = Math.random() * G.cv.width;
+        const y = Math.random() * G.cv.height;
+        const r = 1.2 + Math.random() * 2.6;
+        // a lens of water: dark rim, clear body, a pin of light on top
+        const grd = g.createRadialGradient(x, y, 0, x, y, r);
+        grd.addColorStop(0, 'rgba(170,185,200,0.10)');
+        grd.addColorStop(0.75, 'rgba(70,80,90,0.16)');
+        grd.addColorStop(1, 'rgba(20,24,28,0)');
+        g.fillStyle = grd;
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = 'rgba(235,240,245,0.35)';
+        g.fillRect(x - r * 0.35, y - r * 0.45, 1, 1);
+        this.grimeAdd(G, x, y, r, 0.03);
+      }
+      G.dirty = true;
+    }
+  }
+
   /** how dirty a screen is, 0..1 (the middle counts double: that is where one looks) */
   grimeLevel(pane = 'front') {
     const G = this.panes[pane];

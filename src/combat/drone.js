@@ -171,13 +171,21 @@ export class Drone {
       }
       if (e === 'crashed') this.lose('DROHNE ABGESTÜRZT · AKKU LEER');
     }
-    // under fire from an APC close by: it may be shot down
+    // under fire: an APC close by may hit it; an anti-aircraft tank with its radar will,
+    // from far away, once it has tracked it for a moment; a gunship's gunner sometimes
     if (airborne(d) && d.state !== 'launch' && d.state !== 'land') {
       for (const e of g.enemies.alive()) {
-        if (e.type !== 'apc') continue;
-        if (Math.hypot(e.x - d.x, e.z - d.z) > 260) continue;
-        if (Math.random() < dt * 0.05) {
-          this.lose('DROHNE ABGESCHOSSEN');
+        const dd = Math.hypot(e.x - d.x, e.z - d.z);
+        let rate = 0;
+        if (e.type === 'apc' && dd < 260) rate = 0.05;
+        else if (e.type === 'heli' && dd < 400) rate = 0.12;
+        else if (e.type === 'aa' && dd < 950) {
+          e.aaTrack = (e.aaTrack ?? 0) + dt;
+          if (e.aaTrack > 2.5) rate = 0.9;
+          if (e.aaTrack > 2 && Math.random() < dt * 3) g.enemies.aaBurst?.(e, d);
+        }
+        if (rate && Math.random() < dt * rate) {
+          this.lose(e.type === 'aa' ? 'DROHNE VON FLAK ABGESCHOSSEN' : 'DROHNE ABGESCHOSSEN');
           break;
         }
       }

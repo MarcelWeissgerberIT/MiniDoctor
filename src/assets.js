@@ -3,14 +3,18 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { VOICE_KEYS } from './missions.js';
 import { TRAINING_TEXT } from './tutorial.js';
+import { THEMES } from './world/themes.js';
+import { CAMPAIGN_TEXT } from './campaign.js';
 
 const BASE = import.meta.env.BASE_URL + 'assets/';
 
 export const TEXTURE_SETS = ['armor', 'rivets', 'floor', 'console', 'hazard', 'concrete', 'ground'];
 export const DECALS = ['nameplate', 'danger', 'eject', 'reactor', 'hydraulic', 'radiation', 'weapons', 'nostep'];
+// every world: cockpit, base, the mech, enemies and mission objects; each world adds its own props
 export const MODELS = [
-  'seat', 'stick', 'throttle', 'radio', 'extinguisher', 'tank', 'hedgehog', 'ruin',
+  'seat', 'stick', 'throttle', 'radio', 'extinguisher', 'tank',
   'mech', 'sandbags', 'crates', 'drums', 'generator', 'enemy_tank', 'enemy_apc', 'mech_rigged',
+  'bunker', 'artillery', 'heli', 'truck', 'aa',
 ];
 export const SOUNDS = [
   'cockpit_hum', 'battle_far', 'footstep', 'servo', 'startup',
@@ -21,7 +25,8 @@ export const SOUNDS = [
   'drone_loop', 'drone_launch', 'wiper',
   'rail_shot', 'gatling', 'flamer', 'cannon_heavy', 'amb_jungle', 'amb_desert', 'rain_loop', 'sandstorm_loop', 'heli_loop', 'arty_whistle',
 ];
-export const VOICES = [...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')), ...VOICE_KEYS, ...Object.keys(TRAINING_TEXT)];
+// the campaign's radio lines (missions 6-30) are fetched when their mission starts
+export const VOICES = [...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')), ...VOICE_KEYS.filter((k) => !(k in CAMPAIGN_TEXT)), ...Object.keys(TRAINING_TEXT)];
 
 /**
  * Loads every generated asset (Higgsfield images/audio, Meshy models) and
@@ -103,23 +108,28 @@ export class Assets {
     this._tick();
   }
 
-  async loadAll() {
+  /** theme: the world to build (see world/themes.js): its floor, sky and props */
+  async loadAll(theme = 'city') {
+    const T = THEMES[theme] ?? THEMES.city;
+    this.theme = T.id;
     const jobs = [];
     for (const s of TEXTURE_SETS) {
       this.tex[s] = {};
-      jobs.push(this._texture(`tex/${s}_c.webp`, true).then((t) => (this.tex[s].c = t)));
-      jobs.push(this._texture(`tex/${s}_n.webp`, false).then((t) => (this.tex[s].n = t)));
-      jobs.push(this._texture(`tex/${s}_orm.webp`, false).then((t) => (this.tex[s].orm = t)));
+      // the ground set is the world's own floor
+      const src = s === 'ground' ? T.ground : s;
+      jobs.push(this._texture(`tex/${src}_c.webp`, true).then((t) => (this.tex[s].c = t)));
+      jobs.push(this._texture(`tex/${src}_n.webp`, false).then((t) => (this.tex[s].n = t)));
+      jobs.push(this._texture(`tex/${src}_orm.webp`, false).then((t) => (this.tex[s].orm = t)));
     }
     for (const f of ['glass_grime', 'smoke', 'fire', 'fireball', 'muzzle', 'crack']) {
       jobs.push(this._texture(`fx/${f}.webp`, f === 'fire' || f === 'fireball' || f === 'muzzle', f === 'glass_grime').then((t) => (this.fx[f] = t)));
     }
     jobs.push(this._json('decals/decals.json').then((j) => (this.decalAspect = j)));
     for (const d of DECALS) jobs.push(this._texture(`decals/${d}.webp`, true, false).then((t) => (this.decals[d] = t)));
-    jobs.push(this._json('sky/pano.json').then((j) => (this.skyMeta = j)));
+    jobs.push(this._json(`${T.sky}/pano.json`).then((j) => (this.skyMeta = j)));
     this.pano = [];
-    for (let k = 0; k < 2; k++) jobs.push(this._texture(`sky/pano_${k}.webp`, true, false).then((t) => (this.pano[k] = t)));
-    for (const m of MODELS) jobs.push(this._model(m));
+    for (let k = 0; k < 2; k++) jobs.push(this._texture(`${T.sky}/pano_${k}.webp`, true, false).then((t) => (this.pano[k] = t)));
+    for (const m of [...MODELS, ...T.models]) jobs.push(this._model(m));
     for (const a of SOUNDS) jobs.push(this._audio(a));
     for (const v of VOICES) jobs.push(this._audio(v, 'voice'));
     this._total = jobs.length;

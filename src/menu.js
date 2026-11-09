@@ -46,6 +46,14 @@ export const ACHIEVEMENTS = [
   { id: 'lance', name: 'Niemand bleibt zurück', desc: 'Mit Lanze gewinnen, ohne einen Flügelmann zu verlieren.' },
   { id: 'dodge', name: 'Ausweichkünstler', desc: '25 Granaten knapp an sich vorbeipfeifen lassen.', goal: 25, counter: 'whizz' },
   { id: 'ace', name: 'Ass', desc: '25 Abschüsse insgesamt.', goal: 25, counter: 'kills' },
+  { id: 'win_c10', name: 'Ritterschlag', desc: 'Den Schwarzen Ritter besiegen (Mission 10).' },
+  { id: 'win_j10', name: 'Großwildjäger', desc: 'Den Jaguar zur Strecke bringen (Mission 20).' },
+  { id: 'win_d10', name: 'Kriegsentscheidung', desc: 'Das Endspiel in der Wüste gewinnen (Mission 30).' },
+  { id: 'world_city', name: 'Herr der Ruinen', desc: 'Alle zehn Missionen in der Stadt gewinnen.' },
+  { id: 'world_jungle', name: 'Grüne Hölle', desc: 'Alle zehn Missionen im Dschungel gewinnen.' },
+  { id: 'world_desert', name: 'Wüstenfuchs', desc: 'Alle zehn Missionen in der Wüste gewinnen.' },
+  { id: 'helis', name: 'Hubschrauberjäger', desc: '5 Kampfhubschrauber abschießen.', goal: 5, counter: 'helis' },
+  { id: 'escort', name: 'Geleitschutz', desc: 'Einen Konvoi ohne Verlust ans Ziel bringen.' },
 ];
 
 export class Achievements {

@@ -4,7 +4,7 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 
 *A browser first-person mech game. You board a 5 m combat robot, bring it up from cold and dark and walk it out of a forward base.*
 
-**Stand: Prototyp 0.5 – Grundausbildung in der Basis, fünf Einsätze, interaktive Displays, Aufklärungsdrohne, Lanze, Pause-Menü mit Einstellungen und Erfolgen.**
+**Stand: Prototyp 0.6 – drei Welten (Stadt, Dschungel, Wüste) mit 30 Missionen, Hangar zum Zusammenstellen des Mechs, Bordcomputer, Aufklärungsdrohne, Lanze, Nacht und Wetter.**
 
 ## Missionskatalog
 
@@ -15,8 +15,66 @@ Ein 3D-Ego-Shooter im Browser: Du steuerst **BB-07**, einen 5 Meter hohen und 18
 | 3 | Schulter an Schulter | Lanze · Verteidigung | Mit Hammer 2 und Hammer 3: Befehle lernen, zwei Wellen (9 Fahrzeuge) abwehren |
 | 4 | Depotschlag | Lanze · Angriff | Mit der Lanze zum Feinddepot (700 m NO), Wachen ausschalten, 4 Depotziele zerstören, Verstärkung abwehren |
 | 5 | Spähtrupp | Aufklärung | Allein vier Fahrzeuge in den Ruinen mit dem Raketensucher markieren, ohne entdeckt zu werden; danach Artillerieschlag und Rückkehr |
+| 6 | Bunkerlinie | Lanze · Angriff | Vier Bunker mit schweren MGs im Norden aufbrechen, dann den Panzer-Gegenangriff abwehren |
+| 7 | Nachtwache | Nacht · Verteidigung | Vier Minuten bis zum Morgen: vier Wellen aus allen Richtungen, Nachtsicht und Scheinwerfer (Licht verrät dich) |
+| 8 | Geleitzug | Lanze · Eskorte | Drei eigene LKW durch die Ruinen nach Norden bringen (fahren nur, wenn du nah bist), zwei Hinterhalte; mindestens zwei müssen ankommen |
+| 9 | Feuerwalze | Artillerie-Jagd | Drei Haubitzen hinter den Ruinen finden und zerstören; ihre Granaten liegen jedes Mal näher, nach der zweiten kommen Panzer |
+| 10 | Der Schwarze Ritter | Lanze · Endkampf | Feindlicher Kampfmech mit Begleitschutz; bei halber Panzerung kommt Verstärkung |
 
-Das Titelmenü zeigt alle Missionen mit Typ, Schwierigkeit, Lanzengröße und – nach einem Sieg – einem Haken mit der besten Zeit (im Browser gespeichert).
+**Dschungel – Tal von Ixtal**
+
+| # | Mission | Typ | Inhalt |
+|---|---|---|---|
+| 11 | Grüne Hölle | Patrouille | Durch den Dschungel zum alten Tempel, Hinterhalt im Unterholz |
+| 12 | Tempelwache | Lanze · Verteidigung | Funkrelais am Tempel gegen drei Wellen halten, die letzte mit Flakpanzer |
+| 13 | Lichtungsfalle | Lanze · Hinterhalt | Kolonne mit fünf LKW in der Lichtung abfangen – höchstens zwei dürfen entkommen |
+| 14 | Flakgürtel | Zerstören | Drei Flakpanzer ausschalten (sie holen die Drohne auf 900 m herunter), danach Luftschlag |
+| 15 | Jäger und Gejagte | Hubschrauber | Zwei, dann ein dritter Kampfhubschrauber mit Bodentruppen |
+| 16 | Funkstille | Nacht · Aufklärung | Nachts ohne Drohne vier Fahrzeuge am Tempel markieren, dann zurück |
+| 17 | Nachschubweg | Abfangen | Sechs LKW auf der Westpiste stoppen – höchstens einer darf durch |
+| 18 | Riegel von Ixtal | Lanze · Sturmangriff | Hügel mit drei Bunkern und zwei Haubitzen nehmen, unter Artilleriefeuer |
+| 19 | Monsun | Regen · Verteidigung | Drei Minuten im Monsun halten: nasse Scheibe, Sicht unter 200 m, ein Hubschrauber |
+| 20 | Der Jaguar | Lanze · Endkampf | Schneller feindlicher Jagdmech mit Flak und Hubschrauber |
+
+**Wüste – Al-Haddar-Becken**
+
+| # | Mission | Typ | Inhalt |
+|---|---|---|---|
+| 21 | Sandsturm | Sturm · Verteidigung | Sicht unter 150 m, Sand auf der Scheibe, Angriffe aus dem Sturm von mehreren Seiten |
+| 22 | Oase | Lanze · Angriff | Bunker am Palmenhain zerstören, dann den Panzer-Gegenangriff abwehren |
+| 23 | Karawane | Lanze · Eskorte | Vier LKW durch die Dünen zum Dorf im Osten, Hubschrauber und Schützenpanzer greifen an; drei müssen ankommen |
+| 24 | Ölfeld | Zerstören | Sechs Tanks und Pumpen am Ölfeld sprengen, Wache und Verstärkung vom Tafelberg |
+| 25 | Langstrecke | Fernkampf | Panzervorstoß auf offener Fläche abfangen, dann die Haubitzen-Batterie |
+| 26 | Geisterdorf | Lanze · Häuserkampf | Lehmdorf räumen: Schützenpanzer zwischen den Häusern, Bunker, Panzer im Dorfkern |
+| 27 | Wüstenfuchs | Abfangen | Acht schnelle LKW mit Panzergeleit queren das Becken – höchstens zwei dürfen durch |
+| 28 | Nachtfalke | Nacht · Hubschrauber | Zwei Rotten Kampfhubschrauber über der Basis, gedeckt von einem Flakpanzer |
+| 29 | Tafelberg | Aufklärung · Angriff | Drei Fahrzeuge markieren, dann die Radarflak auf dem Plateau |
+| 30 | Endspiel | Lanze · Entscheidung | Zwei feindliche Kampfmechs, Panzer und Artillerie |
+
+Das Titelmenü zeigt oben drei Reiter für die Welten (mit gewonnenen Missionen, z. B. „3/10“); ein Klick lädt die gewählte Welt. Darunter stehen die Missionen dieser Welt mit Typ, Schwierigkeit, Lanzengröße und – nach einem Sieg – einem Haken mit der besten Zeit (im Browser gespeichert).
+
+## Drei Welten
+
+| Welt | Gelände | Besonderes |
+|---|---|---|
+| **Stadt** (Sektor Kilo) | Plattenbau-Ruinen, Krater, Asche | Deckung überall, kurze Sichtlinien |
+| **Dschungel** (Tal von Ixtal) | Hügel, dichter Regenwald (Bäume, Palmen, Büsche), Tempelruinen, Felsen, Nebel | Zwei Dickichte zwischen Schütze und Ziel nehmen die Sicht – für beide Seiten; Regenwald-Atmo |
+| **Wüste** (Al-Haddar-Becken) | Dünen, Tafelberge, Lehmdörfer, Oasen, brennende Ölquelle | Weite Sicht, kaum Deckung, Wüstenwind, Sandböen |
+
+Missionen bringen ihr eigenes Wetter mit: **Nacht** (Mondlicht, Nachtsicht N, Scheinwerfer U – Gegner sehen dich bei Licht auf volle Entfernung, sonst nur auf 60 %), **Monsunregen** (Regenschleier, Tropfen auf allen Scheiben, Prasseln) und **Sandsturm** (brauner Dunst, Sand setzt die Scheiben zu, Heulen). Gegen Tropfen und Sand hilft der Scheibenwischer (K).
+
+## Neue Gegner
+
+| Gegner | Verhalten |
+|---|---|
+| **Bunker** | Eingegraben, dreht nur sein schweres MG, hält viel aus (150) |
+| **Haubitze** | Schießt indirekt bis 2,4 km auf die gemeldete Position, ohne Sichtlinie; jede Salve liegt näher (Streuung von 45 m auf 10 m), Pfeifen vor dem Einschlag |
+| **Flakpanzer** | Vierlingskanone, holt die Drohne im Umkreis von 950 m nach kurzer Zielverfolgung herunter |
+| **Kampfhubschrauber** | Kreist in 380 m um sein Ziel, dreht zu Raketenanflügen ein, stürzt brennend ab |
+| **Lastwagen** | Unbewaffnet, fährt eine Route ab und flieht, wenn er getroffen wird; entkommene LKW zählen gegen dich |
+| **Kampfmech** | Gegnerischer Mech mit eigener Gehanimation, 320 Strukturpunkte, schwere Kanone – „Schwarzer Ritter“, „Jaguar“, „Titan“, „Goliath“ |
+
+Eigene LKW im Geleitzug fahren nur, solange BB-07 in 170 m Nähe ist (Anzeige „WARTET“), und werden vom Gegner beschossen wie die Mechs. Gehen zu viele verloren oder entkommen zu viele feindliche LKW, ist die Mission gescheitert. Die Auftragszeile im HUD zeigt Countdown, LKW-Zahl oder Entkommene.
 
 ## Funk mit Gesicht
 
@@ -130,7 +188,7 @@ Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung, 
   - Grafikqualität, Sichtfeld, Mausempfindlichkeit, Y-Invertierung
   - Kopf- und Kabinenbewegung: weniger Schaukeln gegen Reiseübelkeit
   - Lautstärke und Funklautstärke getrennt, Untertitel
-- **Erfolge:** 14 Stück, z. B. Heckschuss, Von oben, Fliegendes Auge, Unberührt, Niemand bleibt zurück. Eine Meldung oben im Bild zeigt jeden neuen Erfolg. Die Liste steht im Pause- und Titelmenü.
+- **Erfolge:** 22 Stück, z. B. Heckschuss, Von oben, Fliegendes Auge, Unberührt, Niemand bleibt zurück, Hubschrauberjäger, Geleitschutz, die drei Boss-Siege und je einer für jede ganz gewonnene Welt. Eine Meldung oben im Bild zeigt jeden neuen Erfolg. Die Liste steht im Pause- und Titelmenü.
 
 Wie BattleBot auf Steam kommen soll und was dafür noch fehlt, steht in [docs/STEAM.md](docs/STEAM.md).
 
@@ -322,6 +380,7 @@ Alle Grafiken, Modelle und Sounds wurden für dieses Projekt generiert:
 | 12 Funksprüche für Mission 2 | Higgsfield (Text-to-Speech, ElevenLabs „Barrett“) | `public/assets/voice/m2_*.mp3` |
 | Gesichter für die Videoverbindung (Ausbilder, Hammer 2, Hammer 3) | Higgsfield: Porträts GPT Image 2.6, sprechende Clips Higgsfield Intone | `public/assets/faces/`, `public/assets/video/face_*` |
 | 17 Funksprüche für die Missionen 3–5, je 8 für Hammer 2 und Hammer 3 | Higgsfield (Text-to-Speech, ElevenLabs „Barrett“, „Knox“ und „Vera“; per Spracherkennung geprüft) | `public/assets/voice/m3_* … w3_*.mp3` |
+| 101 Funksprüche für die Missionen 6–30 (werden erst beim Missionsstart geladen) | Higgsfield (Seed Audio, Stimme des Ausbilders) | `public/assets/voice/{c,j,d}*_*.mp3` |
 
 `tools/process-assets.mjs` macht daraus spielfertige Dateien: Normal-Maps und gepackte ORM-Maps (Ambient Occlusion, Rauheit, Metallanteil) werden aus den Farbtexturen abgeleitet (Rost = rau und nicht-metallisch, blanker Stahl = metallisch), Texturen werden nahtlos gemacht, das Panorama wird horizontal nahtlos überblendet, die Decals ausgeschnitten und die GLBs mit WebP-Texturen und Meshopt komprimiert. Die Rohdateien liegen in `assets-src/` (nicht im Repo).
 
@@ -346,7 +405,10 @@ src/
   menu.js              Einstellungen, Erfolge, Pause-Menü (localStorage, Steam-IDs)
   touch.js             Touch-Steuerung für Tablets und Handys (Schubhebel, Lenkfeld, Feuerknöpfe, Mehrfinger-Umsehen)
   world/mechwalk.js    Prozeduraler Mech-Gang: Bein-IK, gepflanzte Füße, Schritte synchron zur Gangsimulation
-  missions.js          Missionskatalog: Definitionen, Wellen, Ziele, Funksprüche, Ablauf
+  missions.js          Missionskatalog und Laufzeit: Gruppen, Halte-Timer, Konvoi, Auslöser, Hinterhalte, Fehlschlag
+  campaign.js          Missionen 6–30 (Stadt, Dschungel, Wüste) aus Bausteinen, ihre Funksprüche
+  combat/convoy.js     Eigene LKW im Geleitzug: Route, Abstand, Treffer, Ankunft
+  world/themes.js      Die drei Welten: Himmel, Boden, Licht, Nebel, Partikel, Atmo, Modelle
   combat/allies.js     Verbündete Mechs: Modelle, Gehanimation, Waffen, Treffer, Wracks
   cockpit/comms.js     Videoverbindung: wer spricht, Clip abspielen
   logic/allies.js      Flügelmann-Logik: Befehle, Formation, Bewegung, Feuer (getestet)
@@ -360,7 +422,7 @@ src/
   combat/enemies.js    Panzer/Schützenpanzer: abgetrennter Drehturm, ballistische Granaten mit Kollision, Nebelwände, Deckungssuche, Wracks
   combat/hmd.js        Helmdisplay (Schub, Waffen, Zielmarken, Trefferrichtung)
   combat/gunrig.js     sichtbarer Waffenarm: Kanone + MG, Schwenken, Rücklauf, Hitzeglühen, Hülsen
-  logic/combat.js      Waffen, Richtschütze (Vorhalt, Streuung), Panzerung nach Richtung, Trefferzonen, Systemschäden, Gegnertaktik (getestet)
+  logic/combat.js      Waffen, Richtschütze (Vorhalt, Streuung), Panzerung nach Richtung, Trefferzonen, Systemschäden, Gegnertaktik und -typen (Bunker, Haubitze, Flak, Hubschrauber, LKW, Mech; getestet)
   logic/mech.js        reine Bewegungslogik (getestet)
   logic/systems.js     Strom, APU, Hydraulik, Kühlung, Reaktor, Gyro, Beinverriegelung (getestet)
   logic/gait.js        Gang: Gewichtsverlagerung, Nachschwingen, Kopf-Feder, Pendel (getestet)
@@ -369,7 +431,7 @@ src/
   cockpit/displays.js  Glas-Displays (Status mit Systemmatrix, Zielkamera, Taktik-Lagebild, Seiten des Bordcomputers)
   cockpit/computer.js  Bordcomputer: Reiter, eingebettete Seiten, Seitenleisten
   cockpit/hud.js       Head-up-Display
-  world/world.js       Gelände, Panorama, Ruinen, Wracks
+  world/world.js       Gelände je Welt (Stadt, Dschungel-Hügel, Dünen), Panorama, Ruinen, Vegetation, Dörfer, Wracks, Nacht, Wetter
   world/effects.js     Feuer, Rauch, Asche, Leuchtspur, Artillerie
   audio.js  post.js  input.js  ui.js  assets.js  geom.js
 ```
