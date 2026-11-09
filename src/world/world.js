@@ -967,30 +967,94 @@ export class World {
   /* ------------------------------------------------------------- beacons */
 
   buildBeacons() {
-    this.beacons = WAYPOINTS.map((wp) => {
-      const g = new THREE.Group();
-      const y = this.heightAt(wp.x, wp.z);
-      g.position.set(wp.x, y, wp.z);
-      const pole = new THREE.Mesh(cyl(0.08, 0.1, 6, 8, 0.5), this.m.hazard);
-      pole.position.y = 3;
-      const lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 6, 1.2) });
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), lampMat);
-      lamp.position.y = 6.2;
-      g.add(pole, lamp);
-      g.visible = false;
-      this.scene.add(g);
-      this.contacts.push({ x: wp.x, z: wp.z, type: 'wp', hidden: true });
-      return { ...wp, y, group: g, lampMat, contact: this.contacts[this.contacts.length - 1] };
-    });
+    this.beacons = WAYPOINTS.map((wp) => this.makeBeacon(wp));
     this.activeBeacon = -1;
   }
 
+  makeBeacon(wp) {
+    const g = new THREE.Group();
+    const y = this.heightAt(wp.x, wp.z);
+    g.position.set(wp.x, y, wp.z);
+    const pole = new THREE.Mesh(cyl(0.08, 0.1, 6, 8, 0.5), this.m.hazard);
+    pole.position.y = 3;
+    const lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 6, 1.2) });
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), lampMat);
+    lamp.position.y = 6.2;
+    g.add(pole, lamp);
+    g.visible = false;
+    this.scene.add(g);
+    const contact = { x: wp.x, z: wp.z, type: 'wp', hidden: true };
+    this.contacts.push(contact);
+    return { ...wp, y, group: g, lampMat, contact };
+  }
+
+  /**
+   * i: index of a fixed waypoint, or {x, z, label} for one a mission sets anywhere.
+   * Returns the active index (or null).
+   */
   setWaypoint(i) {
+    if (i && typeof i === 'object') {
+      if (!this.customBeacon) {
+        this.customBeacon = this.makeBeacon(i);
+        this.beacons.push(this.customBeacon);
+      }
+      const b = this.customBeacon;
+      b.x = i.x;
+      b.z = i.z;
+      b.label = i.label || 'ZIEL';
+      b.y = this.heightAt(i.x, i.z);
+      b.group.position.set(i.x, b.y, i.z);
+      b.contact.x = i.x;
+      b.contact.z = i.z;
+      i = this.beacons.indexOf(b);
+    }
     this.activeBeacon = i ?? -1;
     this.beacons.forEach((b, k) => {
       b.group.visible = k === this.activeBeacon;
       b.contact.hidden = k !== this.activeBeacon;
     });
+    return this.activeBeacon >= 0 ? this.activeBeacon : null;
+  }
+
+  /* ------------------------------------------------------ night, weather */
+
+  /**
+   * Night: a dark sky and haze, a little moonlight; our lamps and the night vision matter.
+   */
+  setNight(on) {
+    this.day ??= {
+      hemi: this.hemi.intensity,
+      sun: this.sun.intensity,
+      sunColor: this.sun.color.clone(),
+      fog: this.scene.fog.color.clone(),
+      bg: this.scene.background.clone(),
+      exposure: this.skyUniforms.exposure.value,
+      env: this.scene.environmentIntensity ?? 1,
+    };
+    const d = this.day;
+    this.night = on;
+    this.hemi.intensity = on ? d.hemi * 0.07 : d.hemi;
+    this.sun.intensity = on ? 0.16 : d.sun;
+    this.sun.color.copy(on ? new THREE.Color(0.55, 0.65, 1) : d.sunColor);
+    this.scene.fog.color.copy(on ? d.fog.clone().multiplyScalar(0.06) : d.fog);
+    this.scene.background.copy(on ? d.bg.clone().multiplyScalar(0.06) : d.bg);
+    this.skyUniforms.exposure.value = on ? 0.07 : d.exposure;
+    this.scene.environmentIntensity = on ? 0.08 : d.env;
+  }
+
+  /**
+   * Weather: 'rain' (jungle downpour: thick air, rain streaks), 'sandstorm' (desert: a
+   * brown wall, sand everywhere), or null. The effects own the particles, the game the sound.
+   */
+  setWeather(kind) {
+    this.weather = kind;
+    this.fog0 ??= this.scene.fog.density;
+    this.fogColor0 ??= this.scene.fog.color.clone();
+    this.scene.fog.density = kind === 'rain' ? this.fog0 * 2.2 : kind === 'sandstorm' ? 0.011 : this.fog0;
+    if (kind === 'sandstorm') this.scene.fog.color.setRGB(0.55, 0.38, 0.22, THREE.SRGBColorSpace);
+    else if (!this.night) this.scene.fog.color.copy(this.fogColor0);
+    if (kind === 'rain') this.scene.fog.color.multiplyScalar(0.7);
+    this.effects.setWeather?.(kind);
   }
 
   /* -------------------------------------------------------------- update */

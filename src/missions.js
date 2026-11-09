@@ -3,6 +3,7 @@
 import { Vector3 } from 'three';
 import { WAYPOINTS } from './tutorial.js';
 import { ENEMY_TYPES } from './logic/combat.js';
+import { CAMPAIGN, CAMPAIGN_TEXT } from './campaign.js';
 
 const near = (g, wp, r) => Math.hypot(g.mech.x - wp.x, g.mech.z - wp.z) < r;
 const wp = (label) => WAYPOINTS.find((w) => w.label === label);
@@ -60,6 +61,7 @@ export const MISSION_TEXT = {
   w3_hit: 'Hammer drei, ich habe Treffer abbekommen!',
   w3_down: 'Hammer drei, Mech verloren, ich steige aus!',
   w3_ff: 'Hammer drei, Achtung, Sie schießen auf mich!',
+  ...CAMPAIGN_TEXT,
 };
 export const VOICE_KEYS = Object.keys(MISSION_TEXT);
 
@@ -209,6 +211,7 @@ export const MISSIONS = [
     comms: 'HQ: BB-07, Funkstille ab jetzt.',
     winText: 'Alle Ziele markiert und vernichtet.',
   },
+  ...CAMPAIGN,
 ];
 
 /* ------------------------------------------------------------- runtime */
@@ -223,11 +226,205 @@ export class Mission {
     this.marked = 0;
     this.detected = false;
     this.reinforced = false;
+    this.holds = {};
+    this.escaped = 0;
+    this.fired = new Set(); // triggers and ambushes that already went off
+  }
+
+  /* ------------------------------------------------ places and groups */
+
+  /** [bearing°, distance] around a centre (the base by default), or { x, z } as it is */
+  pt(p, c = [0, 0]) {
+    if (!Array.isArray(p)) return [p.x, p.z];
+    const a = (p[0] * Math.PI) / 180;
+    return [c[0] + Math.sin(a) * p[1], c[1] - Math.cos(a) * p[1]];
+  }
+
+  near(at, r) {
+    const [x, z] = this.pt(at);
+    return Math.hypot(this.g.mech.x - x, this.g.mech.z - z) < r;
+  }
+
+  waypointAt(at, label = 'ZIEL') {
+    const [x, z] = this.pt(at);
+    return { x, z, label: label.length > 14 ? 'ZIEL' : label.toUpperCase() };
+  }
+
+  /**
+   * A group of enemies under one name. specs: { t: type, b: bearing°, d: distance from the
+   * centre, goal: 'here' (dug in / parked) | 'player' | 'convoy' | [bearing, distance] |
+   * default (drive at the centre), path (trucks), label, tint, speed, engage }.
+   * Adds to the group if it exists, so a step can top up a group spawned earlier.
+   */
+  spawnGroup(name, specs, center) {
+    const c = center ? this.pt(center) : [0, 0];
+    const E = this.g.enemies;
+    const list = (this.waves[name] ??= []);
+    for (const s of specs) {
+      let [x, z] = this.pt([s.b, s.d], c);
+      if (s.t !== 'heli') [x, z] = this.freeSpot(x, z, s.t === 'bunker' || s.t === 'artillery' ? 8 : s.t === 'mech' ? 6 : 5);
+      let goal;
+      let hold = false;
+      if (s.goal === 'here') {
+        goal = [x, z];
+        hold = true;
+      } else if (s.goal === 'player') goal = [this.g.mech.x, this.g.mech.z];
+      else if (s.goal === 'convoy') goal = this.convoyPoint(x, z);
+      else if (s.goal) goal = this.pt(s.goal, c);
+      else goal = [c[0] + (x - c[0]) * 0.25, c[1] + (z - c[1]) * 0.25];
+      const T = ENEMY_TYPES[s.t];
+      // dug-in guns face where the attack comes from: our base
+      const heading = T.emplaced ? Math.atan2(x, z) : undefined;
+      const path = s.path?.map((q) => this.pt(q, c));
+      const e = E.spawn(s.t, x, z, goal, name, { heading, engage: s.engage, label: s.label, tint: s.tint, path, speed: s.t === 'truck' ? s.speed : undefined });
+      if (hold) e.hold = true;
+      if (s.t === 'mech' && s.speed) e.speedMul = s.speed / T.speed;
+      list.push(e);
+    }
+    return list;
+  }
+
+  /** how many of a group are down (optionally only one type) */
+  dead(name, type) {
+    return (this.waves[name] || []).filter((e) => e.state === 'dead' && (!type || e.type === type)).length;
+  }
+
+  /** a group is settled when everything in it is dead or got away */
+  settled(name) {
+    return !!this.waves[name] && this.waves[name].every((e) => e.state === 'dead' || e.escaped);
+  }
+
+  /** hit points left of the first battle mech in a group, 0..1 */
+  bossHp(name) {
+    const b = (this.waves[name] || []).find((e) => e.type === 'mech');
+    if (!b) return 1;
+    return b.state === 'dead' ? 0 : b.hp / ENEMY_TYPES.mech.hp;
+  }
+
+  /* ------------------------------------------------ hold out */
+
+  /** hold for `secs` while the schedule's groups arrive: [{ at, name, voice, group }] */
+  startHold(key, secs, schedule) {
+    this.holds[key] = { t0: this.g.time, secs, schedule, names: [] };
+  }
+
+  holdLeft(key) {
+    const h = this.holds[key];
+    return h ? Math.max(0, h.secs - (this.g.time - h.t0)) : 0;
+  }
+
+  /** time is up and the last attackers are (nearly) beaten, or a minute and a half later anyway */
+  holdDone(key) {
+    const h = this.holds[key];
+    if (!h) return false;
+    const t = this.g.time - h.t0;
+    if (t < h.secs || h.names.length < h.schedule.length) return false;
+    const left = h.names.reduce((n, k) => n + this.waves[k].filter((e) => e.state !== 'dead' && !e.escaped).length, 0);
+    return left <= 1 || t > h.secs + 90;
+  }
+
+  /* ------------------------------------------------ convoys */
+
+  convoyPath() {
+    return this.def.convoy.path.map((q) => this.pt(q));
+  }
+
+  /** the point of our convoy's route nearest to (x, z): where an ambush drives to */
+  convoyPoint(x, z) {
+    if (!this.def.convoy) return [this.g.mech.x, this.g.mech.z];
+    let best = null;
+    let bd = Infinity;
+    for (const p of this.convoyPath()) {
+      const d = Math.hypot(p[0] - x, p[1] - z);
+      if (d < bd) [bd, best] = [d, p];
+    }
+    return best;
+  }
+
+  startConvoy() {
+    const c = this.def.convoy;
+    this.g.convoy.spawn(this.convoyPath(), c.count);
+    this.convoyOn = true;
+  }
+
+  convoyDone() {
+    const v = this.g.convoy;
+    return this.convoyOn && v.trucks.every((t) => t.dead || t.arrived) && v.arrived >= this.def.convoy.need;
+  }
+
+  /* ------------------------------------------------ strikes */
+
+  /** our jets: a carpet of bombs around a point (cosmetic, plus whatever stands there) */
+  airStrike(at, n = 6) {
+    const g = this.g;
+    const [cx, cz] = this.pt(at);
+    g.sound.jet?.();
+    for (let k = 0; k < n; k++) {
+      setTimeout(() => {
+        if (g.mission !== this) return;
+        const x = cx + (Math.random() - 0.5) * 120;
+        const z = cz + (Math.random() - 0.5) * 120;
+        const y = g.world.heightAt(x, z);
+        g.world.effects.explosion(x, y + 1, z, 14);
+        g.explosionSound(new Vector3(x, y, z), 1.4);
+        for (const e of g.enemies.alive()) if (Math.hypot(e.x - x, e.z - z) < 25) g.enemies.damage(e, 999);
+      }, 1500 + k * 380);
+    }
+  }
+
+  /** a depot of n targets around a free spot near `at`, with its guards */
+  setupDepotAt(at, n, guards) {
+    const [x0, z0] = this.pt(at);
+    const [cx, cz] = this.freeSpot(x0, z0, 26);
+    const models = ['drums', 'generator', 'crates', 'drums', 'generator', 'drums', 'crates', 'drums'];
+    const E = this.g.enemies;
+    this.waves.depot = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const r = 9 + (i % 2) * 7;
+      const x = cx + Math.cos(a) * r;
+      const z = cz + Math.sin(a) * r;
+      this.waves.depot.push(E.spawn('depot', x, z, [x, z], 'depot', { model: models[i % models.length], heading: Math.random() * 6 }));
+    }
+    this.spawnGroup('guard', guards, { x: cx, z: cz });
+    this.depotAt = [cx, cz];
+  }
+
+  /* ------------------------------------------------ status */
+
+  /** a word for the objective line: countdown, convoy count */
+  status() {
+    const st = this.g.tutorial?.step;
+    if (!st) return '';
+    const h = this.holds[st.id];
+    if (h) {
+      const t = Math.ceil(this.holdLeft(st.id));
+      return t > 0 ? `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` : 'LETZTE GEGNER';
+    }
+    if (this.convoyOn && st.id === 'escort') {
+      const v = this.g.convoy;
+      return `LKW ${v.alive}/${v.trucks.length}${v.waiting ? ' · WARTET' : ''}`;
+    }
+    if (this.def.escapeLimit != null && this.escaped) return `ENTKOMMEN ${this.escaped}/${this.def.escapeLimit}`;
+    return '';
+  }
+
+  /** a truck of theirs got away */
+  onEscaped() {
+    this.escaped++;
+    this.g.hmd.notify(`LKW ENTKOMMEN ${this.escaped}/${this.def.escapeLimit ?? '-'}`, '#ffb070', 2.5);
   }
 
   /** objective done: what is left of the enemy breaks off */
   finish() {
     this.ended = true;
+  }
+
+  /** the objective is lost (convoy gone, too many got away) */
+  fail(reason) {
+    if (this.failed) return;
+    this.failed = true;
+    this.g.failMission(reason);
   }
 
   spawnWave(n) {
@@ -287,6 +484,7 @@ export class Mission {
   /** recon: vehicles parked next to ruins in the west, with a short detection range */
   setupRecon() {
     const r = this.def.recon;
+    this.reconMark = r.mark ?? 4;
     // far enough from the base that the start is not already inside their detection range
     const ok = (x, z) => Math.hypot(x, z) > r.minBase;
     const ruins = this.g.world.colliders.filter((c) => c.r > 3 && ok(c.x, c.z) && Math.hypot(c.x - r.x, c.z - r.z) < 220);
@@ -302,15 +500,16 @@ export class Mission {
     }
     const types = ['tank', 'apc', 'tank', 'apc', 'tank'];
     this.waves.recon = spots.map(([x, z], i) => this.g.enemies.spawn(types[i % types.length], x, z, [x, z], 'recon', { engage: 280, heading: Math.random() * 6 }));
+    for (const e of this.waves.recon) e.hold = true; // parked
   }
 
   /** recon: the seeker locked a vehicle */
   mark(e) {
-    if (e.marked || this.def.id !== 'm5') return;
+    if (e.marked || !this.def.recon || e.wave !== 'recon' || this.marked >= this.reconMark) return;
     e.marked = true;
     this.marked++;
-    this.g.hmd.notify(`ZIEL MARKIERT ${this.marked}/4`, '#a6ffb8', 2);
-    if (this.marked < 4) this.call('m5_02', 3);
+    this.g.hmd.notify(`ZIEL MARKIERT ${this.marked}/${this.reconMark}`, '#a6ffb8', 2);
+    if (this.marked < this.reconMark) this.call(this.def.recon.voice ?? 'm5_02', 3);
   }
 
   /** recon payoff: the guns fall on everything that was marked */
@@ -331,8 +530,50 @@ export class Mission {
     });
   }
 
-  /** per frame: reinforcements, detection */
+  /** per frame: reinforcements, detection, schedules, triggers, ambushes, failure */
   update() {
+    const g = this.g;
+    if (this.ended || g.dead || this.failed) return;
+    // hold-outs: groups arrive on time
+    for (const [key, h] of Object.entries(this.holds)) {
+      const t = g.time - h.t0;
+      for (const s of h.schedule) {
+        const name = `${key}_${s.name}`;
+        if (t < s.at || h.names.includes(name)) continue;
+        h.names.push(name);
+        this.spawnGroup(name, s.group);
+        if (s.voice) this.call(s.voice, 0);
+      }
+    }
+    // ambushes along a convoy's route
+    const st = g.tutorial?.step;
+    if (st?.ambush && this.convoyOn) {
+      for (const a of st.ambush) {
+        if (this.fired.has(a) || g.convoy.progress < a.at) continue;
+        this.fired.add(a);
+        this.spawnGroup(a.name, a.group);
+        if (a.voice) this.call(a.voice, 0);
+      }
+    }
+    // scripted events
+    for (const tr of this.def.triggers || []) {
+      if (this.fired.has(tr) || !tr.when(g, this)) continue;
+      this.fired.add(tr);
+      tr.run(g, this);
+    }
+    // failure
+    const c = this.def.convoy;
+    if (c && this.convoyOn && g.convoy.alive < c.need) return this.fail(`Der Konvoi ist verloren: nur ${g.convoy.alive} von ${c.count} LKW übrig.`);
+    if (this.def.escapeLimit != null && this.escaped > this.def.escapeLimit) return this.fail(`${this.escaped} feindliche LKW sind entkommen.`);
+    const r = this.def.recon;
+    if (r && this.def.id !== 'm5' && !this.detected && (this.waves.recon || []).some((e) => e.state === 'engage' || e.hp < ENEMY_TYPES[e.type].hp)) {
+      this.detected = true;
+      for (const e of this.waves.recon) {
+        e.engage = undefined;
+        e.hold = false;
+      }
+      if (r.detected) this.call(r.detected, 0);
+    }
     if (this.def.id === 'm4' && !this.reinforced && this.waves.depot && this.waves.depot.some((e) => e.state === 'dead')) {
       this.reinforced = true;
       this.spawnWave('reinforce');
@@ -340,7 +581,10 @@ export class Mission {
     }
     if (this.def.id === 'm5' && !this.detected && (this.waves.recon || []).some((e) => e.state === 'engage' || e.hp < ENEMY_TYPES[e.type].hp)) {
       this.detected = true;
-      for (const e of this.waves.recon) e.engage = undefined; // the whole group is alerted
+      for (const e of this.waves.recon) {
+        e.engage = undefined; // the whole group is alerted
+        e.hold = false;
+      }
       this.call('m5_03', 0);
     }
   }

@@ -180,7 +180,7 @@ export class Tutorial {
     }
     this.ui.checklist(this.steps, i, this.title);
     if (s.voice) this.g.say(s.voice, this.text[s.voice]);
-    this.g.setWaypoint(s.waypoint ?? null);
+    this.g.setWaypoint(typeof s.waypoint === 'function' ? s.waypoint(this.g) : s.waypoint ?? null);
     s.start?.(this.g);
   }
 

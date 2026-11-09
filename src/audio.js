@@ -205,6 +205,48 @@ export class Sound {
     this.levels = { hum: 0, battle: 0, base: 0, walk: 0 };
   }
 
+  /** radio lines that are not loaded with the game (the campaign's): fetched on demand */
+  async loadVoices(keys) {
+    const base = import.meta.env.BASE_URL + 'assets/voice/';
+    await Promise.all(
+      keys
+        .filter((k) => !this.buf[k] && !this.raw[k])
+        .map(async (k) => {
+          try {
+            const r = await fetch(base + k + '.mp3');
+            if (!r.ok) return;
+            const ab = await r.arrayBuffer();
+            if (this.ctx) this.buf[k] = await this.ctx.decodeAudioData(ab);
+            else this.raw[k] = ab; // decoded by init()
+          } catch (e) {
+            console.warn('voice missing', k);
+          }
+        }),
+    );
+  }
+
+  /** rain drumming on the canopy or the sandstorm howling outside; null fades it out */
+  setWeather(kind) {
+    if (!this.ctx) return;
+    const name = kind === 'rain' ? 'rain_loop' : kind === 'sandstorm' ? 'sandstorm_loop' : null;
+    if ((this.weatherLoop?.name ?? null) === name) return;
+    const old = this.weatherLoop;
+    if (old) {
+      old.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.5);
+      setTimeout(() => {
+        try {
+          old.src.stop();
+        } catch {}
+      }, 2500);
+    }
+    this.weatherLoop = null;
+    if (!name || !this.buf[name]) return;
+    const l = this.loop(name, 0);
+    l.name = name;
+    l.gain.gain.setTargetAtTime(kind === 'rain' ? 0.5 : 0.6, this.ctx.currentTime, 1.2);
+    this.weatherLoop = l;
+  }
+
   /** inside: 0 = standing outside, 1 = in the cockpit with the hatch closed */
   setMix({ hum = 0, battle = 0.85, base = 0, walk = 0 }) {
     if (!this.ctx || !this.hum) return;

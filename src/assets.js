@@ -4,6 +4,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { VOICE_KEYS } from './missions.js';
 import { TRAINING_TEXT } from './tutorial.js';
 import { THEMES } from './world/themes.js';
+import { CAMPAIGN_TEXT } from './campaign.js';
 
 const BASE = import.meta.env.BASE_URL + 'assets/';
 
@@ -24,7 +25,8 @@ export const SOUNDS = [
   'drone_loop', 'drone_launch', 'wiper',
   'rail_shot', 'gatling', 'flamer', 'cannon_heavy', 'amb_jungle', 'amb_desert', 'rain_loop', 'sandstorm_loop', 'heli_loop', 'arty_whistle',
 ];
-export const VOICES = [...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')), ...VOICE_KEYS, ...Object.keys(TRAINING_TEXT)];
+// the campaign's radio lines (missions 6-30) are fetched when their mission starts
+export const VOICES = [...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')), ...VOICE_KEYS.filter((k) => !(k in CAMPAIGN_TEXT)), ...Object.keys(TRAINING_TEXT)];
 
 /**
  * Loads every generated asset (Higgsfield images/audio, Meshy models) and

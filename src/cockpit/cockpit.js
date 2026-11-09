@@ -773,6 +773,29 @@ export class Cockpit {
     }
   }
 
+  /** rain: clear drops beading on every screen; they blur the view like dirt */
+  rainGlass(amount) {
+    for (const G of Object.values(this.panes)) {
+      const g = G.g;
+      const n = Math.round(amount * 600 * (G.cv.width / 512));
+      for (let k = 0; k < n; k++) {
+        const x = Math.random() * G.cv.width;
+        const y = Math.random() * G.cv.height;
+        const r = 1.5 + Math.random() * 3.5;
+        const grd = g.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+        grd.addColorStop(0, 'rgba(225,232,240,0.38)');
+        grd.addColorStop(0.7, 'rgba(120,135,150,0.24)');
+        grd.addColorStop(1, 'rgba(60,70,80,0)');
+        g.fillStyle = grd;
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+        this.grimeAdd(G, x, y, r, 0.04);
+      }
+      G.dirty = true;
+    }
+  }
+
   /** how dirty a screen is, 0..1 (the middle counts double: that is where one looks) */
   grimeLevel(pane = 'front') {
     const G = this.panes[pane];

@@ -104,12 +104,12 @@ export class UI {
   }
 
   /** end of a fight: title, stats, retry / menu */
-  result({ win, rows, tag, sub }, onRetry, onMenu) {
+  result({ win, rows, tag, sub, head }, onRetry, onMenu) {
     const el = $('result');
     el.classList.toggle('win', win);
     el.classList.toggle('lose', !win);
     el.querySelector('.rtag').textContent = tag || '';
-    el.querySelector('h2').textContent = win ? 'MISSION ERFÜLLT' : 'MECH ZERSTÖRT';
+    el.querySelector('h2').textContent = head || (win ? 'MISSION ERFÜLLT' : 'MECH ZERSTÖRT');
     el.querySelector('.rsub').textContent = sub || (win ? 'Ziel erreicht.' : 'BB-07 ist ausgefallen. Mission fehlgeschlagen.');
     const t = el.querySelector('table');
     t.innerHTML = '';
