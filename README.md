@@ -261,7 +261,7 @@ Auf Touch-Geräten erscheinen automatisch Bedienelemente; in den Einstellungen l
 | rechts | FEUER | halten = Kanone (zeigt die Munition) |
 | rechts | MG | halten = Maschinengewehr |
 | rechts | RAKETE, ZIEL, ZOOM | Rakete starten, nächstes Ziel zuweisen, Zoom halten |
-| oben | Pause, DROHNE, COMP, WISCHER, KARTE, LANZE | Pause-Menü, Drohne starten oder zurückrufen, Bordcomputer, Scheibenwischer, Taktikkarte, Lanzenbefehle (Folgen, Halten, Angriff) |
+| oben | Pause, DROHNE, COMP, WISCHER, LICHT, NEBEL, KARTE, LANZE | Pause-Menü, Drohne starten oder zurückrufen, Bordcomputer, Scheibenwischer, Scheinwerfer, Nebelwand, Taktikkarte, Lanzenbefehle (Folgen, Halten, Angriff) |
 | übriger Bildschirm | Wischen | umsehen; das geht auch gleichzeitig mit gedrücktem Feuerknopf, weil jeder Finger einzeln verfolgt wird |
 | Cockpit | Antippen | Schalter und Displays bedienen |
 

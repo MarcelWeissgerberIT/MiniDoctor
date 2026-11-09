@@ -30,6 +30,8 @@ const html = `
     <button class="t-btn t-u" data-key="KeyQ" data-tap="1">DROHNE</button>
     <button class="t-btn t-u" data-key="Digit7" data-tap="1">COMP</button>
     <button class="t-btn t-u" data-key="KeyK" data-tap="1">WISCHER</button>
+    <button class="t-btn t-u" data-key="KeyU" data-tap="1">LICHT</button>
+    <button class="t-btn t-u" data-key="KeyJ" data-tap="1">NEBEL</button>
     <button class="t-btn t-u" data-key="KeyM" data-tap="1">KARTE</button>
     <button class="t-btn t-u" data-lance="1">LANZE</button>
     <div class="t-lance">
