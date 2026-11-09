@@ -42,13 +42,41 @@ export const MISSILE = {
   accel: 260,
   turn: 1.8, // rad/s
   life: 12,
-  gimbal: (75 * Math.PI) / 180, // a designated target may lie this far off the hull axis
+  gimbal: (110 * Math.PI) / 180, // the launcher swivels this far off the hull axis (a lased target: any way)
+  laserLock: 0.3, // s to lock a target the drone lases (no seeker search needed)
+  boostSpeed: 130, // m/s a missile leaves the rail with when it flies a set angle without a lock
   loft: 95, // m a top-attack missile climbs over the cover
   guided: true, // false: unguided rockets that fly to the aim point (hangar: RW-24)
   burst: 1, // rockets per press of an unguided launcher
   speedTop: 170, // m/s a top-attack missile cruises at
   climbOut: 40, // m it first climbs steeply off the pod before it turns toward the target
 };
+
+/** the enemy's anti-tank guided missile (APCs, battle mechs): slow enough to see coming */
+export const ATGM = {
+  speed: 150, // m/s cruise
+  turn: 1.0, // rad/s
+  life: 10, // s
+  damage: [13, 19],
+};
+
+/**
+ * Will a projectile at p moving with v pass within `r` of c in the next `horizon` seconds?
+ * Returns the time of closest approach, or -1. (The missile defence decides on this.)
+ */
+export function closingOn(p, v, c, r, horizon) {
+  const rx = c.x - p.x;
+  const ry = c.y - p.y;
+  const rz = c.z - p.z;
+  const v2 = v.x * v.x + v.y * v.y + v.z * v.z;
+  if (v2 < 1e-6) return -1;
+  const t = (rx * v.x + ry * v.y + rz * v.z) / v2;
+  if (t < 0 || t > horizon) return -1;
+  const mx = rx - v.x * t;
+  const my = ry - v.y * t;
+  const mz = rz - v.z * t;
+  return Math.hypot(mx, my, mz) < r ? t : -1;
+}
 
 /* --------------------------------------------------------------- tracks */
 
@@ -70,7 +98,7 @@ export const ENEMY_TYPES = {
   tank: { hp: 100, speed: 7, engage: 560, reload: [6, 9], shellSpeed: 800, damage: [10, 17], burst: 1, radius: 3.4, height: 2.6, traverse: 0.7, skill: 1 },
   // static supply depot targets (fuel, generators, ammunition)
   depot: { hp: 70, speed: 0, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.6, height: 2.2, static: true },
-  apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4, traverse: 1.4, skill: 0.7 },
+  apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4, traverse: 1.4, skill: 0.7, atgm: { range: [200, 900], reload: [26, 38] } },
   // dug in: a concrete pillbox with a heavy machine gun; it turns its gun, not itself
   bunker: { hp: 150, speed: 0, engage: 450, reload: [3.5, 5], shellSpeed: 950, damage: [1.5, 3], burst: 4, radius: 3.6, height: 3.0, traverse: 1.6, skill: 0.5, emplaced: true },
   // a howitzer far behind the line: it needs no sight of us, its shells walk in salvo by salvo
@@ -82,7 +110,7 @@ export const ENEMY_TYPES = {
   // unarmed supply truck on a road: drives its route, flees when shot at
   truck: { hp: 35, speed: 11, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.8, height: 3.0, traverse: 0, skill: 0, unarmed: true },
   // an enemy battle mech: tough, a fast-turning torso, cannon bursts
-  mech: { hp: 320, speed: 6, engage: 700, reload: [3.2, 4.2], shellSpeed: 1150, damage: [6.5, 9.5], burst: 3, radius: 2.6, height: 5.0, traverse: 2.4, skill: 1.1, walker: true },
+  mech: { hp: 320, speed: 6, engage: 700, reload: [3.2, 4.2], shellSpeed: 1150, damage: [6.5, 9.5], burst: 3, radius: 2.6, height: 5.0, traverse: 2.4, skill: 1.1, walker: true, atgm: { range: [200, 1100], reload: [17, 25] } },
 };
 
 export const PARTS = ['head', 'torso', 'larm', 'rarm', 'lleg', 'rleg'];
@@ -163,7 +191,8 @@ export function stepLock(w, candidates, dt, live) {
     // a target picked on the display: the seeker slews to it within its gimbal, and needs
     // either its own view of it or a drone mark to guide on
     const d = candidates.find((c) => c.id === m.designated);
-    if (d && d.dist <= MISSILE.lockRange && (d.gimbal ?? 0) <= MISSILE.gimbal && (d.visible !== false || d.marked)) best = d;
+    // a lased target is reached over the top whichever way it lies; one in sight within the swivel
+    if (d && d.dist <= MISSILE.lockRange && (d.marked || (d.visible !== false && (d.gimbal ?? 0) <= MISSILE.gimbal))) best = d;
   } else {
     for (const c of candidates) {
       if (c.visible === false) continue;
@@ -181,8 +210,11 @@ export function stepLock(w, candidates, dt, live) {
     m.target = best.id;
     m.lockT = 0;
   }
-  m.lockT = Math.min(MISSILE.lockTime, m.lockT + dt);
-  m.locked = m.lockT >= MISSILE.lockTime;
+  // the drone's laser spot: the seeker only has to see the spot, it locks at once
+  const need = best.marked ? Math.min(MISSILE.lockTime, MISSILE.laserLock) : MISSILE.lockTime;
+  m.lockNeed = need;
+  m.lockT = Math.min(need, m.lockT + dt);
+  m.locked = m.lockT >= need;
 }
 
 export function fireMissile(w, live) {

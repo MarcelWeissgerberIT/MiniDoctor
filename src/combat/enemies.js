@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { ENEMY_TYPES, createEnemy, stepEnemy, damageEnemy, chooseTarget, gunnerAim, armorFace, ARMOR, observe, artilleryImpact } from '../logic/combat.js';
+import { ENEMY_TYPES, createEnemy, stepEnemy, damageEnemy, chooseTarget, gunnerAim, armorFace, ARMOR, observe, artilleryImpact, ATGM } from '../logic/combat.js';
 import { fitModel } from '../geom.js';
 import { MECH, stepLength } from '../logic/mech.js';
 import { MechWalker } from '../world/mechwalk.js';
 
 // model fitting: the Meshy vehicles lie along X with the front at -X; turn them to face -Z.
 // turretCut: height (m) above which the tank mesh is the turret with its gun
+const _Z = new THREE.Vector3(0, 0, 1);
+const _seg = new THREE.Vector3();
+const _u = new THREE.Vector3();
+
 const MODEL = {
   tank: { name: 'enemy_tank', length: 8.2, rotY: -Math.PI / 2, turretCut: 1.6 },
   apc: { name: 'enemy_apc', length: 7.4, rotY: -Math.PI / 2 },
@@ -118,6 +122,11 @@ export class Enemies {
     this.list = [];
     this.shells = [];
     this.strikes = []; // artillery salvos in the air
+    this.atgms = []; // their guided missiles in flight
+    this.atgmGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.95, 8).rotateX(Math.PI / 2);
+    this.atgmMat = new THREE.MeshStandardMaterial({ color: 0x5d6152, metalness: 0.5, roughness: 0.6 });
+    this.atgmGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color(9, 2.6, 0.8), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.atgmGlowGeo = new THREE.SphereGeometry(0.28, 8, 6);
     this.templates = {};
     for (const [type, def] of Object.entries(MODEL)) {
       const src = game.assets.models[def.name] || game.assets.models.tank;
@@ -157,6 +166,8 @@ export class Enemies {
     this.list = [];
     this.shells = [];
     this.strikes = [];
+    for (const m of this.atgms) this.world.scene.remove(m.mesh);
+    this.atgms = [];
     this.tracers.count = 0;
   }
 
@@ -377,6 +388,19 @@ export class Enemies {
       if (night && !T.indirect) e.engage = (engage0 ?? T.engage) * 0.6;
       const ev = stepEnemy(e, dt, { player: tgt, colliders: near, rand, findCover: (x) => this.findCover(x, tgt) });
       e.engage = engage0;
+      // a guided missile now and then, at a target it can see and that is far enough away
+      if (T.atgm && tgt && e.state === 'engage' && !this.g.mission?.ended) {
+        e.atgmT ??= 5 + Math.random() * T.atgm.reload[0];
+        // a boss told to go easy (dmg below 1) also fires its missiles less often
+        const slow = e.dmgMul && e.dmgMul < 1 ? 1 / e.dmgMul : 1;
+        e.atgmT -= dt;
+        const d = Math.hypot(tgt.x - e.x, tgt.z - e.z);
+        const sees = tgt.isPlayer ? e.losPlayer !== false : !e.noLos;
+        if (e.atgmT <= 0 && sees && d > T.atgm.range[0] && d < T.atgm.range[1]) {
+          e.atgmT = (T.atgm.reload[0] + Math.random() * (T.atgm.reload[1] - T.atgm.reload[0])) * slow;
+          this.fireATGM(e, tgt);
+        }
+      }
       if (e.walker) this.walk(e, dt);
       if (was !== 'engage' && e.state === 'engage') this.g.onEnemyEngaged?.(e);
       this.place(e, Math.min(1, dt * 4));
@@ -420,6 +444,109 @@ export class Enemies {
       }
     }
     this.updateShells(dt, ctx);
+    this.updateATGMs(dt);
+  }
+
+  /** a guided missile off the launcher rail, at a mech or a truck */
+  fireATGM(e, tgt) {
+    const p = this.center(e, new THREE.Vector3());
+    p.y += e.height * 0.35;
+    const to = tgt.center(new THREE.Vector3());
+    const v = to.sub(p).normalize();
+    v.y += 0.12;
+    v.normalize().multiplyScalar(ATGM.speed * 0.45);
+    const mesh = new THREE.Group();
+    mesh.add(new THREE.Mesh(this.atgmGeo, this.atgmMat));
+    const glow = new THREE.Mesh(this.atgmGlowGeo, this.atgmGlow);
+    glow.position.z = 0.55;
+    mesh.add(glow);
+    mesh.position.copy(p);
+    this.world.scene.add(mesh);
+    const m = { p, v, tgt, mesh, age: 0, smoke: 0, from: new THREE.Vector3(e.x, 0, e.z), dmg: (ATGM.damage[0] + Math.random() * (ATGM.damage[1] - ATGM.damage[0])) * (e.dmgMul ?? 1), by: e };
+    this.atgms.push(m);
+    this.fx.muzzle(p.x, p.y, p.z, 1.6);
+    const dist = p.distanceTo(this.g.mechObj.position);
+    if (dist < 1500) this.g.sound.one('missile_launch', Math.min(0.6, 90 / (dist + 60)), 1.15, this.g.sound.outside, 0, this.g.panOf?.(p) ?? 0);
+    if (tgt.isPlayer) this.g.onMissileWarning?.(m);
+    return m;
+  }
+
+  /** the defence shot it down (or it struck): gone with a bang */
+  killATGM(m, big = false) {
+    const i = this.atgms.indexOf(m);
+    if (i < 0) return;
+    this.atgms.splice(i, 1);
+    this.world.scene.remove(m.mesh);
+    this.fx.explosion(m.p.x, m.p.y, m.p.z, big ? 7 : 3.5, { smoke: 0.5, light: big ? 1 : 0.6 });
+    this.g.explosionSound(m.p, big ? 1 : 0.55);
+  }
+
+  /** guidance: it turns toward its target (our ECM blurs the picture), speeds up, smokes */
+  updateATGMs(dt) {
+    const ecm = this.g.kit?.ecm ?? 1;
+    const _t = new THREE.Vector3();
+    for (let i = this.atgms.length - 1; i >= 0; i--) {
+      const m = this.atgms[i];
+      m.age += dt;
+      const speed = Math.min(ATGM.speed, m.v.length() + 120 * dt);
+      // a smoke screen between it and the target: the gunner loses it, it flies on blind
+      if (!m.lost && this.world.smokeScreens.length && this.world.smokeBlocks(m.p, m.tgt.center(_t))) m.lost = true;
+      if (!m.tgt.dead && !m.lost) {
+        const to = m.tgt.center(_t).sub(m.p);
+        const d = to.length();
+        // over the line of sight until close (the gunner sees the upper hull over a rise),
+        // then down onto it
+        to.y += d > 45 ? 1.5 + Math.min(6, d * 0.03) : 0.6;
+        // and it keeps off the ground just ahead
+        const hx = m.p.x + (m.v.x / (m.v.length() || 1)) * 25;
+        const hz = m.p.z + (m.v.z / (m.v.length() || 1)) * 25;
+        const clear = m.p.y - Math.max(this.world.heightAt(m.p.x, m.p.z), this.world.heightAt(hx, hz));
+        if (clear < 3 && d > 30) to.y += (3 - clear) * 4;
+        to.normalize();
+        const dir = m.v.clone().normalize();
+        const turn = ATGM.turn * dt * (m.tgt.isPlayer ? ecm : 1) * (m.age < 0.5 ? 0.3 : 1);
+        const ang = Math.acos(Math.max(-1, Math.min(1, dir.dot(to))));
+        if (ang > 1e-4) dir.lerp(to, Math.min(1, turn / ang)).normalize();
+        m.v.copy(dir).multiplyScalar(speed);
+      }
+      const prev = m.p.clone();
+      m.p.addScaledVector(m.v, dt);
+      m.mesh.position.copy(m.p);
+      m.mesh.quaternion.setFromUnitVectors(_Z, _t.copy(m.v).normalize().negate());
+      m.smoke += dt;
+      while (m.smoke > 0.04) {
+        m.smoke -= 0.04;
+        const k = Math.random();
+        this.fx.spawnSmoke(prev.x + (m.p.x - prev.x) * k, prev.y + (m.p.y - prev.y) * k, prev.z + (m.p.z - prev.z) * k, 0.6, 2.5 + Math.random(), 0.22, 0.65, 0.4);
+      }
+      if (m.lost) m.v.setLength(speed);
+      // struck? (the whole way flown this frame: at 150 m/s that is ten metres)
+      if (!m.tgt.dead) {
+        const c = m.tgt.center(_t);
+        const seg = _seg.subVectors(m.p, prev);
+        const k = Math.max(0, Math.min(1, seg.dot(_u.subVectors(c, prev)) / (seg.lengthSq() || 1)));
+        const at = prev.clone().addScaledVector(seg, k);
+        if (at.distanceTo(c) < 2.8) {
+          m.p.copy(at);
+          m.tgt.onHit({ dmg: m.dmg, from: m.from, type: 'atgm', p: at.clone() }, at.clone());
+          this.killATGM(m, true);
+          continue;
+        }
+      }
+      const gy = this.world.heightAt(m.p.x, m.p.z);
+      let wall = m.p.y < gy;
+      if (!wall)
+        for (const c of this.world.colliders) {
+          if (c.r < 2.5) continue;
+          const dx = m.p.x - c.x;
+          const dz = m.p.z - c.z;
+          if (dx * dx + dz * dz < c.r * c.r * 0.8 && m.p.y < gy + (c.h ?? 8)) {
+            wall = true;
+            break;
+          }
+        }
+      if (wall || m.age > ATGM.life) this.killATGM(m, true);
+    }
   }
 
   /** an enemy mech's legs: planted feet in step with its speed (like our lance) */

@@ -11,6 +11,7 @@ import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms } from './coc
 import { drawBoardComputer } from './cockpit/computer.js';
 import { Drone } from './combat/drone.js';
 import { Convoy } from './combat/convoy.js';
+import { closingOn } from './logic/combat.js';
 import { MechWalker } from './world/mechwalk.js';
 import { Comms, speakerOf } from './cockpit/comms.js';
 import { World, WORLD } from './world/world.js';
@@ -176,6 +177,7 @@ class Game {
     this.failed = {}; // knocked-out systems (optics, sensors, gyro, cooling, missiles, hydraulics)
     this.drone = new Drone(this);
     this.convoy = new Convoy(this);
+    this.aps = { max: 6, left: 6, cool: 0, off: false }; // missile defence (refilled per fight)
     // fire-control computer settings (kept between sessions)
     this.fc = { ...FIRE_CONTROL };
     try {
@@ -485,13 +487,15 @@ class Game {
       this.flamerLoop = null;
     }
     const flying = this.droneHands();
+    let fireMissile = !this.dead && !flying && this.input.hit('KeyF');
+    if (fireMissile && live.missile) fireMissile = this.readyLaunch(cam.position, dir);
     this.arsenal.update(dt, {
       live,
       rig: this.gunRig,
       fc: this.fc,
       triggerMG: aiming && this.input.down('KeyE'),
       trigger: (aiming || (this.gunAuto && this.view === 'front' && !this.hovered && !this.dead)) && this.input.lmb,
-      launch: !this.dead && !flying && this.input.hit('KeyF'),
+      launch: fireMissile,
       inLimits,
       origin: cam.position.clone(),
       dir,
@@ -508,7 +512,7 @@ class Game {
         this.lockBeep = 0.12;
       } else {
         this.sound.beep(860, 0.06, 0.03);
-        this.lockBeep = 0.34 - (ms.lockT / MISSILE.lockTime) * 0.2;
+        this.lockBeep = 0.34 - (ms.lockT / (ms.lockNeed || MISSILE.lockTime)) * 0.2;
       }
     }
     const m = this.mech;
@@ -588,6 +592,7 @@ class Game {
     this.convoy.update(dt);
     for (const t of this.convoy.targets()) targets.push(t);
     this.enemies.update(dt, { targets, playerCenter: pt.center(new THREE.Vector3()) });
+    this.updateDefence(dt);
     this.mission?.update();
     this.updateFire(dt);
   }
@@ -1067,6 +1072,9 @@ class Game {
     this.applyLoadout();
     this.enemies.clear();
     this.convoy.clear();
+    // the missile defence: a magazine of interceptor charges, full at the start of a fight
+    const charges = this.kit?.aps ?? 6;
+    this.aps = { max: charges, left: charges, cool: 0, off: false };
     this.allies.clear();
     this.arsenal.reset();
     this.gunRig.reset();
@@ -1666,9 +1674,159 @@ class Game {
     if (I.hit('KeyM')) this.toggleDisplay('tactical');
     if (I.hit('Digit7') || I.hit('Numpad7')) this.toggleDisplay('computer');
     if (I.hit('KeyU')) this.toggleLamps();
-    if (I.hit('KeyJ')) this.fireSmoke();
+    if (I.hit('KeyJ')) {
+      // Shift+J: the missile defence off and on; J alone: a smoke screen
+      if (I.down('ShiftLeft', 'ShiftRight')) this.toggleDefence();
+      else this.fireSmoke();
+    }
     if (I.hit('Tab')) this.nextTarget();
-    if (I.hit('KeyQ')) this.drone.toggle(this.droneGoal());
+    // Q: drone up (to where the pilot looks, or the known vehicle there) or home; Shift+Q: new goal
+    if (I.hit('KeyQ')) {
+      if (I.down('ShiftLeft', 'ShiftRight') && this.drone.airborne) this.drone.launch(this.droneGoal());
+      else this.drone.toggle(this.droneGoal());
+    }
+    // the launcher's angle: , and . (or the mouse wheel) set it by hand, I gives it back to the computer
+    if (I.hit('Comma')) this.nudgePod(-5);
+    if (I.hit('Period')) this.nudgePod(5);
+    if (I.hit('KeyI')) this.podAuto();
+    // touch: one button steps through AUTO, 20, 40, 60, 80 degrees
+    if (I.hit('Semicolon')) {
+      const p = this.arsenal.pod;
+      const steps = [20, 40, 60, 80];
+      const next = p.auto ? 20 : steps.find((s) => s > p.elev);
+      if (next == null) this.podAuto();
+      else this.nudgePod(next - (p.auto ? Math.round((p.el * 180) / Math.PI / 5) * 5 : p.elev));
+    }
+  }
+
+  /* ------------------------------------------------ missile warning and defence */
+
+  /** a guided missile is coming at us: warning tone, where from, how far */
+  onMissileWarning(m) {
+    const b = Math.atan2(-(m.p.x - this.mech.x), -(m.p.z - this.mech.z));
+    const clock = clockOf(wrapA(b - this.mech.heading));
+    const d = Math.round(Math.hypot(m.p.x - this.mech.x, m.p.z - this.mech.z) / 10) * 10;
+    this.hmd.notify(`RAKETE! ${clock} UHR · ${d} m${this.apsOn() ? '' : ' · ABWEHR AUS'}`, '#ff5a48', 2.6);
+    for (let k = 0; k < 3; k++) {
+      this.sound.beep(2600, 0.07, 0.07, k * 0.16);
+      this.sound.beep(1900, 0.07, 0.07, k * 0.16 + 0.08);
+    }
+  }
+
+  apsOn() {
+    return !!this.aps && !this.aps.off && this.aps.left > 0 && this.sys.mainBus && !this.dead;
+  }
+
+  toggleDefence() {
+    if (!this.aps) return;
+    this.aps.off = !this.aps.off;
+    this.sound.beep(this.aps.off ? 700 : 1400, 0.05, 0.05);
+    this.hmd.notify(this.aps.off ? 'RAKETENABWEHR AUS' : `RAKETENABWEHR EIN · ${this.aps.left}/${this.aps.max}`, this.aps.off ? '#ffc15e' : '#a6ffb8', 1.6);
+  }
+
+  /**
+   * The active defence: a guided missile at us inside 70 m, or a rocket that would strike in
+   * the next half second, gets a charge fired at it (9 in 10 work). One shot every 0.45 s,
+   * so a whole rocket ripple can still get through; the magazine is small.
+   */
+  updateDefence(dt) {
+    const a = this.aps;
+    if (!a) return;
+    a.cool = Math.max(0, a.cool - dt);
+    if (a.cool > 0 || !this.apsOn() || this.mission?.ended) return;
+    const pc = this.playerTarget.center(new THREE.Vector3());
+    for (const m of this.enemies.atgms) {
+      if (m.tgt !== this.playerTarget) continue;
+      const d = m.p.distanceTo(pc);
+      if (d < 70 && d > 10) return this.interceptAt(m.p, () => this.enemies.killATGM(m));
+    }
+    const sh = this.enemies.shells;
+    for (let i = sh.length - 1; i >= 0; i--) {
+      const s = sh[i];
+      if (s.type !== 'heli' || s.p.distanceTo(pc) < 12) continue;
+      if (closingOn(s.p, s.v, pc, 4.5, 0.5) < 0) continue;
+      return this.interceptAt(s.p, () => {
+        const k = sh.indexOf(s);
+        if (k >= 0) sh.splice(k, 1);
+        this.world.effects.explosion(s.p.x, s.p.y, s.p.z, 3, { smoke: 0.4, light: 0.5 });
+      });
+    }
+  }
+
+  interceptAt(p, kill) {
+    const a = this.aps;
+    a.cool = 0.45;
+    a.left--;
+    // the charge leaves the shoulder box toward the threat
+    const from = this.mechObj.localToWorld(new THREE.Vector3(0.9, 1.4, -0.4));
+    this.world.effects.muzzle(from.x, from.y, from.z, 1.2);
+    this.sound.one('gun_shot', 0.5, 1.6);
+    if (Math.random() < 0.9) {
+      kill();
+      this.stats.intercepts = (this.stats.intercepts ?? 0) + 1;
+      this.hmd.notify(`ABWEHR: ABGEFANGEN · ${a.left}/${a.max}`, '#a6ffb8', 1.6);
+    } else this.hmd.notify(`ABWEHR: VERFEHLT · ${a.left}/${a.max}`, '#ffc15e', 1.6);
+    if (a.left === 0) setTimeout(() => this.hmd.notify('ABWEHR LEER', '#ff5a48', 2.4), 900);
+  }
+
+  /** the launcher for the displays: angle, bearing off the hull, range without a lock */
+  podInfo() {
+    const p = this.arsenal.pod;
+    const r = this.arsenal.podRange(p.elev);
+    return {
+      auto: p.auto,
+      elev: Math.round((p.el * 180) / Math.PI),
+      az: Math.round((p.az * 180) / Math.PI / 5) * 5,
+      range: r >= 1000 ? `${(r / 1000).toFixed(1)} km` : `${Math.round(r / 10) * 10} m`,
+    };
+  }
+
+  /** raise or lower the launcher by hand (degrees) */
+  nudgePod(d) {
+    const p = this.arsenal.pod;
+    const from = p.auto ? Math.round((p.el * 180) / Math.PI / 5) * 5 : p.elev;
+    const e = this.arsenal.setPodElev(from + d);
+    this.sound.beep(900 + e * 6, 0.03, 0.04);
+    const r = this.arsenal.podRange(e);
+    this.hmd.notify(`STARTWINKEL ${e}° · OHNE LOCK ≈ ${r >= 1000 ? (r / 1000).toFixed(1) + ' km' : Math.round(r / 10) * 10 + ' m'}`, '#ffc15e', 1.6);
+  }
+
+  podAuto() {
+    this.arsenal.pod.auto = true;
+    this.sound.beep(1200, 0.04, 0.04);
+    this.hmd.notify('STARTWINKEL AUTO', '#a6ffb8', 1.4);
+  }
+
+  /**
+   * F: a lased target needs no seeker search, it goes at once; with nothing chosen and the
+   * seeker idle, the nearest vehicle the drone lases is taken.
+   */
+  readyLaunch(origin, look) {
+    if (MISSILE.guided === false) return true;
+    const ms = this.arsenal.w.missiles;
+    const list = this.intel?.list ?? [];
+    let des = list.find((t) => t.id === ms.designated);
+    if (!des && ms.target == null) {
+      const lased = list.filter((t) => t.marked && !t.stale && t.dist <= MISSILE.lockRange).sort((a, b) => a.dist - b.dist)[0];
+      if (lased) {
+        this.designate(lased.id, true);
+        des = lased;
+      }
+    }
+    if (des && des.marked && !des.stale && des.dist <= MISSILE.lockRange && !ms.locked) {
+      ms.target = des.id;
+      ms.lockNeed = MISSILE.laserLock;
+      ms.lockT = MISSILE.laserLock;
+      ms.locked = true;
+    }
+    // nothing locked, the computer's angle, and the eyes on the cover right in front: that
+    // missile would only blow up our own wall - say what is missing instead
+    if (!ms.locked && this.arsenal.pod.auto && this.arsenal.aimPoint(origin, look).distanceTo(origin) < 80) {
+      this.sound.beep(300, 0.12, 0.06);
+      this.hmd.notify('KEIN ZIEL · Q: DROHNE MARKIERT · RAD: STARTWINKEL', '#ffc15e', 2.2);
+      return false;
+    }
+    return true;
   }
 
   /* ------------------------------------------------ displays you can open */
@@ -1793,7 +1951,8 @@ class Game {
         const s = Math.sin(mp.heading);
         const wx = mp.x + rx * c + rz * s;
         const wz = mp.z - rx * s + rz * c;
-        if (this.droneMode) {
+        if (this.droneMode || this.drone.airborne) {
+          // the drone goes where the pilot clicks (up from the dock only via DROHNE ►)
           if (this.drone.d.mode !== 'orbit') this.drone.setMode('orbit');
           if (this.drone.launch([wx, wz])) this.droneMode = false;
         } else this.selected = null;
@@ -1885,7 +2044,9 @@ class Game {
 
   /** Tab: the next known vehicle (by range) goes to the seeker */
   nextTarget() {
-    const list = (this.intel?.list ?? []).filter((t) => !t.stale);
+    // what the drone lases first, then what we see, then the rest; each by range
+    const rank = (t) => (t.marked ? 0 : t.visible ? 1 : 2);
+    const list = (this.intel?.list ?? []).filter((t) => !t.stale).sort((a, b) => rank(a) - rank(b) || a.dist - b.dist);
     if (!list.length) return this.hmd.notify('KEIN BEKANNTES ZIEL', '#ffc15e', 1.5);
     const i = list.findIndex((t) => t.id === this.arsenal.w.missiles.designated);
     this.designate(list[(i + 1) % list.length].id);
@@ -1897,8 +2058,18 @@ class Game {
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
     const p = this.arsenal.aimPoint(cam.position, dir, new THREE.Vector3());
     const d = p.distanceTo(cam.position);
-    const dist = clamp(Number.isFinite(d) ? d : 450, 250, 1200);
     const l = Math.hypot(dir.x, dir.z) || 1;
+    // a known vehicle close to where the pilot looks: the drone goes straight there
+    const look = Math.atan2(-dir.x, -dir.z);
+    let best = null;
+    for (const t of this.intel?.list ?? []) {
+      if (t.stale || t.dist < 120 || t.dist > 1400) continue;
+      const off = Math.abs(Math.atan2(Math.sin(t.brg - look), Math.cos(t.brg - look)));
+      if (off < 0.26 && (!best || off * 600 + t.dist < best.off * 600 + best.dist)) best = { ...t, off };
+    }
+    if (best) return [best.x, best.z];
+    // otherwise where the eye meets the ground, but never just in front of the feet
+    const dist = clamp(Number.isFinite(d) ? d : 600, 400, 1200);
     return [this.mech.x + (dir.x / l) * dist, this.mech.z + (dir.z / l) * dist];
   }
 
@@ -2047,7 +2218,7 @@ class Game {
         selected: this.selected,
         designated: ms.designated,
         locked,
-        lockT: ms.lockT / MISSILE.lockTime,
+        lockT: ms.lockT / (ms.lockNeed || MISSILE.lockTime),
         filter: this.listFilter,
         scroll: this.listScroll,
         droneDisabled: this.drone.jammed || this.drone.state === 'lost',
@@ -2058,7 +2229,7 @@ class Game {
       des,
       desId: ms.designated,
       locked,
-      lockT: ms.lockT / MISSILE.lockTime,
+      lockT: ms.lockT / (ms.lockNeed || MISSILE.lockTime),
       autoTarget: fc.autoTarget,
       droneDisabled: this.drone.jammed || this.drone.state === 'lost',
       weapons: {
@@ -2135,7 +2306,7 @@ class Game {
         face: it.stale ? '' : it.face,
         hp: it.hp,
         aiming: it.aiming,
-        lock: mine ? ms.lockT / MISSILE.lockTime : 0,
+        lock: mine ? ms.lockT / (ms.lockNeed || MISSILE.lockTime) : 0,
         locked: mine && ms.locked,
         onScreen,
       };
@@ -2221,8 +2392,10 @@ class Game {
               inLimits: live.inLimits,
               missile: live.missile,
               missiles: w.missiles.count,
-              lockT: w.missiles.lockT / MISSILE.lockTime,
+              lockT: w.missiles.lockT / (w.missiles.lockNeed || MISSILE.lockTime),
               locked: w.missiles.locked,
+              pod: this.podInfo(),
+              aps: this.aps ? { on: this.apsOn(), left: this.aps.left, max: this.aps.max } : null,
               coneR: (innerHeight / 2 / Math.tan((cam.fov * DEG) / 2)) * Math.tan(MISSILE.lockCone),
             }
           : null,
@@ -2333,7 +2506,11 @@ class Game {
       if (t < 0 || t > 1.5) continue;
       if (Math.hypot(rx - s.v.x * t, ry - s.v.y * t, rz - s.v.z * t) < 25) incoming++;
     }
-    this.intel = { list, primary, threats, incoming };
+    // guided missiles coming at us, for the threat ring
+    const missiles = this.enemies.atgms
+      .filter((mm) => mm.tgt === this.playerTarget)
+      .map((mm) => ({ rel: wrapA(Math.atan2(-(mm.p.x - m.x), -(mm.p.z - m.z)) - m.heading), dist: Math.hypot(mm.p.x - m.x, mm.p.z - m.z) }));
+    this.intel = { list, primary, threats, incoming, missiles };
     return this.intel;
   }
 
@@ -2374,6 +2551,8 @@ class Game {
       if (this.entry.done) this.enterCockpitState();
     } else if (this.state === 'cockpit') {
       this.hotkeys();
+      // the mouse wheel raises and lowers the missile launcher (looking out, no display open)
+      if (inp.wheel && this.view === 'front' && !this.openMfd && !this.external && !this.droneHands()) this.nudgePod(-Math.sign(inp.wheel) * 5);
       this.updateLook(dt, inp);
       this.tutorial.update(dt);
     }
@@ -2415,7 +2594,9 @@ class Game {
         overheated: w.gun.overheated,
         missiles: w.missiles.count,
         locked: w.missiles.locked,
-        lockT: w.missiles.lockT / MISSILE.lockTime,
+        lockT: w.missiles.lockT / (w.missiles.lockNeed || MISSILE.lockTime),
+        pod: this.podInfo(),
+        aps: this.aps ? { on: this.apsOn(), left: this.aps.left, max: this.aps.max } : null,
         inLimits: live.inLimits,
         gunYaw: this.gunRig.yaw,
         gunPitch: this.gunRig.pitch,

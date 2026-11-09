@@ -5,6 +5,7 @@ import { triggerWants, triggerShot } from '../logic/firecontrol.js';
 // missile pod on the left shoulder, relative to the pilot's eye (mech body frame, -Z forward);
 // far enough forward that the pilot sees the missiles leave
 const POD = new THREE.Vector3(-1.2, 0.6, -0.6);
+const MISSILE_UNGUIDED_SPEED = 150; // m/s off the rail for a rocket fired at a set angle
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -45,6 +46,56 @@ export class Arsenal {
     this.missileMat = new THREE.MeshStandardMaterial({ color: 0x8a8f86, metalness: 0.6, roughness: 0.5 });
     this.glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(10, 5, 1.6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
     this.glowGeo = new THREE.SphereGeometry(0.32, 10, 8);
+    // the launcher: it swivels (az, off the hull axis) toward the target or where the pilot
+    // looks and raises to a launch angle - the computer's (auto) or one the pilot sets
+    this.pod = { auto: true, elev: 40, az: 0, el: 0.12 };
+  }
+
+  /** the pilot sets the launch angle (degrees, 0..85); it stays manual until AUTO */
+  setPodElev(deg) {
+    this.pod.auto = false;
+    this.pod.elev = Math.max(0, Math.min(85, Math.round(deg)));
+    return this.pod.elev;
+  }
+
+  /** where a rocket fired at the set angle comes down, on level ground (m) */
+  podRange(elevDeg = this.pod.elev) {
+    const v = MISSILE.guided === false ? MISSILE_UNGUIDED_SPEED : MISSILE.boostSpeed;
+    return (v * v * Math.sin((2 * elevDeg * Math.PI) / 180)) / 9.81;
+  }
+
+  /** the launch angle the computer picks for a target (or none): low and direct, or steep */
+  autoElev(tg) {
+    return this.wantsTop(tg) ? 64 : 7;
+  }
+
+  /** will a missile at this target fly the top attack (steep over cover)? */
+  wantsTop(tg, from = null) {
+    if (!tg) return false;
+    const prof = this.g.fc?.missileProfile || 'auto';
+    const p = from ?? this.g.mech;
+    const near = tg.losPlayer !== false && Math.hypot(tg.x - p.x, tg.z - p.z) < 140;
+    if (!this.pod.auto) return this.pod.elev >= 30 && !near;
+    return (prof === 'top' && !near) || (prof === 'auto' && tg.losPlayer === false && (tg.droneMark ?? 0) > this.g.time);
+  }
+
+  /** the launcher follows its target (the locked or designated one) or the pilot's eyes */
+  updatePod(dt, ctx) {
+    const ms = this.w.missiles;
+    const id = ms.target ?? ms.designated;
+    const tg = id != null ? this.g.enemies.list.find((e) => e.id === id && e.state !== 'dead') : null;
+    const hull = this.g.mech.heading;
+    let want;
+    if (tg) want = Math.atan2(-(tg.x - this.g.mech.x), -(tg.z - this.g.mech.z)) - hull;
+    else want = Math.atan2(-ctx.dir.x, -ctx.dir.z) - hull;
+    want = Math.atan2(Math.sin(want), Math.cos(want));
+    const el = ((this.pod.auto ? this.autoElev(tg) : this.pod.elev) * Math.PI) / 180;
+    // steep enough, it can go out any way; low, only as far as it swivels
+    if (el < 0.95) want = Math.max(-MISSILE.gimbal, Math.min(MISSILE.gimbal, want));
+    const da = Math.atan2(Math.sin(want - this.pod.az), Math.cos(want - this.pod.az));
+    this.pod.az += Math.max(-2.2 * dt, Math.min(2.2 * dt, da));
+    this.pod.el += Math.max(-1.6 * dt, Math.min(1.6 * dt, el - this.pod.el));
+    this.pod.target = tg;
   }
 
   reset() {
@@ -112,6 +163,7 @@ export class Arsenal {
       });
     }
     stepLock(w, cands, dt, ctx.live.missile);
+    this.updatePod(dt, ctx);
 
     const failed = this.g.failed ?? {};
     // the trigger as the fire-control computer sets it: one round, a burst, or as long as held
@@ -331,24 +383,35 @@ export class Arsenal {
   launch(targetId, ctx) {
     const p = ctx.mechObj.localToWorld(POD.clone());
     const tg = targetId != null ? this.g.enemies.list.find((e) => e.id === targetId) : null;
-    // the pod fires along the hull, slightly up, slewed toward a target within its gimbal,
-    // so the missile does not swing wide past cover on its way round; the seeker steers on
-    const dir = new THREE.Vector3(0, 0.12, -1).applyQuaternion(ctx.mechObj.quaternion);
-    if (tg) {
-      const fh = Math.atan2(-dir.x, -dir.z);
-      const th = Math.atan2(-(tg.x - p.x), -(tg.z - p.z));
-      const off = Math.atan2(Math.sin(th - fh), Math.cos(th - fh));
-      const h = fh + Math.max(-MISSILE.gimbal, Math.min(MISSILE.gimbal, off));
-      const l = Math.hypot(dir.x, dir.z);
-      dir.x = -Math.sin(h) * l;
-      dir.z = -Math.cos(h) * l;
-    }
-    dir.y = Math.max(dir.y, 0.08);
-    dir.normalize();
-    // unguided rockets leave towards the aim point, each a little off
     const unguided = MISSILE.guided === false;
+    const manual = !this.pod.auto;
+    // the launcher's bearing: at the target (a lased one any way round, one in sight within
+    // the swivel), else where the pilot looks; the seeker steers on from there
+    const hull = this.g.mech.heading;
+    let h;
+    const top0 = this.wantsTop(tg, p);
+    if (tg) {
+      const off = Math.atan2(Math.sin(Math.atan2(-(tg.x - p.x), -(tg.z - p.z)) - hull), Math.cos(Math.atan2(-(tg.x - p.x), -(tg.z - p.z)) - hull));
+      h = hull + (top0 || (manual && this.pod.elev >= 55) ? off : Math.max(-MISSILE.gimbal, Math.min(MISSILE.gimbal, off)));
+    } else {
+      const off = Math.atan2(Math.sin(Math.atan2(-ctx.dir.x, -ctx.dir.z) - hull), Math.cos(Math.atan2(-ctx.dir.x, -ctx.dir.z) - hull));
+      h = hull + (manual && this.pod.elev >= 55 ? off : Math.max(-MISSILE.gimbal, Math.min(MISSILE.gimbal, off)));
+    }
+    const elev = ((manual ? this.pod.elev : top0 ? 64 : 7) * Math.PI) / 180;
+    const dir = new THREE.Vector3(-Math.sin(h) * Math.cos(elev), Math.sin(elev), -Math.cos(h) * Math.cos(elev));
+    if (!manual && !top0) dir.y = Math.max(dir.y, 0.08);
+    dir.normalize();
+    // the pilot's own angle and nothing locked: it flies a ballistic arc like a shell
+    const ballistic = manual && (unguided || !tg);
+    // unguided rockets leave towards the aim point, each a little off
     let aim = this.aimPoint(ctx.origin, ctx.dir);
-    if (unguided) {
+    if (ballistic) {
+      const spread = unguided ? 0.012 : 0.004;
+      dir.x += (Math.random() - 0.5) * spread * 2;
+      dir.y += (Math.random() - 0.5) * spread;
+      dir.z += (Math.random() - 0.5) * spread * 2;
+      dir.normalize();
+    } else if (unguided) {
       const d = aim.distanceTo(p);
       aim = aim.clone().add(new THREE.Vector3((Math.random() - 0.5) * d * 0.035, (Math.random() - 0.5) * d * 0.015, (Math.random() - 0.5) * d * 0.035));
       dir.copy(aim).sub(p).normalize();
@@ -363,25 +426,26 @@ export class Arsenal {
     mesh.position.copy(p);
     this.world.scene.add(mesh);
     // no line of sight but a drone mark: a top attack over the cover onto the thin roof
-    // flight profile from the computer: direct, steep (top attack), or steep only without sight
-    const prof = this.g.fc?.missileProfile || 'auto';
-    // STEIL needs room to climb and dive: a target in sight closer than 140 m is taken direct
-    const near = !!tg && tg.losPlayer !== false && Math.hypot(tg.x - p.x, tg.z - p.z) < 140;
-    const top = !!tg && ((prof === 'top' && !near) || (prof === 'auto' && tg.losPlayer === false && (tg.droneMark ?? 0) > this.g.time));
-    if (top) {
-      dir.y = Math.max(dir.y, 0.9);
-      dir.normalize();
-    }
+    // (flight profile from the computer: direct, steep, or steep only without sight; or the
+    // pilot's own launch angle: from 30 degrees up it flies a lofted arc)
+    const top = !!tg && !unguided && top0;
+    const hd = tg ? Math.hypot(tg.x - p.x, tg.z - p.z) : 0;
+    // close in, a lower arc that it can still turn down from onto the roof; a set angle
+    // decides how high it goes
+    const loft = !tg ? MISSILE.loft : manual ? Math.min(180, Math.max(30, hd * Math.tan(elev) * 0.35)) : Math.min(MISSILE.loft, Math.max(45, hd * 0.4));
     this.missiles.push({
       mesh,
       p,
       top,
       y0: p.y,
-      // close in, a lower arc that it can still turn down from onto the roof
-      loft: tg ? Math.min(MISSILE.loft, Math.max(45, Math.hypot(tg.x - p.x, tg.z - p.z) * 0.4)) : MISSILE.loft,
+      loft,
+      // it holds the set angle off the rail before the seeker takes over
+      boost: manual ? 0.3 + 0.9 * Math.sin(elev) : 0.2,
+      ballistic,
+      vel: ballistic ? dir.clone().multiplyScalar(unguided ? MISSILE_UNGUIDED_SPEED : MISSILE.boostSpeed) : null,
       dir: dir.toArray(),
       speed: MISSILE.speed0,
-      target: unguided ? null : targetId,
+      target: unguided || ballistic ? null : targetId,
       aim,
       age: 0,
       smoke: 0,
@@ -396,8 +460,14 @@ export class Arsenal {
     for (let i = this.missiles.length - 1; i >= 0; i--) {
       const m = this.missiles[i];
       m.age += dt;
+      if (m.ballistic) {
+        // a set angle and no lock: a shell's arc, the motor only gets it going
+        m.vel.y -= 9.81 * dt;
+        m.dir = m.vel.clone().normalize().toArray();
+        m.speed = m.vel.length();
+      }
       // a top attack flies slower, so it can bend over into the dive
-      m.speed = Math.min(m.top ? MISSILE.speedTop : MISSILE.speedMax, m.speed + MISSILE.accel * dt);
+      else m.speed = Math.min(m.top ? MISSILE.speedTop : MISSILE.speedMax, m.speed + MISSILE.accel * dt);
       const tgt = m.target != null ? enemies.list.find((e) => e.id === m.target) : null;
       if (tgt && tgt.state !== 'dead') {
         enemies.center(tgt, _b).y += 0.3;
@@ -424,7 +494,7 @@ export class Arsenal {
           }
         }
       }
-      if (m.age > 0.2) {
+      if (!m.ballistic && m.age > (m.boost ?? 0.2)) {
         const to = _a.copy(m.aim).sub(m.p).normalize().toArray();
         // fins bite harder in the steep terminal dive of a top attack
         m.dir = steer(m.dir, to, MISSILE.turn * dt * (m.age < 0.6 ? 2 : m.terminal ? 3.2 : 1));
@@ -466,7 +536,7 @@ export class Arsenal {
           }
         }
       }
-      if (hitEnemy || ground || wall || m.age > MISSILE.life) {
+      if (hitEnemy || ground || wall || m.age > (m.ballistic ? 40 : MISSILE.life)) {
         this.explode(m, hitEnemy);
         this.world.scene.remove(m.mesh);
         this.missiles.splice(i, 1);
