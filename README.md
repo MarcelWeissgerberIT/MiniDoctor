@@ -67,6 +67,23 @@ Jedes der drei Glas-Displays lässt sich **öffnen**: anklicken (z. B. aus der D
 
 **Zuweisen:** Mit **Tab** oder über ein Display bekommt der Raketensucher ein Ziel. Er schaltet darauf auf, wenn es bis zu 75° neben der Rumpfachse liegt und du es siehst oder die Drohne es markiert. Dafür musst du nicht mehr hinschauen. Der Werfer schwenkt beim Start in Richtung des zugewiesenen Ziels (höchstens 75° neben der Rumpfachse), die Rakete fliegt ein paar Meter über der Sichtlinie und lenkt dann ins Ziel.
 
+## Hangar: den Battlebot selbst zusammenstellen
+
+Im Hauptmenü öffnet **Hangar** die Wartungshalle. BB-07 steht auf einer Drehscheibe (Ziehen = drehen, Mausrad = Zoom). Links liegen die Slots, rechts die Teile zur Auswahl, unten Werte und Nutzlast. Jedes Teil wiegt etwas, und das Fahrgestell trägt **50 t**. Wer überlädt, kann nicht übernehmen. Teile werden mit gewonnenen Missionen freigeschaltet. Die Anzeige unten nennt das nächste Teil.
+
+| Slot | Teile (Gewicht · Freischaltung) | Wirkung im Spiel |
+|---|---|---|
+| Hauptwaffe | MK-30 Maschinenkanone 30 mm (9 t) · SK-40 Schwere Kanone 40 mm (12 t, 2 Siege) · GR-20 Gatling 20 mm (10 t, 4) · EM-9 Railgun (14 t, 8) | Kadenz, Schaden, Munition, Mündungsgeschwindigkeit, Hitze und Streuung; eigener Lauf am Arm (Gatling-Bündel dreht beim Feuern, Railgun mit leuchtenden Spulen), eigener Schussklang, stärkerer Rückstoß bei 40 mm und Railgun |
+| Sekundärwaffe | MG 7,62 mm (2 t) · sMG 12,7 mm (4 t, 3) · FW-2 Flammenwerfer (4 t, 6) | Flammenwerfer statt MG: Taste E hält einen Flammenstrahl bis 70 m, alles im Kegel brennt, 30 s Treibstoff |
+| Raketensystem | LR-12 Lenkraketen (8 t) · RW-24 Raketenwerfer ungelenkt (7 t, 4) · SL-6 Schwere Lenkraketen (10 t, 7) · keins | RW-24: kein Aufschalten, F feuert eine Vierersalve auf den Zielpunkt. SL-6: 130 Schaden, 2400 m Reichweite. Der Werfer am linken Arm bekommt die passende Front (12, 24 oder 6 Rohre) |
+| Panzerung | leicht (10 t) · Standard (16 t) · schwer (24 t, 5) | Schaden ×1/0,78, ×1, ×1/1,35; Tempo ×1,12, ×1, ×0,88; schwere Mechs sind zusätzlich etwas langsamer |
+| Scheinwerfer | keine · Halogen (0,5 t) · LED-Flutlicht (1 t, 2) · IR-Strahler (1 t, 5) | Taste U: zwei echte Lichtkegel vor dem Mech. IR leuchtet nur im Nachtsicht-Kamerabild |
+| Zusatzausrüstung | Nebelwurfanlage (2 t, 1) · Störsender ECM (3 t, 4) · Zusatzpanzerung Front (5 t, 3) · Drohnen-Akku XL (1 t, 2) | Nebel: Taste J, drei Nebelwände vor dem Mech. ECM: feindliche Richtschützen streuen stärker. Platten: Frontreffer −25 %. Akku: Drohne fliegt 60 % länger |
+| Lackierung | Stadt-Grau, Oliv, Wüsten-, Dschungel-, Stadt-Tarn, Nachtschwarz, Signalrot | Shader auf der Modelltextur: Schmutz und Paneele bleiben, die Farbe (und das Tarnmuster) kommt aus der Lackierung. Gilt für den Mech in der Basis und die Außenansicht |
+| Abzeichen | Stern, Blitz, Totenkopf, Winkel, Wolfskopf (1 Sieg) · **Kennung** (bis 6 Zeichen) | Abzeichen am Werferarm, Kennung an beiden Flanken |
+
+Die Grundausbildung fliegt immer mit Werkswaffen (die Lektionen brauchen Lenkraketen und das 30-mm-Geschütz). Lackierung, Abzeichen, Kennung und Scheinwerfer gelten auch dort.
+
 ## Bordcomputer (Taste 7)
 
 Ein eigener Breitbild-Bildschirm an der rechten Wand über dem Tastenfeld, mit eigener Ansicht: **Taste 7**, Klick auf den Bildschirm, **COMPUTER ►** auf dem linken oder **DROHNE ►** auf dem mittleren Display (Touch: COMP). Oben liegen drei Reiter, links die Seite, rechts eine Seitenleiste mit den Details des Moments. Esc, Rechtsklick oder ✕ schließt.
@@ -244,7 +261,7 @@ Auf Touch-Geräten erscheinen automatisch Bedienelemente; in den Einstellungen l
 | rechts | FEUER | halten = Kanone (zeigt die Munition) |
 | rechts | MG | halten = Maschinengewehr |
 | rechts | RAKETE, ZIEL, ZOOM | Rakete starten, nächstes Ziel zuweisen, Zoom halten |
-| oben | Pause, DROHNE, COMP, WISCHER, KARTE, LANZE | Pause-Menü, Drohne starten oder zurückrufen, Bordcomputer, Scheibenwischer, Taktikkarte, Lanzenbefehle (Folgen, Halten, Angriff) |
+| oben | Pause, DROHNE, COMP, WISCHER, LICHT, NEBEL, KARTE, LANZE | Pause-Menü, Drohne starten oder zurückrufen, Bordcomputer, Scheibenwischer, Scheinwerfer, Nebelwand, Taktikkarte, Lanzenbefehle (Folgen, Halten, Angriff) |
 | übriger Bildschirm | Wischen | umsehen; das geht auch gleichzeitig mit gedrücktem Feuerknopf, weil jeder Finger einzeln verfolgt wird |
 | Cockpit | Antippen | Schalter und Displays bedienen |
 
@@ -274,6 +291,8 @@ Die Ansichten 1 bis 9 liegen in der Leiste unten. Im Touch-Modus übernehmen die
 | Tab | nächstes Ziel zuweisen |
 | Drohne im Handflug | W/S Tempo · A/D drehen · R/F Höhe (Bordcomputer auf DROHNE offen, Modus MANUELL) |
 | K | Scheibenwischer an/aus |
+| U | Scheinwerfer an/aus (wenn verbaut) |
+| J | Nebelwand (Nebelwurfanlage) |
 | C | Blick zentrieren |
 | M | Taktikkarte |
 | P / Esc | Pause |
@@ -333,6 +352,9 @@ src/
   logic/allies.js      Flügelmann-Logik: Befehle, Formation, Bewegung, Feuer (getestet)
   logic/drone.js       Drohnen-Logik: Start, Anflug, Suchkreis, Modi, Handflug, Rückkehr, Landung, Akku (getestet)
   logic/firecontrol.js Feuerleitrechner: Zielauswahl, Vorhaltepunkt, Abzugslogik (getestet)
+  logic/loadout.js     Hangar: Teile, Nutzlast, Freischaltungen, Wirkung auf Waffen/Tempo/Panzerung (getestet)
+  hangar.js            Hangar-Bildschirm: Drehscheibe, Slots, Teile, Werte, Speichern
+  world/livery.js      Lackierung (Tarn-Shader), Kennung, Abzeichen und Anbauteile am Mech-Rig
   combat/drone.js      Drohne: Modell, Rotoren, Kamera, Markieren, Abschuss, Geräusch
   combat/arsenal.js    Kanone, Leuchtspur, Lenkraketen, Einschläge
   combat/enemies.js    Panzer/Schützenpanzer: abgetrennter Drehturm, ballistische Granaten mit Kollision, Nebelwände, Deckungssuche, Wracks

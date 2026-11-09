@@ -120,6 +120,9 @@ const TEXTURES = {
   hazard: { src: 'tex_hazard', size: 1024, tile: false, bump: 3, paintRough: 0.66, steel: 0.7, rustRough: 0.92 },
   concrete: { src: 'tex_concrete', size: 1024, tile: true, bump: 6, paintRough: 0.95, steel: 2, rustRough: 0.95, noMetal: true },
   ground: { src: 'tex_ground', size: 1024, tile: true, bump: 7, paintRough: 0.97, steel: 2, rustRough: 0.97, noMetal: true },
+  // the floors of the other worlds
+  ground_jungle: { src: 'tex_ground_jungle', size: 1024, tile: true, bump: 7, paintRough: 0.9, steel: 2, rustRough: 0.95, noMetal: true },
+  ground_desert: { src: 'tex_ground_desert', size: 1024, tile: true, bump: 5, paintRough: 0.96, steel: 2, rustRough: 0.97, noMetal: true },
 };
 
 async function processTexture(name, cfg) {
@@ -251,9 +254,16 @@ async function processDecals() {
 /* ------------------------------------------------------------------- pano */
 
 async function processPano() {
-  const dir = path.join(OUT, 'sky');
+  // one panorama per world: sky/ (city), sky_jungle/, sky_desert/
+  for (const [img, sub] of [['panorama', 'sky'], ['panorama_jungle', 'sky_jungle'], ['panorama_desert', 'sky_desert']]) {
+    if (fs.existsSync(path.join(SRC, `img/${img}.png`))) await processOnePano(img, sub);
+  }
+}
+
+async function processOnePano(img, sub) {
+  const dir = path.join(OUT, sub);
   mk(dir);
-  const file = path.join(SRC, 'img/panorama.png');
+  const file = path.join(SRC, `img/${img}.png`);
   const { data, info } = await sharp(file).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const W = info.width;
   const H = info.height;
@@ -305,7 +315,7 @@ async function processPano() {
     haze: avgRow(Math.round(H * 0.6), Math.round(H * 0.66)),
   };
   fs.writeFileSync(path.join(dir, 'pano.json'), JSON.stringify(meta, null, 2));
-  console.log('pano', meta);
+  console.log(sub, meta);
 }
 
 /* --------------------------------------------------------------------- ui */
@@ -314,6 +324,8 @@ async function processUi() {
   const dir = path.join(OUT, 'ui');
   mk(dir);
   await sharp(path.join(SRC, 'img/concept.png')).resize(1920).webp({ quality: 82 }).toFile(path.join(dir, 'keyart.webp'));
+  // the hangar behind the mech configurator
+  if (fs.existsSync(path.join(SRC, 'img/hangar.png'))) await sharp(path.join(SRC, 'img/hangar.png')).resize(1920).webp({ quality: 84 }).toFile(path.join(dir, 'hangar.webp'));
   console.log('ui');
 }
 
@@ -327,7 +339,12 @@ async function processGlb() {
   await MeshoptEncoder.ready;
   await MeshoptSimplifier.ready;
   // battlefield props are instanced many times and seen from afar: fewer triangles
-  const SIMPLIFY = { hedgehog: 0.25, ruin: 0.4, tank: 0.4, sandbags: 0.5, mech_rigged: 0.35, enemy_tank: 0.35, enemy_apc: 0.35 };
+  const SIMPLIFY = {
+    hedgehog: 0.25, ruin: 0.4, tank: 0.4, sandbags: 0.5, mech_rigged: 0.35, enemy_tank: 0.35, enemy_apc: 0.35,
+    // the other worlds: vegetation stands in hundreds, buildings and rocks in dozens
+    jungle_tree: 0.5, palm: 0.6, bush: 0.5, temple: 0.5, adobe: 0.5, rock: 0.5,
+    bunker: 0.5, artillery: 0.5, heli: 0.5, truck: 0.5, aa: 0.45,
+  };
   // `glb name1 name2` limits the run to those models
   const only = steps.filter((s) => !KNOWN.includes(s));
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });

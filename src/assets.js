@@ -19,6 +19,7 @@ export const SOUNDS = [
   'creak_1', 'creak_2', 'hyd_step', 'rattle',
   'gun_shot', 'missile_launch', 'explosion_near', 'armor_hit', 'sparks', 'enemy_cannon', 'shell_whizz', 'extinguisher',
   'drone_loop', 'drone_launch', 'wiper',
+  'rail_shot', 'gatling', 'flamer', 'cannon_heavy', 'amb_jungle', 'amb_desert', 'rain_loop', 'sandstorm_loop', 'heli_loop', 'arty_whistle',
 ];
 export const VOICES = [...Array.from({ length: 22 }, (_, i) => 'v' + String(i).padStart(2, '0')), ...VOICE_KEYS, ...Object.keys(TRAINING_TEXT)];
 
