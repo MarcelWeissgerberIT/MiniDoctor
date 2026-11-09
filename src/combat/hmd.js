@@ -475,7 +475,7 @@ export class HMD {
       g.globalAlpha = alpha * Math.min(1, fade * 2);
       if (k.onScreen) {
         // first 0.15 s: closes in on the burst; then a wide ring that slowly opens and fades
-        const r = k.t < 0.15 ? 70 - (k.t / 0.15) * 52 : 18 + (k.t - 0.15) * 22;
+        const r = k.t < 0.15 ? 80 - (k.t / 0.15) * 46 : 34 + (k.t - 0.15) * 20;
         g.strokeStyle = `rgb(${col})`;
         g.lineWidth = 3;
         g.beginPath();
