@@ -127,6 +127,9 @@ export class Enemies {
     this.atgmMat = new THREE.MeshStandardMaterial({ color: 0x5d6152, metalness: 0.5, roughness: 0.6 });
     this.atgmGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color(9, 2.6, 0.8), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
     this.atgmGlowGeo = new THREE.SphereGeometry(0.28, 8, 6);
+    // a soft glow around the motor so the missile shows as a bright point from far off
+    this.atgmHalo = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.1, 0.35), opacity: 0.5, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    this.atgmHaloGeo = new THREE.SphereGeometry(0.85, 10, 8);
     this.templates = {};
     for (const [type, def] of Object.entries(MODEL)) {
       const src = game.assets.models[def.name] || game.assets.models.tank;
@@ -460,6 +463,9 @@ export class Enemies {
     const glow = new THREE.Mesh(this.atgmGlowGeo, this.atgmGlow);
     glow.position.z = 0.55;
     mesh.add(glow);
+    const halo = new THREE.Mesh(this.atgmHaloGeo, this.atgmHalo);
+    halo.position.z = 0.55;
+    mesh.add(halo);
     mesh.position.copy(p);
     this.world.scene.add(mesh);
     const m = { p, v, tgt, mesh, age: 0, smoke: 0, from: new THREE.Vector3(e.x, 0, e.z), dmg: (ATGM.damage[0] + Math.random() * (ATGM.damage[1] - ATGM.damage[0])) * (e.dmgMul ?? 1), by: e };
@@ -472,11 +478,12 @@ export class Enemies {
   }
 
   /** the defence shot it down (or it struck): gone with a bang */
-  killATGM(m, big = false) {
+  killATGM(m, big = false, fx = true) {
     const i = this.atgms.indexOf(m);
     if (i < 0) return;
     this.atgms.splice(i, 1);
     this.world.scene.remove(m.mesh);
+    if (!fx) return;
     this.fx.explosion(m.p.x, m.p.y, m.p.z, big ? 7 : 3.5, { smoke: 0.5, light: big ? 1 : 0.6 });
     this.g.explosionSound(m.p, big ? 1 : 0.55);
   }

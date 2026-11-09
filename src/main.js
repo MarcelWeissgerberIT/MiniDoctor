@@ -11,7 +11,7 @@ import { drawBoot, drawStatus, drawCamera, drawTactical, drawComms } from './coc
 import { drawBoardComputer } from './cockpit/computer.js';
 import { Drone } from './combat/drone.js';
 import { Convoy } from './combat/convoy.js';
-import { closingOn } from './logic/combat.js';
+import { Defence } from './combat/defence.js';
 import { MechWalker } from './world/mechwalk.js';
 import { Comms, speakerOf } from './cockpit/comms.js';
 import { World, WORLD } from './world/world.js';
@@ -177,6 +177,7 @@ class Game {
     this.failed = {}; // knocked-out systems (optics, sensors, gyro, cooling, missiles, hydraulics)
     this.drone = new Drone(this);
     this.convoy = new Convoy(this);
+    this.defence = new Defence(this);
     this.aps = { max: 6, left: 6, cool: 0, off: false }; // missile defence (refilled per fight)
     // fire-control computer settings (kept between sessions)
     this.fc = { ...FIRE_CONTROL };
@@ -1075,6 +1076,7 @@ class Game {
     // the missile defence: a magazine of interceptor charges, full at the start of a fight
     const charges = this.kit?.aps ?? 6;
     this.aps = { max: charges, left: charges, cool: 0, off: false };
+    this.defence.reset();
     this.allies.clear();
     this.arsenal.reset();
     this.gunRig.reset();
@@ -1724,49 +1726,9 @@ class Game {
     this.hmd.notify(this.aps.off ? 'RAKETENABWEHR AUS' : `RAKETENABWEHR EIN · ${this.aps.left}/${this.aps.max}`, this.aps.off ? '#ffc15e' : '#a6ffb8', 1.6);
   }
 
-  /**
-   * The active defence: a guided missile at us inside 70 m, or a rocket that would strike in
-   * the next half second, gets a charge fired at it (9 in 10 work). One shot every 0.45 s,
-   * so a whole rocket ripple can still get through; the magazine is small.
-   */
+  /** the active defence (src/combat/defence.js): visible charges that meet the missile in the air */
   updateDefence(dt) {
-    const a = this.aps;
-    if (!a) return;
-    a.cool = Math.max(0, a.cool - dt);
-    if (a.cool > 0 || !this.apsOn() || this.mission?.ended) return;
-    const pc = this.playerTarget.center(new THREE.Vector3());
-    for (const m of this.enemies.atgms) {
-      if (m.tgt !== this.playerTarget) continue;
-      const d = m.p.distanceTo(pc);
-      if (d < 70 && d > 10) return this.interceptAt(m.p, () => this.enemies.killATGM(m));
-    }
-    const sh = this.enemies.shells;
-    for (let i = sh.length - 1; i >= 0; i--) {
-      const s = sh[i];
-      if (s.type !== 'heli' || s.p.distanceTo(pc) < 12) continue;
-      if (closingOn(s.p, s.v, pc, 4.5, 0.5) < 0) continue;
-      return this.interceptAt(s.p, () => {
-        const k = sh.indexOf(s);
-        if (k >= 0) sh.splice(k, 1);
-        this.world.effects.explosion(s.p.x, s.p.y, s.p.z, 3, { smoke: 0.4, light: 0.5 });
-      });
-    }
-  }
-
-  interceptAt(p, kill) {
-    const a = this.aps;
-    a.cool = 0.45;
-    a.left--;
-    // the charge leaves the shoulder box toward the threat
-    const from = this.mechObj.localToWorld(new THREE.Vector3(0.9, 1.4, -0.4));
-    this.world.effects.muzzle(from.x, from.y, from.z, 1.2);
-    this.sound.one('gun_shot', 0.5, 1.6);
-    if (Math.random() < 0.9) {
-      kill();
-      this.stats.intercepts = (this.stats.intercepts ?? 0) + 1;
-      this.hmd.notify(`ABWEHR: ABGEFANGEN · ${a.left}/${a.max}`, '#a6ffb8', 1.6);
-    } else this.hmd.notify(`ABWEHR: VERFEHLT · ${a.left}/${a.max}`, '#ffc15e', 1.6);
-    if (a.left === 0) setTimeout(() => this.hmd.notify('ABWEHR LEER', '#ff5a48', 2.4), 900);
+    this.defence.update(dt);
   }
 
   /** the launcher for the displays: angle, bearing off the hull, range without a lock */
@@ -2320,6 +2282,30 @@ class Game {
     return out;
   }
 
+  /** where the missile defence just met a missile: a ring on the visor, or an arc at the edge */
+  hmdIntercepts() {
+    const marks = this.defence.marks;
+    if (!marks.length) return null;
+    const cam = this.worldCam;
+    const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const view = Math.atan2(-camDir.x, -camDir.z);
+    return marks.map((k) => {
+      const front = k.p.clone().sub(cam.position).dot(camDir) > 0;
+      const p = k.p.clone().project(cam);
+      const onScreen = front && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.92;
+      const b = Math.atan2(-(k.p.x - cam.position.x), -(k.p.z - cam.position.z));
+      return {
+        t: k.t,
+        ok: k.ok,
+        onScreen,
+        x: ((p.x + 1) / 2) * innerWidth,
+        y: ((1 - p.y) / 2) * innerHeight,
+        dist: k.p.distanceTo(cam.position),
+        angle: Math.atan2(Math.sin(view - b), Math.cos(view - b)), // + = to the right
+      };
+    });
+  }
+
   /** wingmen for the helmet display: screen markers and the lance panel */
   hmdAllies() {
     if (!this.allies.list.length) return null;
@@ -2403,6 +2389,7 @@ class Game {
       failed: Object.keys(this.failed).map((k) => SYSTEMS[k]),
       allies: this.hmdAllies(),
       targets: this.hmdTargets(),
+      intercepts: this.hmdIntercepts(),
       fire: !!this.fire,
     });
   }
@@ -2510,7 +2497,9 @@ class Game {
     const missiles = this.enemies.atgms
       .filter((mm) => mm.tgt === this.playerTarget)
       .map((mm) => ({ rel: wrapA(Math.atan2(-(mm.p.x - m.x), -(mm.p.z - m.z)) - m.heading), dist: Math.hypot(mm.p.x - m.x, mm.p.z - m.z) }));
-    this.intel = { list, primary, threats, incoming, missiles };
+    // and where the defence just met one
+    const intercepts = this.defence.marks.map((k) => ({ rel: wrapA(Math.atan2(-(k.p.x - m.x), -(k.p.z - m.z)) - m.heading), t: k.t, ok: k.ok }));
+    this.intel = { list, primary, threats, incoming, missiles, intercepts };
     return this.intel;
   }
 

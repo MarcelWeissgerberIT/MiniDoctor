@@ -111,6 +111,7 @@ export class HMD {
     if (s.panels === false) {
       g.restore();
       this.drawHits(dt, W_, H);
+      if (s.intercepts) this.drawIntercepts(s.intercepts, W_, H);
       this.drawNotes(s, W_, H);
       g.globalAlpha = 1;
       return;
@@ -137,6 +138,7 @@ export class HMD {
     }
     if (s.targets) this.drawTargets(s, W_, H);
     this.drawHits(dt, W_, H);
+    if (s.intercepts) this.drawIntercepts(s.intercepts, W_, H);
     this.drawNotes(s, W_, H);
     g.globalAlpha = 1;
   }
@@ -457,6 +459,50 @@ export class HMD {
       g.arc(W_ / 2, H / 2, R, ang - 0.35, ang + 0.35);
       g.stroke();
     }
+  }
+
+  /**
+   * The missile defence met a missile: in view, a ring snaps shut on the spot and opens again
+   * with ABGEFANGEN (green) or VERFEHLT (amber); out of view, an arc at the edge of the hit ring.
+   */
+  drawIntercepts(list, W_, H) {
+    const g = this.g;
+    const alpha = g.globalAlpha;
+    const R = Math.min(W_, H) * 0.3;
+    for (const k of list) {
+      const col = k.ok ? '166,255,184' : '255,193,94';
+      const fade = Math.max(0, 1 - k.t / 1.8);
+      g.globalAlpha = alpha * Math.min(1, fade * 2);
+      if (k.onScreen) {
+        // first 0.15 s: closes in on the burst; then a wide ring that slowly opens and fades
+        const r = k.t < 0.15 ? 80 - (k.t / 0.15) * 46 : 34 + (k.t - 0.15) * 20;
+        g.strokeStyle = `rgb(${col})`;
+        g.lineWidth = 3;
+        g.beginPath();
+        g.arc(k.x, k.y, r, 0, Math.PI * 2);
+        g.stroke();
+        // four ticks pointing in
+        g.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const a = (i * Math.PI) / 2 + Math.PI / 4;
+          g.moveTo(k.x + Math.cos(a) * (r + 4), k.y + Math.sin(a) * (r + 4));
+          g.lineTo(k.x + Math.cos(a) * (r + 14), k.y + Math.sin(a) * (r + 14));
+        }
+        g.stroke();
+        // the label under the ring, clear of the notes across the top of the visor
+        this.text(k.ok ? 'ABGEFANGEN' : 'VERFEHLT', k.x, k.y + r + 24, { size: 14, color: `rgb(${col})`, align: 'center' });
+        this.text(`${Math.round(k.dist)} m`, k.x, k.y + r + 40, { size: 11, color: `rgb(${col})`, align: 'center', weight: 'normal' });
+      } else {
+        g.strokeStyle = `rgba(${col},1)`;
+        g.lineWidth = 8;
+        const ang = -Math.PI / 2 + k.angle;
+        g.beginPath();
+        g.arc(W_ / 2, H / 2, R + 14, ang - 0.25, ang + 0.25);
+        g.stroke();
+        this.text(k.ok ? 'ABGEFANGEN' : 'VERFEHLT', W_ / 2 + Math.cos(ang) * (R + 40), H / 2 + Math.sin(ang) * (R + 40), { size: 13, color: `rgb(${col})`, align: 'center' });
+      }
+    }
+    g.globalAlpha = alpha;
   }
 
   drawNotes(s, W_, H) {
