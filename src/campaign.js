@@ -203,7 +203,7 @@ const CITY = [
         start: (g) => g.mission.startConvoy(),
         done: (g) => g.mission.convoyDone(),
         ambush: [
-          { at: 0.25, name: 'amb1', voice: 'c8_b', group: [U('apc', -40, 420, { goal: 'convoy' }), U('apc', -55, 450, { goal: 'convoy' })] },
+          { at: 0.25, name: 'amb1', voice: 'c8_b', group: [U('apc', -40, 420, { goal: 'convoy' }), U('apc', -55, 450, { goal: 'convoy' }), U('tank', -48, 520, { goal: 'convoy' })] },
           { at: 0.6, name: 'amb2', voice: 'c8_c', group: [U('tank', 30, 700, { goal: 'convoy' }), U('apc', 40, 680, { goal: 'convoy' }), U('apc', 20, 760, { goal: 'convoy' })] },
         ],
       },

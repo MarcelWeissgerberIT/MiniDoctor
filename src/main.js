@@ -645,9 +645,8 @@ class Game {
     if (kind === 'down') this.hmd.notify(`${w.name} AUSGEFALLEN`, '#ff5a48', 3);
   }
 
-  onAllyKill(w, e) {
-    this.stats.lanceKills = (this.stats.lanceKills ?? 0) + 1;
-    this.onEnemyKilled(e, w);
+  /** a wingman's kill (already counted in onEnemyKilled): his radio call */
+  onAllyKill(w) {
     this.wingCall(w, 'kill', 12);
   }
 
@@ -720,8 +719,10 @@ class Game {
     this.cockpit.jolt(0.3);
   }
 
-  onEnemyKilled(e, by = null) {
+  onEnemyKilled(e, by = this.enemies.killer ?? null) {
     this.stats.kills++;
+    if (by) this.stats.lanceKills = (this.stats.lanceKills ?? 0) + 1;
+    if (!by && e.type === 'heli') this.ach.count('helis');
     if (!by && !e.training) this.ach.count('kills');
     // how the killing round struck (set by onArmorHit just before)
     if (!by && e.type === 'tank' && this.time - (e.lastFaceT ?? -9) < 0.2) {
@@ -954,6 +955,11 @@ class Game {
       this.ach.unlock(def.kind === 'tutorial' ? 'training' : `win_${def.id}`);
       if (def.kind !== 'tutorial' && this.stats.hitsTaken === 0) this.ach.unlock('untouched');
       if (lance.length && !lance.some((x) => x.dead)) this.ach.unlock('lance');
+      if (def.convoy && this.convoy.arrived === this.convoy.trucks.length) this.ach.unlock('escort');
+      // a whole world won
+      const prog = loadProgress();
+      const world = def.world ?? 'city';
+      if (MISSIONS.filter((m) => (m.world ?? 'city') === world).every((m) => prog[m.id]?.done)) this.ach.unlock(`world_${world}`);
     }
     this.inResult = true;
     ui.result(

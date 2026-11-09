@@ -72,7 +72,7 @@ export const ENEMY_TYPES = {
   depot: { hp: 70, speed: 0, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.6, height: 2.2, static: true },
   apc: { hp: 60, speed: 9, engage: 420, reload: [4, 6], shellSpeed: 1000, damage: [3, 6], burst: 3, radius: 3.0, height: 2.4, traverse: 1.4, skill: 0.7 },
   // dug in: a concrete pillbox with a heavy machine gun; it turns its gun, not itself
-  bunker: { hp: 150, speed: 0, engage: 480, reload: [2.2, 3.4], shellSpeed: 950, damage: [4, 7], burst: 5, radius: 3.6, height: 3.0, traverse: 1.6, skill: 0.8, emplaced: true },
+  bunker: { hp: 150, speed: 0, engage: 450, reload: [3.5, 5], shellSpeed: 950, damage: [1.5, 3], burst: 4, radius: 3.6, height: 3.0, traverse: 1.6, skill: 0.5, emplaced: true },
   // a howitzer far behind the line: it needs no sight of us, its shells walk in salvo by salvo
   artillery: { hp: 70, speed: 0, engage: 2400, reload: [7, 10], shellSpeed: 0, damage: [16, 24], burst: 1, radius: 3.4, height: 2.6, traverse: 0.6, skill: 1, emplaced: true, indirect: true },
   // twin-gun anti-aircraft tank with radar: shoots drones down from far away, and at us
@@ -82,7 +82,7 @@ export const ENEMY_TYPES = {
   // unarmed supply truck on a road: drives its route, flees when shot at
   truck: { hp: 35, speed: 11, engage: 0, reload: [1e9, 1e9], shellSpeed: 0, damage: [0, 0], burst: 0, radius: 2.8, height: 3.0, traverse: 0, skill: 0, unarmed: true },
   // an enemy battle mech: tough, a fast-turning torso, cannon bursts
-  mech: { hp: 320, speed: 6, engage: 700, reload: [2.6, 3.4], shellSpeed: 1150, damage: [9, 13], burst: 3, radius: 2.6, height: 5.0, traverse: 2.4, skill: 1.1, walker: true },
+  mech: { hp: 320, speed: 6, engage: 700, reload: [3.2, 4.2], shellSpeed: 1150, damage: [6.5, 9.5], burst: 3, radius: 2.6, height: 5.0, traverse: 2.4, skill: 1.1, walker: true },
 };
 
 export const PARTS = ['head', 'torso', 'larm', 'rarm', 'lleg', 'rleg'];

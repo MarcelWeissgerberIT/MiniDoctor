@@ -221,6 +221,15 @@ export class Allies {
     this.g.allyMissile?.(p);
   }
 
+  /** a wingman's round or missile strikes: the kill is credited to him, not to us */
+  hit(w, tgt, dmg) {
+    const E = this.g.enemies;
+    E.killer = w;
+    const killed = E.damage(tgt, dmg);
+    E.killer = null;
+    return killed;
+  }
+
   updateRounds(dt) {
     let n = 0;
     for (let i = this.rounds.length - 1; i >= 0; i--) {
@@ -230,7 +239,7 @@ export class Allies {
         this.rounds.splice(i, 1);
         if (r.hit && r.tgt.state !== 'dead') {
           this.fx.impact(r.to.x, r.to.y, r.to.z, 'metal', 1.1);
-          if (this.g.enemies.damage(r.tgt, WINGMAN.damage)) this.g.onAllyKill?.(r.w, r.tgt);
+          if (this.hit(r.w, r.tgt, WINGMAN.damage)) this.g.onAllyKill?.(r.w, r.tgt);
         } else this.fx.impact(r.to.x, r.to.y, r.to.z, 'ground', 1);
         continue;
       }
@@ -270,7 +279,7 @@ export class Allies {
         this.fx.explosion(m.p.x, Math.max(m.p.y, this.world.heightAt(m.p.x, m.p.z) + 0.5), m.p.z, 6);
         this.g.explosionSound(m.p, 0.8);
         if (m.hit && m.tgt.state !== 'dead' && m.p.distanceTo(c) < m.tgt.radius + 3) {
-          if (this.g.enemies.damage(m.tgt, WINGMAN.missileDamage)) this.g.onAllyKill?.(m.w, m.tgt);
+          if (this.hit(m.w, m.tgt, WINGMAN.missileDamage)) this.g.onAllyKill?.(m.w, m.tgt);
         }
         this.world.scene.remove(m.mesh);
         this.missiles.splice(i, 1);

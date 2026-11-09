@@ -188,7 +188,7 @@ Die Drohne sitzt auf dem Rücken des Mechs. **Q** startet sie in Blickrichtung, 
   - Grafikqualität, Sichtfeld, Mausempfindlichkeit, Y-Invertierung
   - Kopf- und Kabinenbewegung: weniger Schaukeln gegen Reiseübelkeit
   - Lautstärke und Funklautstärke getrennt, Untertitel
-- **Erfolge:** 14 Stück, z. B. Heckschuss, Von oben, Fliegendes Auge, Unberührt, Niemand bleibt zurück. Eine Meldung oben im Bild zeigt jeden neuen Erfolg. Die Liste steht im Pause- und Titelmenü.
+- **Erfolge:** 22 Stück, z. B. Heckschuss, Von oben, Fliegendes Auge, Unberührt, Niemand bleibt zurück, Hubschrauberjäger, Geleitschutz, die drei Boss-Siege und je einer für jede ganz gewonnene Welt. Eine Meldung oben im Bild zeigt jeden neuen Erfolg. Die Liste steht im Pause- und Titelmenü.
 
 Wie BattleBot auf Steam kommen soll und was dafür noch fehlt, steht in [docs/STEAM.md](docs/STEAM.md).
 
