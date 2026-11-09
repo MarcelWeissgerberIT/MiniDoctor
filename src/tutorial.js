@@ -129,6 +129,8 @@ export const STEPS = [
     start: (g) => {
       g.cockpit.splatter(1, -0.3);
       g.cockpit.splatter(1, 0.4);
+      g.cockpit.splatter(0.9, 0.3, 'left');
+      g.cockpit.splatter(0.9, -0.3, 'right');
       g.cockpit.dustGlass(0.06);
     },
     done: (g) => g.sw.wiper && g.cockpit.grimeLevel() < 0.15,
