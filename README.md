@@ -89,9 +89,9 @@ Der Rechner nimmt dir Zielerfassung, Richten und Vorhalt ab. Alle Einstellungen 
 | RAKETEN | DIREKT / AUTO / STEIL · SALVE 1/2 | Flugprofil: DIREKT immer flach, AUTO steil nur bei einem markierten Ziel ohne Sicht, STEIL immer von oben. SALVE 2 schickt zwei Raketen im Abstand von 0,3 s |
 | DROHNE | KREISEN / BEGLEITEN / VORAUS / MANUELL · START / RÜCKRUF | siehe Aufklärungsdrohne |
 
-## Frontscheibe und Scheibenwischer
+## Scheiben und Scheibenwischer
 
-Auf der Außenseite der Frontscheibe sammelt sich Schmutz: Nahe Einschläge (unter 75 m) werfen Matsch und Splitt dagegen, umso mehr, je näher und je weiter vorn sie liegen. Beim Laufen setzen sich Staub und Asche ab. Zwei parallel laufende Wischer an der Unterkante (Schalter **WIPER** an der Mittelkonsole unten, Taste **K**, Touch: WISCHER) wischen in Zügen von 1,7 s frei, was ihre Blätter überstreichen. Die oberen Ecken bleiben schmutzig. Die Wischer brauchen den Hauptstrom, beim Ausschalten fahren sie in die Parkstellung unter der Scheibenkante.
+Auf der Außenseite der Front- und der beiden Seitenscheiben sammelt sich Schmutz: Nahe Einschläge (unter 75 m) werfen Matsch und Splitt dagegen, umso mehr, je näher sie liegen und je direkter die Scheibe zu ihnen zeigt (die Seitenscheiben schauen etwa 50° zur Seite). Beim Laufen setzen sich Staub und Asche ab. Zwei parallel laufende Wischer an der Frontscheibe und je einer an den Seitenscheiben (alle auf einem Schalter: **WIPER** an der Mittelkonsole unten, Taste **K**, Touch: WISCHER) wischen in Zügen von 1,7 s frei, was ihre Blätter überstreichen. Die oberen Ecken bleiben schmutzig. Die Wischer brauchen den Hauptstrom, beim Ausschalten fahren sie in die Parkstellung unter der Scheibenkante.
 
 ## Aufklärungsdrohne
 

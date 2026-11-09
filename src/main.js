@@ -698,12 +698,16 @@ class Game {
       const k = size * (1 - d / 140);
       setTimeout(() => (this.shake += k * 1.4), (d / 343) * 1000);
     }
-    // close blasts throw mud and grit onto the front screen, most from in front
+    // close blasts throw mud and grit onto the screens, most onto the one facing them:
+    // the front looks ahead, the side screens about 50 degrees to either side
     if (d < 75 && this.state === 'cockpit') {
       const rel = Math.atan2(-(p.x - this.mech.x), -(p.z - this.mech.z)) - this.mech.heading;
-      const front = 0.35 + 0.65 * Math.max(0, Math.cos(rel));
-      const amount = Math.min(1, size * Math.pow(1 - d / 75, 1.5) * front * 1.6);
-      if (amount > 0.03) setTimeout(() => this.cockpit.splatter(amount, -Math.sin(rel)), (d / 343) * 1000 + 120);
+      const base = size * Math.pow(1 - d / 75, 1.5) * 1.6;
+      for (const [pane, dir] of [['front', 0], ['left', 0.9], ['right', -0.9]]) {
+        const facing = 0.3 + 0.7 * Math.max(0, Math.cos(rel - dir));
+        const amount = Math.min(1, base * facing * (pane === 'front' ? 1 : 0.8));
+        if (amount > 0.03) setTimeout(() => this.cockpit.splatter(amount, -Math.sin(rel - dir), pane), (d / 343) * 1000 + 120);
+      }
     }
   }
 

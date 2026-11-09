@@ -624,67 +624,83 @@ export class Cockpit {
   /* ------------------------------------------------------------- wipers */
 
   /**
-   * Grime on the outside of the front screen (mud from near hits, dust, ash) and two
-   * parallel wipers that clear what their blades sweep. Window coordinates: front frame.
+   * Grime on the outside of the front and the two side screens (mud from near hits, dust,
+   * ash) and wipers that clear what their blades sweep: two parallel ones on the front,
+   * one on each side screen, all on one switch. Pane coordinates: the screen's own frame,
+   * x from the middle of the glass.
    */
   buildWipers() {
     const { m } = this;
-    const gw = WIN.x1 - WIN.x0 - 0.01;
     const gh = WIN.y1 - WIN.y0 - 0.01;
     const wy = (WIN.y0 + WIN.y1) / 2;
-    const cv = document.createElement('canvas');
-    cv.width = 512;
-    cv.height = 366;
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, color: 0xffffff });
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(gw, gh), mat);
-    plane.position.set(0, wy, -0.044);
-    plane.renderOrder = 4;
-    this.front.add(plane);
-    // a coarse copy of how dirty each part is, for the logic (the canvas is only looks)
-    const GX = 32;
-    const GY = 23;
-    this.grime = { cv, g: cv.getContext('2d'), tex, mat, gw, gh, wy, grid: new Float32Array(GX * GY), GX, GY, dirty: false };
-    const arms = [];
-    const R0 = 0.16;
-    const R1 = 0.74;
     const PY = WIN.y0 - 0.045;
-    // what reaches past the screen's side edges is hidden behind the body
-    const clip = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), WIN.x1 + 0.012), new THREE.Plane(new THREE.Vector3(1, 0, 0), -WIN.x0 + 0.012)];
-    const armMat = m.blackPaint.clone();
-    const bladeMat = m.rubber.clone();
-    armMat.clippingPlanes = clip;
-    bladeMat.clippingPlanes = clip;
-    for (const [i, px] of [-0.31, 0.31].entries()) {
-      const pivot = new THREE.Object3D();
-      pivot.position.set(px, PY, -0.052 - i * 0.005);
-      this.front.add(pivot);
-      const arm = new THREE.Mesh(rbox(R1 + 0.02, 0.016, 0.01, 0.004, 0.1), armMat);
-      arm.position.set((R1 + 0.02) / 2 - 0.01, 0, -0.006);
-      pivot.add(arm);
-      const blade = new THREE.Mesh(rbox(R1 - R0, 0.026, 0.014, 0.005, 0.1), bladeMat);
-      blade.position.set((R0 + R1) / 2, 0, 0.002);
-      pivot.add(blade);
-      const hub = new THREE.Mesh(cyl(0.018, 0.018, 0.02, 10), m.steel);
-      hub.rotation.x = Math.PI / 2;
-      hub.position.z = -0.006;
-      pivot.add(hub);
-      arms.push({ pivot, px, py: PY });
+    const [frontRect, leftRect, rightRect] = this.paneRects;
+    const setups = [
+      ['front', frontRect, [-0.31, 0.31], 0.16, 0.74],
+      ['left', leftRect, [0], 0.08, 0.58],
+      ['right', rightRect, [0], 0.08, 0.58],
+    ];
+    this.panes = {};
+    const allArms = [];
+    for (const [name, rect, pivots, R0, R1] of setups) {
+      const { frame, x: cx, w: gw } = rect;
+      frame.updateMatrixWorld(true);
+      const cv = document.createElement('canvas');
+      cv.width = Math.round((gw / gh) * 366);
+      cv.height = 366;
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, color: 0xffffff });
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(gw, gh), mat);
+      plane.position.set(cx, wy, -0.044);
+      plane.renderOrder = 4;
+      frame.add(plane);
+      // a coarse copy of how dirty each part is, for the logic (the canvas is only looks)
+      const GX = Math.max(8, Math.round(gw * 26));
+      const GY = 23;
+      // what reaches past the screen's side edges is hidden behind the body: two clip
+      // planes across the frame's x axis, in world space
+      const o = new THREE.Vector3().setFromMatrixPosition(frame.matrixWorld);
+      const ex = new THREE.Vector3(1, 0, 0).transformDirection(frame.matrixWorld);
+      const half = gw / 2 + 0.012;
+      const clip = [new THREE.Plane(ex.clone().negate(), ex.dot(o) + cx + half), new THREE.Plane(ex.clone(), -ex.dot(o) - (cx - half))];
+      const armMat = m.blackPaint.clone();
+      const bladeMat = m.rubber.clone();
+      armMat.clippingPlanes = clip;
+      bladeMat.clippingPlanes = clip;
+      const arms = [];
+      for (const [i, px] of pivots.entries()) {
+        const pivot = new THREE.Object3D();
+        pivot.position.set(cx + px, PY, -0.052 - i * 0.005);
+        frame.add(pivot);
+        const arm = new THREE.Mesh(rbox(R1 + 0.02, 0.016, 0.01, 0.004, 0.1), armMat);
+        arm.position.set((R1 + 0.02) / 2 - 0.01, 0, -0.006);
+        pivot.add(arm);
+        const blade = new THREE.Mesh(rbox(R1 - R0, 0.026, 0.014, 0.005, 0.1), bladeMat);
+        blade.position.set((R0 + R1) / 2, 0, 0.002);
+        pivot.add(blade);
+        const hub = new THREE.Mesh(cyl(0.018, 0.018, 0.02, 10), m.steel);
+        hub.rotation.x = Math.PI / 2;
+        hub.position.z = -0.006;
+        pivot.add(hub);
+        const a = { pivot, px, py: PY, pane: name };
+        arms.push(a);
+        allArms.push(a);
+      }
+      this.panes[name] = { name, cv, g: cv.getContext('2d'), tex, mat, gw, gh, wy, grid: new Float32Array(GX * GY), GX, GY, dirty: false, arms, R0, R1 };
     }
-    this.wiper = { arms, R0, R1, A: Math.PI - 0.12, park: 0.03, t: 0, angle: 0.03, period: 1.7 };
-    for (const a of arms) a.pivot.rotation.z = this.wiper.park;
+    this.grime = this.panes.front;
+    this.wiper = { arms: allArms, A: Math.PI - 0.12, park: 0.03, t: 0, angle: 0.03, period: 1.7 };
+    for (const a of allArms) a.pivot.rotation.z = this.wiper.park;
   }
 
-  /** window point (front frame x, y) to grime canvas pixels */
-  grimePx(x, y) {
-    const G = this.grime;
+  /** pane point (x from the middle of the glass, y in frame units) to canvas pixels */
+  grimePx(G, x, y) {
     return [((x + G.gw / 2) / G.gw) * G.cv.width, ((G.wy + G.gh / 2 - y) / G.gh) * G.cv.height];
   }
 
-  /** add to the logic grid around a canvas point */
-  grimeAdd(cx, cy, r, v) {
-    const G = this.grime;
+  /** add to a pane's logic grid around a canvas point */
+  grimeAdd(G, cx, cy, r, v) {
     const sx = G.cv.width / G.GX;
     const sy = G.cv.height / G.GY;
     for (let j = Math.max(0, Math.floor((cy - r) / sy)); j <= Math.min(G.GY - 1, Math.floor((cy + r) / sy)); j++)
@@ -692,16 +708,18 @@ export class Cockpit {
   }
 
   /**
-   * Mud from a near hit. amount 0..1; side -1..1 shifts it to the left or right half
-   * (where the blast came from).
+   * Mud from a near hit on one screen ('front', 'left', 'right'). amount 0..1; side -1..1
+   * shifts it towards the left or right end of that screen (where the blast came from).
    */
-  splatter(amount, side = 0) {
-    const G = this.grime;
+  splatter(amount, side = 0, pane = 'front') {
+    const G = this.panes[pane];
+    if (!G) return;
     const g = G.g;
     const W0 = G.cv.width;
     const H0 = G.cv.height;
     const rnd = Math.random;
-    const n = Math.round(2 + amount * 9);
+    const area = W0 / 512; // the narrow side screens take fewer splashes
+    const n = Math.round((2 + amount * 9) * Math.max(0.45, area));
     for (let k = 0; k < n; k++) {
       const cx = Math.max(0, Math.min(W0, W0 * (0.5 + side * 0.25 + (rnd() - 0.5) * 1.1)));
       const cy = H0 * Math.pow(rnd(), 0.7); // more from below
@@ -732,31 +750,32 @@ export class Cockpit {
         g.fillStyle = `rgba(${c},0.32)`;
         g.fillRect(cx - R * 0.07, cy, R * 0.14, R * (1 + rnd() * 2.5));
       }
-      this.grimeAdd(cx, cy, R * 1.6, 0.55);
+      this.grimeAdd(G, cx, cy, R * 1.6, 0.55);
     }
     // fine grit
-    for (let k = 0; k < 30 + amount * 140; k++) {
+    for (let k = 0; k < (30 + amount * 140) * area; k++) {
       g.fillStyle = `rgba(80,70,54,${0.3 + rnd() * 0.4})`;
       g.fillRect(rnd() * W0, rnd() * H0, 1 + rnd() * 1.5, 1 + rnd() * 1.5);
     }
     G.dirty = true;
   }
 
-  /** dust and ash settling evenly (amount per call, small) */
+  /** dust and ash settling evenly on every screen (amount per call, small) */
   dustGlass(amount) {
-    const G = this.grime;
-    const g = G.g;
-    g.fillStyle = `rgba(150,140,122,${Math.min(0.2, amount * 0.5)})`;
-    g.fillRect(0, 0, G.cv.width, G.cv.height);
-    g.fillStyle = 'rgba(96,88,74,0.35)';
-    for (let k = 0; k < amount * 900; k++) g.fillRect(Math.random() * G.cv.width, Math.random() * G.cv.height, 1.5, 1.5);
-    for (let i = 0; i < G.grid.length; i++) G.grid[i] = Math.min(1, G.grid[i] + amount * 0.5);
-    G.dirty = true;
+    for (const G of Object.values(this.panes)) {
+      const g = G.g;
+      g.fillStyle = `rgba(150,140,122,${Math.min(0.2, amount * 0.5)})`;
+      g.fillRect(0, 0, G.cv.width, G.cv.height);
+      g.fillStyle = 'rgba(96,88,74,0.35)';
+      for (let k = 0; k < amount * 900 * (G.cv.width / 512); k++) g.fillRect(Math.random() * G.cv.width, Math.random() * G.cv.height, 1.5, 1.5);
+      for (let i = 0; i < G.grid.length; i++) G.grid[i] = Math.min(1, G.grid[i] + amount * 0.5);
+      G.dirty = true;
+    }
   }
 
-  /** how much of the glass is dirty, 0..1 (the middle counts double: that is where one looks) */
-  grimeLevel() {
-    const G = this.grime;
+  /** how dirty a screen is, 0..1 (the middle counts double: that is where one looks) */
+  grimeLevel(pane = 'front') {
+    const G = this.panes[pane];
     let s = 0;
     let n = 0;
     for (let j = 0; j < G.GY; j++)
@@ -768,22 +787,22 @@ export class Cockpit {
     return s / n;
   }
 
-  /** clear the canvas and grid where a blade swept from angle a0 to a1 */
+  /** clear a pane's canvas and grid where a blade swept from angle a0 to a1 */
   wipeSector(arm, a0, a1) {
-    const G = this.grime;
+    const G = this.panes[arm.pane];
     const g = G.g;
-    const { R0, R1 } = this.wiper;
+    const { R0, R1 } = G;
     const lo = Math.min(a0, a1) - 0.01;
     const hi = Math.max(a0, a1) + 0.01;
     const pts = [];
     const steps = Math.max(2, Math.ceil((hi - lo) / 0.05));
     for (let k = 0; k <= steps; k++) {
       const a = lo + ((hi - lo) * k) / steps;
-      pts.push(this.grimePx(arm.px + Math.cos(a) * R1, arm.py + Math.sin(a) * R1));
+      pts.push(this.grimePx(G, arm.px + Math.cos(a) * R1, arm.py + Math.sin(a) * R1));
     }
     for (let k = steps; k >= 0; k--) {
       const a = lo + ((hi - lo) * k) / steps;
-      pts.push(this.grimePx(arm.px + Math.cos(a) * R0, arm.py + Math.sin(a) * R0));
+      pts.push(this.grimePx(G, arm.px + Math.cos(a) * R0, arm.py + Math.sin(a) * R0));
     }
     g.save();
     g.globalCompositeOperation = 'destination-out';
@@ -794,12 +813,10 @@ export class Cockpit {
     g.fill();
     g.restore();
     // the grid: cells whose centre lies in the swept ring sector
-    const sx = G.cv.width / G.GX;
-    const sy = G.cv.height / G.GY;
     for (let j = 0; j < G.GY; j++)
       for (let i = 0; i < G.GX; i++) {
-        const x = ((i + 0.5) * sx * G.gw) / G.cv.width - G.gw / 2 - arm.px;
-        const y = G.wy + G.gh / 2 - ((j + 0.5) * sy * G.gh) / G.cv.height - arm.py;
+        const x = ((i + 0.5) / G.GX) * G.gw - G.gw / 2 - arm.px;
+        const y = G.wy + G.gh / 2 - ((j + 0.5) / G.GY) * G.gh - arm.py;
         const r = Math.hypot(x, y);
         const a = Math.atan2(y, x);
         if (r >= R0 && r <= R1 && a >= lo && a <= hi) G.grid[j * G.GX + i] *= 0.1;
@@ -827,10 +844,11 @@ export class Cockpit {
         this.wipeSector(a, prev, W.angle);
       }
     }
-    const G = this.grime;
-    if (G.dirty) {
-      G.tex.needsUpdate = true;
-      G.dirty = false;
+    for (const G of Object.values(this.panes)) {
+      if (G.dirty) {
+        G.tex.needsUpdate = true;
+        G.dirty = false;
+      }
     }
     return stroke;
   }
