@@ -386,18 +386,22 @@ export class Effects {
     }
   }
 
+  /** what drifts in the air: ash and embers (city), pollen and fireflies (jungle), sand (desert) */
   buildAsh(scene) {
-    const n = 1600;
+    const kind = (this.particleKind = this.world.theme?.particles ?? 'ash');
+    const n = kind === 'sand' ? 2200 : 1600;
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       pos[i * 3] = (Math.random() - 0.5) * 120;
       pos[i * 3 + 1] = (Math.random() - 0.5) * 60;
       pos[i * 3 + 2] = (Math.random() - 0.5) * 120;
-      const ember = Math.random() < 0.06;
-      col[i * 3] = ember ? 3.0 : 0.55;
-      col[i * 3 + 1] = ember ? 1.1 : 0.53;
-      col[i * 3 + 2] = ember ? 0.3 : 0.5;
+      const glow = Math.random() < 0.06;
+      const c =
+        kind === 'mist' ? (glow ? [1.4, 2.6, 0.5] : [0.62, 0.66, 0.42]) : kind === 'sand' ? [0.86, 0.72, 0.52] : glow ? [3.0, 1.1, 0.3] : [0.55, 0.53, 0.5];
+      col[i * 3] = c[0];
+      col[i * 3 + 1] = c[1];
+      col[i * 3 + 2] = c[2];
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -676,10 +680,14 @@ export class Effects {
     const dz = camPos.z - this.lastCam.z;
     this.lastCam.copy(camPos);
     const wrap = (v, h) => (v > h ? v - 2 * h : v < -h ? v + 2 * h : v);
+    const kind = this.particleKind;
+    // sand races along the ground with the wind; pollen hangs and wanders; ash falls
+    const fall = kind === 'sand' ? 0.15 : kind === 'mist' ? -0.05 : 0.5;
+    const drift = kind === 'sand' ? 9 + (this.gust ?? 0) : kind === 'mist' ? 0.2 : wind * 0.6;
     for (let i = 0; i < pos.count; i++) {
-      const y = pos.getY(i) - dy - dt * (0.5 + (i % 7) * 0.12);
-      const x = pos.getX(i) - dx + dt * (wind * 0.6 + Math.sin(time * 0.7 + i) * 0.4);
-      const z = pos.getZ(i) - dz;
+      const y = pos.getY(i) - dy - dt * (fall + (i % 7) * (kind === 'mist' ? 0.02 : 0.12)) + (kind === 'mist' ? Math.sin(time * 0.9 + i) * dt * 0.3 : 0);
+      const x = pos.getX(i) - dx + dt * (drift * (kind === 'sand' ? 0.7 + (i % 5) * 0.15 : 1) + Math.sin(time * 0.7 + i) * 0.4);
+      const z = pos.getZ(i) - dz + (kind === 'mist' ? Math.cos(time * 0.6 + i * 1.7) * dt * 0.3 : kind === 'sand' ? dt * 2.5 : 0);
       pos.setXYZ(i, wrap(x, 60), wrap(y, 30), wrap(z, 60));
     }
     pos.needsUpdate = true;

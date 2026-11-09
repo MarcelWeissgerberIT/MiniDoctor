@@ -575,6 +575,50 @@ body.hovering #scene {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: min(46vh, 520px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.catalog .worlds {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.wtab {
+  font: inherit;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 14px;
+  color: #bdb7a8;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(217, 164, 65, 0.25);
+  cursor: pointer;
+}
+.wtab b {
+  font-size: 15px;
+  letter-spacing: 0.18em;
+}
+.wtab small {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #a6ffb8;
+}
+.wtab.on {
+  color: #1a1206;
+  background: #d9a441;
+  border-color: #d9a441;
+  cursor: default;
+}
+.wtab.on small {
+  color: #1a1206;
+}
+.wtab.loading {
+  opacity: 0.5;
+}
+.catalog li.empty {
+  cursor: default;
+  padding-left: 14px;
 }
 .catalog li {
   display: flex;

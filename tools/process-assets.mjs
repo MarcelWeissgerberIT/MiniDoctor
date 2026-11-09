@@ -342,7 +342,7 @@ async function processGlb() {
   const SIMPLIFY = {
     hedgehog: 0.25, ruin: 0.4, tank: 0.4, sandbags: 0.5, mech_rigged: 0.35, enemy_tank: 0.35, enemy_apc: 0.35,
     // the other worlds: vegetation stands in hundreds, buildings and rocks in dozens
-    jungle_tree: 0.5, palm: 0.6, bush: 0.5, temple: 0.5, adobe: 0.5, rock: 0.5,
+    jungle_tree: 0.22, palm: 0.35, bush: 0.2, temple: 0.5, adobe: 0.5, rock: 0.5,
     bunker: 0.5, artillery: 0.5, heli: 0.5, truck: 0.5, aa: 0.45,
   };
   // `glb name1 name2` limits the run to those models

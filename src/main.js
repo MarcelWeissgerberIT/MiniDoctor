@@ -24,6 +24,10 @@ import { Range } from './training.js';
 import { loadSettings, Achievements, Menu } from './menu.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { Hangar, loadLoadout } from './hangar.js';
+import { THEMES, THEME_ORDER, currentTheme, chooseTheme } from './world/themes.js';
+
+// the battlefield this page builds (title screen tabs switch it with a reload)
+const THEME = currentTheme();
 import { FIRE_CONTROL, pickTarget, leadPoint } from './logic/firecontrol.js';
 import { GUN, MG } from './logic/combat.js';
 import { DRONE } from './logic/drone.js';
@@ -90,6 +94,7 @@ class Game {
   constructor() {
     this.ui = ui;
     this.world = new World(assets);
+    this.theme = THEMES[THEME];
     this.feedRT = new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType });
     // the drone's picture for the board computer
     this.droneRT = new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType });
@@ -111,6 +116,7 @@ class Game {
     this.post = new Post(renderer, this.world.scene, this.worldCam, this.cockpit.scene, this.cockpitCam);
     this.input = new Input(canvas);
     this.sound = new Sound(assets.audio);
+    this.sound.worldLoop = this.theme.ambience;
     this.radio = new Radio(this.sound, ui);
     this.voiceText = { ...VOICE_TEXT, ...TRAINING_TEXT, ...EXTRA_VOICE, ...MISSION_TEXT };
     this.firingRange = new Range(this);
@@ -2478,7 +2484,7 @@ function loadFonts() {
   return Promise.all(faces.map((f) => document.fonts?.load(f).catch(() => null)));
 }
 
-Promise.all([assets.loadAll(), loadFonts()])
+Promise.all([assets.loadAll(THEME), loadFonts()])
   .then(() => {
     game = new Game();
     window.__game = game;
@@ -2505,7 +2511,12 @@ Promise.all([assets.loadAll(), loadFonts()])
       ui.hideTitle();
       game.beginMission(def);
     } else
-      ui.ready(MISSIONS, loadProgress(), (def) => (def.kind === 'tutorial' ? game.startMission() : game.startCombatMission(def)), () => game.startFree());
+      ui.ready(MISSIONS, loadProgress(), (def) => (def.kind === 'tutorial' ? game.startMission() : game.startCombatMission(def)), () => game.startFree(), {
+        current: THEME,
+        order: THEME_ORDER,
+        themes: THEMES,
+        choose: chooseTheme,
+      });
       document.getElementById('opts').onclick = () => game.menu.show('settings', { inGame: false });
       document.getElementById('hangarbtn').onclick = () => game.openHangar();
       // the parked mech behind the title wears the pilot's paint

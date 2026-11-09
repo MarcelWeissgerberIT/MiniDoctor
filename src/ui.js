@@ -30,14 +30,47 @@ export class UI {
   }
 
   /** mission catalogue on the title screen; progress: { id: { done, best } } */
-  ready(missions, progress, onStart, onFree) {
+  ready(allMissions, progress, onStart, onFree, worlds = null) {
     this.title.classList.add('loaded');
     this.start.disabled = false;
     this.quick.disabled = false;
     const list = this.title.querySelector('.missions');
     const desc = this.title.querySelector('.mdesc');
-    const want = +(new URLSearchParams(location.search).get('mission') || 1);
+    // the battlefields: a tab each, a reload builds the chosen one
+    const tabs = this.title.querySelector('.worlds');
+    const here = worlds?.current ?? 'city';
+    if (tabs && worlds) {
+      tabs.innerHTML = '';
+      for (const id of worlds.order) {
+        const w = worlds.themes[id];
+        const b = document.createElement('button');
+        b.className = `wtab${id === here ? ' on' : ''}`;
+        const n = allMissions.filter((m) => (m.world ?? 'city') === id);
+        const won = n.filter((m) => progress[m.id]?.done).length;
+        b.innerHTML = '<b></b><small></small>';
+        b.querySelector('b').textContent = w.name;
+        b.querySelector('small').textContent = `${won}/${n.length}`;
+        b.title = `${w.title}: ${w.desc}`;
+        if (id !== here)
+          b.addEventListener('click', () => {
+            b.classList.add('loading');
+            worlds.choose(id);
+          });
+        tabs.appendChild(b);
+      }
+    }
+    const missions = allMissions.filter((m) => (m.world ?? 'city') === here);
+    const want = +(new URLSearchParams(location.search).get('mission') || missions[0]?.num || 1);
     let pick = missions.find((m) => m.num === want) || missions[0];
+    if (!pick) {
+      // a world without missions yet: free play explores it
+      list.innerHTML = '<li class="empty"><span class="info"><span class="mtag">EINSATZPLANUNG</span><span class="mname">Missionen in Vorbereitung</span></span></li>';
+      desc.textContent = worlds?.themes[here]?.desc ?? '';
+      this.start.textContent = 'Freies Spiel';
+      this.start.addEventListener('click', onFree, { once: true });
+      this.quick.addEventListener('click', onFree, { once: true });
+      return;
+    }
     const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     const select = (m) => {
       pick = m;
