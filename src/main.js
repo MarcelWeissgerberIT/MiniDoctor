@@ -2307,7 +2307,7 @@ class Game {
         clock: clockOf(wrapA(brg - m.heading)),
         face: armed ? FACE_NAME[armorFace(e.heading, e.x, e.z, m.x, m.z)] : '',
         aiming,
-        hp: e.hp / ENEMY_TYPES[e.type].hp,
+        hp: e.hp / (e.hpMax ?? ENEMY_TYPES[e.type].hp),
         state: armed ? STATE_NAME[e.state] || e.state.toUpperCase() : 'STATISCH',
         kmh: Math.abs(e.speed) * 3.6,
         missionMarked: !!e.marked,

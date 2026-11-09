@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 const FONT = "'JetBrains Mono','DejaVu Sans Mono','Consolas',monospace";
 const C = '#86ffc4'; // holo green-cyan
+const HALO = [[0, 0], [-2, 0], [2, 0], [0, -2], [0, 2], [-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]];
 const DIM = 'rgba(134,255,196,0.45)';
 const WARN = '#ffd25a';
 const RED = '#ff6a50';
@@ -48,6 +49,18 @@ export class HUD {
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(this.w, this.h), this.mat);
     this.mesh.position.set((win.x0 + win.x1) / 2, (win.y0 + win.y1) / 2, z);
     this.mesh.renderOrder = 10;
+    // a dark halo under the symbols (their shapes, widened a few pixels): green light added
+    // to a bright desert or a sandstorm would vanish; on a dark scene it changes nothing
+    this.backCanvas = document.createElement('canvas');
+    this.backCanvas.width = Math.round(this.W / 2);
+    this.backCanvas.height = Math.round(this.H / 2);
+    this.bg = this.backCanvas.getContext('2d');
+    this.backTex = new THREE.CanvasTexture(this.backCanvas);
+    this.backMat = new THREE.MeshBasicMaterial({ map: this.backTex, color: 0x000000, transparent: true, depthWrite: false, opacity: 0 });
+    const back = new THREE.Mesh(this.mesh.geometry, this.backMat);
+    back.position.z = -0.0005;
+    back.renderOrder = 9;
+    this.mesh.add(back);
     this.level = 0;
     this.on = false;
     this.frame = 0;
@@ -84,6 +97,7 @@ export class HUD {
     const target = this.on ? 1 : 0;
     this.level += (target - this.level) * Math.min(1, dt * 4);
     this.mat.opacity = this.level * (0.92 + Math.random() * 0.05);
+    this.backMat.opacity = this.level * 0.6;
     if (this.level < 0.01) return;
     // redraw at half rate: the canvas is big
     if (this.frame++ % 2) return;
@@ -117,6 +131,13 @@ export class HUD {
     this.drawStatus(s, b);
     g.shadowBlur = 8;
     this.tex.needsUpdate = true;
+    // the halo: the symbols stamped around their place, at half size
+    const bg = this.bg;
+    const w2 = this.backCanvas.width;
+    const h2 = this.backCanvas.height;
+    bg.clearRect(0, 0, w2, h2);
+    for (const [dx, dy] of HALO) bg.drawImage(this.canvas, dx, dy, w2, h2);
+    this.backTex.needsUpdate = true;
   }
 
   /** a block of lines; each line [text, color] (or a string) */

@@ -296,7 +296,7 @@ export function stepEnemy(e, dt, ctx) {
   if (e.state === 'advance' && dist <= engage) e.state = 'engage';
   if (e.state === 'engage' && dist > engage * 1.35) e.state = 'advance';
   // badly damaged: smoke and pull back into cover, once
-  if ((e.state === 'engage' || e.state === 'advance') && e.hp < T.hp * 0.5 && !e.coverUsed) {
+  if ((e.state === 'engage' || e.state === 'advance') && e.hp < (e.hpMax ?? T.hp) * 0.5 && !e.coverUsed) {
     e.coverUsed = true;
     const c = ctx.findCover?.(e);
     if (c) {

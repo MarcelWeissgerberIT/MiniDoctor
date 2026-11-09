@@ -35,13 +35,16 @@ body {
 #title .shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(5, 5, 5, 0.92) 0%, rgba(5, 5, 5, 0.65) 45%, rgba(5, 5, 5, 0.05) 100%),
+  /* dark behind the menu column (whatever width the window has), clear on the right */
+  background: linear-gradient(90deg, rgba(5, 5, 5, 0.94) 0, rgba(5, 5, 5, 0.86) calc(7vw + 560px), rgba(5, 5, 5, 0.05) 100%),
     linear-gradient(0deg, rgba(5, 5, 5, 0.8), transparent 50%);
 }
 #title .content {
   position: relative;
-  max-width: 560px;
+  /* the column is 560 px of text; the left margin comes on top of it */
+  max-width: calc(560px + 7vw);
   padding: 0 0 8vh 7vw;
+  text-shadow: 0 1px 2px #000, 0 0 10px rgba(0, 0, 0, 0.85);
 }
 #title .tag {
   letter-spacing: 0.35em;
@@ -50,6 +53,8 @@ body {
 }
 #title h1 {
   margin: 6px 0 10px;
+  white-space: nowrap;
+  /* "BATTLEBOT" is about 4.45 em wide: it always fits the 560 px column */
   font-size: clamp(44px, min(9vw, 12vh), 120px);
   line-height: 0.9;
   letter-spacing: 0.04em;
